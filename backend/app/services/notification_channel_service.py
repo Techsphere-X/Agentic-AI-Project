@@ -234,7 +234,7 @@ def send_test(
     ip_address: str | None,
 ) -> Delivery:
     channel = get_channel(db, channel_id)
-    link = get_settings().PUBLIC_APP_URL.rstrip("/") + "/connections?type=channel"
+    link = get_settings().PUBLIC_APP_URL.rstrip("/") + "/connections/channels"
     result = deliver(
         channel,
         Message(

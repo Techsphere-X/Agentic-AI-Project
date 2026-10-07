@@ -12,7 +12,14 @@ const COLLAPSED_KEY = 'sidebar-collapsed'
 // from non-admins.
 const NAV = [
   { items: [{ to: '/', end: true, label: 'Dashboard', icon: 'dashboard' }] },
-  { title: 'Connections', items: [{ to: '/connections', label: 'Catalog', icon: 'catalog' }] },
+  {
+    title: 'Connections',
+    items: [
+      { to: '/connections/airflow', label: 'Airflow', icon: 'airflow' },
+      { to: '/connections/databases', label: 'Databases', icon: 'database' },
+      { to: '/connections/channels', label: 'Channels', icon: 'channel' },
+    ],
+  },
   {
     title: 'Workflow orchestration',
     items: [

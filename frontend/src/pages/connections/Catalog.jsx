@@ -20,12 +20,26 @@ const TYPES = {
   channel: { label: 'Notification', plural: 'Notification channels', api: channelsApi, state: channelState, tone: 'warning' },
 }
 
-const FILTERS = [
-  ['all', 'All'],
-  ['airflow', 'Airflow'],
-  ['database', 'Databases'],
-  ['channel', 'Notification channels'],
-]
+const PAGE_COPY = {
+  airflow: {
+    title: 'Airflow connections',
+    description: 'Airflow instances connected to this platform. Open a connection to choose which DAGs are monitored.',
+    addLabel: 'Add Airflow',
+    emptyAdmin: 'Add an Airflow instance to start monitoring DAGs. Use the Mock Airflow type if none is running locally.',
+  },
+  database: {
+    title: 'Database connections',
+    description: 'Databases available to workflows for checks, queries, and automated actions.',
+    addLabel: 'Add database',
+    emptyAdmin: 'Add a database connection to make it available to workflows.',
+  },
+  channel: {
+    title: 'Notification channels',
+    description: 'Email, Slack, and Teams destinations used by workflows to notify people.',
+    addLabel: 'Add channel',
+    emptyAdmin: 'Add an email, Slack, or Teams channel to make it available to workflows.',
+  },
+}
 
 function endpoint(type, c) {
   if (type === 'airflow') return c.base_url
@@ -51,10 +65,10 @@ function subtitle(type, c) {
 }
 
 /**
- * The connection catalog: every Airflow instance and database the platform talks to. An
- * Airflow row expands to its DAGs, where monitoring, failure alerts and SLAs are set.
+ * A type-specific connection page. Airflow rows expand to their DAGs, where monitoring,
+ * failure alerts and SLAs are configured.
  */
-export default function Catalog() {
+export default function Catalog({ type }) {
   const { hasRole, user } = useAuth()
   const { health, refreshHealth } = useOutletContext()
   const toast = useToast()
@@ -68,20 +82,18 @@ export default function Catalog() {
   const isAdmin = hasRole('ADMIN')
   const canOperate = hasRole('ADMIN', 'OPERATOR')
   const allowMock = health?.environment !== 'production'
-  const filter = params.get('type') ?? 'all'
   const openId = params.get('open')
+  const page = PAGE_COPY[type]
 
   const load = useCallback(async () => {
-    const keys = Object.keys(TYPES)
-    const results = await Promise.allSettled(keys.map((key) => TYPES[key].api.listConnections()))
-    // A failed list shows as empty with an error, so one broken API never blocks the page.
-    setLists((prev) =>
-      Object.fromEntries(
-        keys.map((key, i) => [key, results[i].status === 'fulfilled' ? results[i].value.items : (prev[key] ?? [])]),
-      ),
-    )
-    results.forEach((r, i) => r.status === 'rejected' && toast.error(`${TYPES[keys[i]].plural}: ${r.reason.message}`))
-  }, [toast])
+    try {
+      const result = await TYPES[type].api.listConnections()
+      setLists((prev) => ({ ...prev, [type]: result.items }))
+    } catch (err) {
+      setLists((prev) => ({ ...prev, [type]: prev[type] ?? [] }))
+      toast.error(`${TYPES[type].plural}: ${err.message}`)
+    }
+  }, [toast, type])
 
   useEffect(() => {
     // eslint-disable-next-line react/set-state-in-effect -- initial fetch; state is set after await
@@ -140,61 +152,31 @@ export default function Catalog() {
     }
   }
 
-  const loading = Object.keys(TYPES).some((key) => !lists[key])
-  const rows = Object.keys(TYPES)
-    .filter((type) => filter === 'all' || filter === type)
-    .flatMap((type) => (lists[type] ?? []).map((c) => ({ type, c })))
-  const counts = Object.fromEntries(Object.keys(TYPES).map((key) => [key, lists[key]?.length ?? 0]))
-  counts.all = Object.values(counts).reduce((a, b) => a + b, 0)
+  const loading = !lists[type]
+  const rows = (lists[type] ?? []).map((c) => ({ type, c }))
 
   return (
     <div className="page">
       <div className="page-header">
         <div>
-          <h1>Connection catalog</h1>
-          <p className="muted">
-            Airflow instances, databases and notification channels this platform connects to. Open an Airflow connection to
-            choose which DAGs are monitored.
-          </p>
+          <h1>{page.title}</h1>
+          <p className="muted">{page.description}</p>
         </div>
         {isAdmin && (
           <div className="header-actions">
-            <Button variant="primary" onClick={() => setEditing({ type: 'airflow', connection: null })}>
-              Add Airflow
-            </Button>
-            <Button variant="primary" onClick={() => setEditing({ type: 'database', connection: null })}>
-              Add database
-            </Button>
-            <Button variant="primary" onClick={() => setEditing({ type: 'channel', connection: null })}>
-              Add channel
+            <Button variant="primary" onClick={() => setEditing({ type, connection: null })}>
+              {page.addLabel}
             </Button>
           </div>
         )}
       </div>
 
       <Card>
-        <div className="tabs" role="tablist">
-          {FILTERS.map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={filter === key}
-              className={`tab ${filter === key ? 'tab-active' : ''}`}
-              onClick={() => setParam('type', key === 'all' ? null : key)}
-            >
-              {label} <span className="muted small">{loading ? '' : counts[key]}</span>
-            </button>
-          ))}
-        </div>
-
         {loading ? (
           <p className="muted">Loading…</p>
         ) : rows.length === 0 ? (
-          <EmptyState title="No connections yet">
-            {isAdmin
-              ? 'Add an Airflow instance to start monitoring DAGs, a database, or a notification channel (email, Slack, Teams) to reach people. Use the Mock Airflow type if none is running locally.'
-              : 'Ask an administrator to register a connection.'}
+          <EmptyState title={`No ${TYPES[type].plural.toLowerCase()} yet`}>
+            {isAdmin ? page.emptyAdmin : 'Ask an administrator to register a connection.'}
           </EmptyState>
         ) : (
           <div className="table-wrap">

@@ -111,7 +111,7 @@ function Panel({
             </Button>
           </p>
         )}
-        <Link className="small" to="/settings/connections">
+        <Link className="small" to="/connections/airflow">
           Manage connections
         </Link>
       </>
@@ -374,7 +374,7 @@ function Canvas() {
   if (!data.connections.length) {
     return (
       <EmptyState title="No Airflow connections yet">
-        <Link to="/settings/connections">Add a connection</Link> and sync its DAGs to see your pipelines here.
+        <Link to="/connections/airflow">Add a connection</Link> and sync its DAGs to see your pipelines here.
       </EmptyState>
     )
   }

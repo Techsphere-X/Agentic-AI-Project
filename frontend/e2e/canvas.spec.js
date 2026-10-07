@@ -12,7 +12,7 @@ async function login(page) {
   await page.getByLabel('Email').fill(EMAIL)
   await page.getByLabel('Password').fill(PASSWORD)
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page.getByRole('navigation').getByRole('link', { name: 'Catalog' })).toBeVisible()
+  await expect(page.getByRole('navigation').getByRole('link', { name: 'Airflow' })).toBeVisible()
 }
 
 /** Press on one element and release over another (React Flow connections). */
@@ -117,10 +117,10 @@ test('workflow editor opens a template read from the server', async ({ page }) =
   await page.screenshot({ path: `${SHOTS}/workflow-template.png` })
 })
 
-test('connection catalog: DAGs inline, old links redirect', async ({ page }) => {
-  // The removed Pipelines page lands on the catalog.
+test('Airflow connections: DAGs inline, old links redirect', async ({ page }) => {
+  // The removed Pipelines page lands on Airflow connections.
   await page.goto('/pipelines')
-  await expect(page).toHaveURL(/\/connections$/)
+  await expect(page).toHaveURL(/\/connections\/airflow$/)
   const row = page.locator('.catalog-table tbody tr', { hasText: 'mock-dev' })
   await expect(row).toContainText('Connected')
 
@@ -155,8 +155,8 @@ test('connection catalog: DAGs inline, old links redirect', async ({ page }) => 
   await expect(page.getByText('SLA removed for partner_api_sync')).toBeVisible()
 })
 
-test('connection catalog: add a database connection', async ({ page }) => {
-  await page.goto('/connections')
+test('database connections: add a database connection', async ({ page }) => {
+  await page.goto('/connections/databases')
   await page.getByRole('button', { name: 'Add database' }).click()
   await page.getByLabel('Name', { exact: true }).fill('local-pg')
   await page.getByLabel('Host', { exact: true }).fill('127.0.0.1')
@@ -170,7 +170,6 @@ test('connection catalog: add a database connection', async ({ page }) => {
   const row = page.locator('.catalog-table tbody tr', { hasText: 'local-pg' })
   await expect(row).toContainText('Database')
   await expect(row).toContainText('127.0.0.1:1/analytics')
-  await page.getByRole('tab', { name: /Databases/ }).click()
   await expect(page.locator('.catalog-table tbody tr', { hasText: 'mock-dev' })).toHaveCount(0)
   await page.screenshot({ path: `${SHOTS}/catalog-database.png`, fullPage: true })
 })
@@ -258,7 +257,7 @@ test('notification channel: test message and a workflow that sends through it', 
   const hookUrl = `http://127.0.0.1:${stub.address().port}/hook`
 
   try {
-    await page.goto('/connections')
+    await page.goto('/connections/channels')
     await page.getByRole('button', { name: 'Add channel' }).click()
     await page.getByLabel('Name', { exact: true }).fill('E2E hook')
     await page.getByLabel('Type').selectOption('WEBHOOK')

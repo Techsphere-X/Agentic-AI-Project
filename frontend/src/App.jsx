@@ -23,11 +23,13 @@ function Lazy({ children }) {
   return <Suspense fallback={<p className="muted">Loading…</p>}>{children}</Suspense>
 }
 
-// Old DAG pages now live in the connection catalog; keep their links working.
-function ToCatalog() {
+// Keep old catalog and DAG links working after connections were split by type.
+function ToConnections() {
   const [params] = useSearchParams()
-  const id = params.get('connection')
-  return <Navigate to={id ? `/connections?open=${id}` : '/connections'} replace />
+  const id = params.get('connection') ?? params.get('open')
+  const type = params.get('type')
+  const path = type === 'database' ? '/connections/databases' : type === 'channel' ? '/connections/channels' : '/connections/airflow'
+  return <Navigate to={id ? `${path}?open=${id}` : path} replace />
 }
 
 export default function App() {
@@ -51,10 +53,13 @@ export default function App() {
           <Route path="/automation/workflows/:id" element={<Lazy><WorkflowEditor /></Lazy>} />
           <Route path="/automation/notifications" element={<Notifications />} />
           <Route path="/diagnosis/analyzer" element={<LogAnalyzer />} />
-          <Route path="/connections" element={<Catalog />} />
-          <Route path="/settings/connections" element={<ToCatalog />} />
-          <Route path="/settings/dags" element={<ToCatalog />} />
-          <Route path="/pipelines" element={<ToCatalog />} />
+          <Route path="/connections" element={<ToConnections />} />
+          <Route path="/connections/airflow" element={<Catalog type="airflow" />} />
+          <Route path="/connections/databases" element={<Catalog type="database" />} />
+          <Route path="/connections/channels" element={<Catalog type="channel" />} />
+          <Route path="/settings/connections" element={<ToConnections />} />
+          <Route path="/settings/dags" element={<ToConnections />} />
+          <Route path="/pipelines" element={<ToConnections />} />
           <Route element={<RequireRole roles={['ADMIN']} />}>
             <Route path="/settings/users" element={<Users />} />
           </Route>

@@ -93,7 +93,7 @@ export default function Dashboard() {
             <p className="muted">Checking…</p>
           )}
         </Card>
-        <Card title="Connections" actions={<Link to="/connections" className="small">Catalog</Link>}>
+        <Card title="Connections" actions={<Link to="/connections/airflow" className="small">Manage</Link>}>
           <div className="stat-value">{connections && databases ? connections.length + databases.length : '—'}</div>
           <p className="muted small">
             {connections?.length ?? 0} Airflow · {databases?.length ?? 0} database
@@ -166,11 +166,11 @@ export default function Dashboard() {
       <Card title="Getting started">
         <ol className="steps">
           <Step done={Boolean(connections?.length)}>
-            <Link to="/connections">Add an Airflow connection</Link> to the catalog
+            <Link to="/connections/airflow">Add an Airflow connection</Link>
           </Step>
           <Step done={tested}>Test the connection until it reports Healthy</Step>
           <Step done={Boolean(dagStats?.synced > 0)}>
-            <Link to="/connections">Sync DAGs</Link> from Airflow
+            <Link to="/connections/airflow">Sync DAGs</Link> from Airflow
           </Step>
           <Step done={Boolean(dagStats?.monitored > 0)}>Open the connection and turn on monitoring for the DAGs you care about</Step>
           <Step done={Boolean(detection?.last_cycle)}>

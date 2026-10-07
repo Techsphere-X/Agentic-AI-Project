@@ -145,7 +145,7 @@ def test_slack_test_message(client: TestClient, admin_headers: dict, http: Http)
     assert str(http.requests[-1].url) == SLACK_URL
     payload = http.last_json()
     assert payload["text"].startswith("Test message from Agentic Ops")
-    assert payload["blocks"][-1]["elements"][0]["url"].endswith("/connections?type=channel")
+    assert payload["blocks"][-1]["elements"][0]["url"].endswith("/connections/channels")
 
 
 def test_failed_send_is_reported(client: TestClient, admin_headers: dict, http: Http) -> None:

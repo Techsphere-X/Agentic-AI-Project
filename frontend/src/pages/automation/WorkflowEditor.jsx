@@ -141,7 +141,7 @@ function ChannelSources({ sources, onAdd }) {
   if (!sources.channels.length) {
     return (
       <p className="muted small">
-        To message people, <Link to="/connections?type=channel">add an email, Slack or Teams channel</Link>.
+        To message people, <Link to="/connections/channels">add an email, Slack or Teams channel</Link>.
       </p>
     )
   }
@@ -186,7 +186,7 @@ function PipelineSources({ sources, onAdd }) {
   if (!sources.airflow.length) {
     return (
       <p className="muted small">
-        No Airflow connections. <Link to="/connections">Add one in the Catalog</Link>.
+        No Airflow connections. <Link to="/connections/airflow">Add one</Link>.
       </p>
     )
   }
@@ -250,7 +250,7 @@ function DatabaseSources({ sources, onAdd }) {
   if (!sources.databases.length) {
     return (
       <p className="muted small">
-        No databases. <Link to="/connections">Add one in the Catalog</Link>.
+        No databases. <Link to="/connections/databases">Add one</Link>.
       </p>
     )
   }
