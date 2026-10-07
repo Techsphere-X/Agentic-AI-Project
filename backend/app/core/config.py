@@ -95,6 +95,15 @@ class Settings(BaseSettings):
     ML_BREAKER_FAILURES: int = 3
     ML_BREAKER_COOLDOWN_SECONDS: int = 60
 
+    # Local LLM (Ollama) that may pick the fix in "Choose the fix" blocks set to suggest/decide.
+    # It only ever chooses among the fixes the rules allow; disabled = the rules decide alone.
+    DECISION_LLM_ENABLED: bool = False
+    DECISION_LLM_URL: str = "http://127.0.0.1:11434"
+    DECISION_LLM_MODEL: str = "qwen3:4b"
+    DECISION_LLM_TIMEOUT_SECONDS: float = 60  # the first call loads the model
+    DECISION_LLM_BREAKER_FAILURES: int = 3
+    DECISION_LLM_BREAKER_COOLDOWN_SECONDS: int = 120
+
     @model_validator(mode="after")
     def _check_production_safety(self) -> "Settings":
         if self.ENVIRONMENT == "development":

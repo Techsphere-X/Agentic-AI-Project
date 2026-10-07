@@ -64,6 +64,50 @@ def test_specific_causes_win_over_generic_code_errors() -> None:
     assert classify(log).retryable is False
 
 
+def test_noise_lines_and_timestamps_do_not_decide_the_category() -> None:
+    log = (
+        "[2026-09-30T00:13:37.503+0000] {taskinstance.py:1225} INFO - Marking task as FAILED.\n"
+        "[2026-09-30T00:13:37.100+0000] {http.py:88} WARNING - Connection reset, retrying (1/3)\n"
+        "Traceback (most recent call last):\n"
+        '  File "/site-packages/requests/adapters.py", line 903, in send\n'
+        "    raise ConnectionError(e, request=request)\n"
+        "    ^^^^^^^^^^\n"
+        "\x1b[31m[2026-09-30T00:13:38.000+0000] {logging_mixin.py:190} INFO - heartbeat ok\x1b[0m\n"
+        'psycopg2.errors.InvalidTextRepresentation: invalid input syntax for type integer: "12a"'
+    )
+    diagnosis = classify(log)
+    assert diagnosis.category == C.DATA_INTEGRITY
+    assert diagnosis.retryable is False
+
+
+def test_killed_task_reported_at_info_level_is_a_resource_failure() -> None:
+    log = "[2026-09-30] {local_task_job_runner.py:266} INFO - Task exited with return code -9"
+    assert classify(log).category == C.RESOURCE
+
+
+@pytest.mark.parametrize(
+    ("log", "category"),
+    [
+        ("google.api_core.exceptions.Forbidden: 403 Quota exceeded for bytes scanned", C.RESOURCE),
+        ("msal: AADSTS7000222: The provided client secret keys are expired.", C.AUTH),
+        ("pyspark AnalysisException: [UNRESOLVED_COLUMN.WITH_SUGGESTION] `amt`", C.SCHEMA),
+        ("ValueError: time data '2026-13-01' does not match format '%Y-%m-%d'", C.DATA_INTEGRITY),
+        ("snowflake: Statement reached its statement or warehouse timeout of 3600", C.TIMEOUT),
+        (
+            "httpx.RemoteProtocolError: Server disconnected without sending a response.",
+            C.TRANSIENT_NETWORK,
+        ),
+        (
+            "AirflowException: The external task load_raw in DAG ingest_orders failed.",
+            C.UPSTREAM_MISSING,
+        ),
+        ("RecursionError: maximum recursion depth exceeded", C.CODE_BUG),
+    ],
+)
+def test_common_vendor_errors(log: str, category: FailureCategory) -> None:
+    assert classify(f"[2026-09-30] ERROR - {log}").category == category
+
+
 def test_retryable_flags_and_empty_logs() -> None:
     assert classify("ConnectionResetError: Connection reset by peer").retryable is True
     assert classify("SyntaxError: invalid syntax").retryable is False

@@ -60,6 +60,7 @@ class CircuitBreaker:
     failures_to_open: int
     cooldown_seconds: float
     clock: Callable[[], float] = time.monotonic
+    name: str = "ML service"
     failures: int = 0
     open_until: float = 0.0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
@@ -79,7 +80,8 @@ class CircuitBreaker:
             if self.failures >= self.failures_to_open and not self.is_open:
                 self.open_until = self.clock() + self.cooldown_seconds
                 logger.warning(
-                    "ML service circuit opened for %ss after %s consecutive failures (last: %s)",
+                    "%s circuit opened for %ss after %s consecutive failures (last: %s)",
+                    self.name,
                     self.cooldown_seconds,
                     self.failures,
                     reason,

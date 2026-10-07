@@ -116,6 +116,70 @@ class DiagnoseConfig(_Config):
     )
 
 
+class ChooseFixConfig(_Config):
+    max_attempts: int = Field(
+        default=2,
+        ge=1,
+        le=10,
+        json_schema_extra=_ui(
+            "Automatic fixes before handing over",
+            hint="Retries and reruns already carried out on this incident, by any workflow",
+        ),
+    )
+    min_confidence_pct: int | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+        json_schema_extra=_ui(
+            "Minimum diagnosis confidence (%)",
+            hint="Below this the cause counts as unknown. Operator corrections always pass. "
+            "Empty = no minimum",
+        ),
+    )
+    retry_unknown_once: bool = Field(
+        default=True, json_schema_extra=_ui("Try once when the cause is unknown")
+    )
+    pause_on_bad_data: bool = Field(
+        default=False,
+        json_schema_extra=_ui(
+            "Pause the DAG on bad data or schema changes",
+            hint="Stops bad data spreading downstream until someone fixes it",
+        ),
+    )
+    pause_after_failures: int | None = Field(
+        default=None,
+        ge=2,
+        le=100,
+        json_schema_extra=_ui(
+            "Pause after this many failures", hint="Empty = never pause for repeated failures"
+        ),
+    )
+    check_dag_state: bool = Field(
+        default=True,
+        json_schema_extra=_ui(
+            "Ask Airflow first",
+            hint="Leave paused DAGs alone and wait while a run is active",
+        ),
+    )
+    ai_mode: Literal["off", "suggest", "decide"] = Field(
+        default="off",
+        json_schema_extra=_ui(
+            "Local AI",
+            hint="suggest = record the AI's pick next to the rules' choice; decide = the AI picks. "
+            "It only ever chooses among the fixes the rules allow",
+        ),
+    )
+    ai_min_confidence_pct: int | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+        json_schema_extra=_ui(
+            "Minimum AI confidence (%)",
+            hint="Below this the rules' choice stands. Empty = no minimum",
+        ),
+    )
+
+
 class ClearTasksConfig(_Config):
     include_downstream: bool = True
 
@@ -430,6 +494,26 @@ NODE_TYPES: dict[str, NodeType] = {
                 "needs_fix": "needs a fix",
                 "unknown": "unknown",
                 "next": "any outcome",
+            },
+            needs_incident=True,
+        ),
+        NodeType(
+            "decide.choose_fix",
+            "Choose the fix",
+            "logic",
+            "Picks how to handle the failure from the diagnosis, earlier fix attempts, the daily "
+            "action limit and the DAG's state, and records why. A local AI can suggest or make "
+            "the pick among the fixes the rules allow. If the chosen output is not connected, "
+            "'hand to a person' is followed.",
+            ("retry", "rerun", "wait", "pause", "escalate", "ignore"),
+            ChooseFixConfig,
+            {
+                "retry": "retry failed tasks",
+                "rerun": "start a new run",
+                "wait": "wait for input",
+                "pause": "pause the DAG",
+                "escalate": "hand to a person",
+                "ignore": "leave it alone",
             },
             needs_incident=True,
         ),

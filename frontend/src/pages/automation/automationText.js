@@ -13,6 +13,7 @@ export const NODE_LABELS = {
   'condition.filter': 'Only if…',
   'diagnose.classify_log': 'Diagnose failure',
   'check.dag_state': 'Check the DAG',
+  'decide.choose_fix': 'Choose the fix',
   'approval.request': 'Ask a human',
   'action.clear_failed_tasks': 'Retry failed tasks',
   'action.trigger_dag_run': 'Start a new run',
@@ -41,6 +42,7 @@ export const NODE_ICONS = {
   condition: '⋔',
   diagnose: '🔎',
   check: '⋔',
+  decide: '⚖',
   approval: '✋',
   action: '⚙',
   verify: '✓',
@@ -134,6 +136,14 @@ export function describeConfig(type, config = {}) {
       if (config.max_occurrences) parts.push(`≤ ${config.max_occurrences} failures`)
       if (config.dag_ids?.length) parts.push(`DAGs ${config.dag_ids.join(', ')}`)
       if (config.tags_any?.length) parts.push(`tags ${config.tags_any.join(', ')}`)
+      break
+    case 'decide.choose_fix':
+      parts.push(`up to ${config.max_attempts ?? 2} automatic fixes`)
+      if (config.min_confidence_pct != null) parts.push(`confidence ≥ ${config.min_confidence_pct}%`)
+      if (config.pause_on_bad_data) parts.push('pause on bad data')
+      if (config.pause_after_failures) parts.push(`pause after ${config.pause_after_failures} failures`)
+      if (config.ai_mode === 'suggest') parts.push('AI suggests')
+      if (config.ai_mode === 'decide') parts.push('AI decides')
       break
     case 'approval.request':
       parts.push(

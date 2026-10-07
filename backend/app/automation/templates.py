@@ -172,6 +172,81 @@ def _retry_graph(categories: list[str], approval_envs: list[str]) -> dict[str, A
     }
 
 
+def _choose_fix_graph() -> dict[str, Any]:
+    """failure / SLA miss -> diagnose -> choose the fix -> the matching fix, verified."""
+    return {
+        "nodes": [
+            _n(
+                "trigger",
+                "trigger.incident",
+                events=["opened", "recurred"],
+                incident_types=["DAG_RUN_FAILED", "SLA_MISSED"],
+            ),
+            _n("diagnose", "diagnose.classify_log"),
+            _n("decide", "decide.choose_fix"),
+            # retry the failed tasks
+            _n("approve_retry", "approval.request", required_environments=["PROD"]),
+            _n("retry", "action.clear_failed_tasks", include_downstream=True),
+            # start a new run (also after waiting for missing input)
+            _n("wait", "flow.wait", "Give the input time to arrive", minutes=30),
+            _n("approve_rerun", "approval.request", required_environments=["PROD"]),
+            _n("rerun", "action.trigger_dag_run"),
+            _n("verify", "verify.run_success", timeout_minutes=60),
+            _n(
+                "resolve",
+                "incident.update",
+                operation="resolve",
+                note="{{decision.reason}} The run then succeeded.",
+            ),
+            _n(
+                "notify_ok",
+                "notify",
+                level="INFO",
+                title="Fixed automatically: {{incident.title}}",
+                message="{{diagnosis.label}} on {{incident.dag_id}}: {{decision.label}}, verified.",
+            ),
+            # pause (only chosen when the block's settings allow it; always asks)
+            _n("approve_pause", "approval.request", required_environments=[], timeout_minutes=240),
+            _n("pause", "action.set_dag_paused", paused=True),
+            _n("paused_note", "incident.update", operation="note", note="{{decision.reason}}"),
+            # hand to a person
+            _n("escalate", "incident.update", operation="escalate"),
+            _n(
+                "notify_fail",
+                "notify",
+                level="WARNING",
+                title="Needs a person: {{incident.title}}",
+                message="{{diagnosis.label}} on {{incident.dag_id}}. {{last_error}}",
+            ),
+            _n("ignore_note", "incident.update", operation="note", note="{{decision.reason}}"),
+        ],
+        "edges": [
+            _e("trigger", "next", "diagnose"),
+            _e("diagnose", "next", "decide"),
+            _e("decide", "retry", "approve_retry"),
+            _e("approve_retry", "approved", "retry"),
+            _e("retry", "success", "verify"),
+            _e("retry", "failed", "escalate"),
+            _e("decide", "rerun", "approve_rerun"),
+            _e("decide", "wait", "wait"),
+            _e("wait", "next", "approve_rerun"),
+            _e("approve_rerun", "approved", "rerun"),
+            _e("rerun", "success", "verify"),
+            _e("rerun", "failed", "escalate"),
+            _e("verify", "success", "resolve"),
+            _e("verify", "failed", "escalate"),
+            _e("resolve", "next", "notify_ok"),
+            _e("decide", "pause", "approve_pause"),
+            _e("approve_pause", "approved", "pause"),
+            _e("pause", "success", "paused_note"),
+            _e("pause", "failed", "escalate"),
+            _e("decide", "escalate", "escalate"),
+            _e("escalate", "next", "notify_fail"),
+            _e("decide", "ignore", "ignore_note"),
+        ],
+    }
+
+
 TEMPLATES: tuple[Template, ...] = (
     Template(
         key="retry-transient",
@@ -327,6 +402,16 @@ TEMPLATES: tuple[Template, ...] = (
                 _e("pause", "success", "note"),
             ],
         },
+    ),
+    Template(
+        key="choose-fix",
+        name="Choose and apply the fix",
+        description=(
+            "One workflow for every failure and SLA miss: diagnose it, pick the fix (retry, new "
+            "run, wait for input, or hand to a person) from the cause and earlier attempts, "
+            "apply it and check it worked. Use instead of the retry workflows, not with them."
+        ),
+        graph=_choose_fix_graph(),
     ),
     Template(
         key="stale-escalation",

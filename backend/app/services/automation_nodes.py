@@ -19,11 +19,12 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.automation import policy
+from app.automation import policy, remediation
 from app.automation.graph import ACTION_TYPES, Graph, Node
 from app.automation.render import render
 from app.automation.types import ApprovalStatus, NotificationLevel
 from app.connectors import database as db_connector
+from app.connectors.decision_llm import DecisionLLM, get_decision_llm
 from app.connectors.notify import Message
 from app.core.config import Settings
 from app.core.exceptions import AppError
@@ -31,6 +32,7 @@ from app.detection.types import (
     IncidentResolution,
     IncidentSeverity,
     IncidentStatus,
+    IncidentType,
 )
 from app.diagnosis.log_classifier import RETRYABLE, FailureCategory
 from app.models.airflow import AirflowConnection, AirflowTriggerReservation, MonitoredDag
@@ -207,6 +209,7 @@ class NodeContext:
             if incident is not None
             else {},
             "diagnosis": self.get_context("diagnosis", {}),
+            "decision": self.get_context("decision", {}),
             "results": self.get_context("results", {}),
             "workflow": {"name": self.run.workflow_name, "trigger": self.run.trigger_event},
             "environment": self.environment,
@@ -301,18 +304,22 @@ def diagnosis_outcome(diagnosis: dict[str, Any], min_confidence_pct: int | None)
     return "retryable" if category in RETRYABLE else "needs_fix"
 
 
-def _classify(ctx: NodeContext, node: Node) -> NodeResult:
-    # The stored diagnosis (computed when evidence arrived, or an operator correction), so the
-    # workflow and the incident page always agree; computed here only if it is missing, or
-    # recomputed from the latest logs when the block asks for it.
-    cfg = node.config
+def _load_diagnosis(ctx: NodeContext, *, refresh: bool = False) -> dict[str, Any]:
+    """The stored diagnosis (computed when evidence arrived, or an operator correction), so the
+    workflow and the incident page always agree; computed here only if it is missing, or
+    recomputed from the latest logs when asked."""
     incident = ctx.the_incident
-    if cfg.get("refresh"):
+    if refresh:
         stored = diagnosis_service.diagnose_and_store(ctx.db, incident, record_event=False)
     else:
         stored = diagnosis_service.ensure(ctx.db, incident, record_event=False)
     # Only failed-run incidents store one; others (SLA) are classified on the fly as before.
-    diagnosis = dict(stored) if stored else incident_service.diagnose(incident).as_dict()
+    return dict(stored) if stored else incident_service.diagnose(incident).as_dict()
+
+
+def _classify(ctx: NodeContext, node: Node) -> NodeResult:
+    cfg = node.config
+    diagnosis = _load_diagnosis(ctx, refresh=bool(cfg.get("refresh")))
     outcome = diagnosis_outcome(diagnosis, cfg.get("min_confidence_pct"))
     diagnosis["outcome"] = outcome
     ctx.set_context("diagnosis", diagnosis)
@@ -370,6 +377,116 @@ def _dag_state(ctx: NodeContext, node: Node) -> NodeResult:
         result = NodeResult("ready", {"is_paused": False}, f"{dag_id} is idle and not paused")
     ctx._dag_state_cache[cache_key] = result
     return result
+
+
+_FIX_ACTIONS = ("action.clear_failed_tasks", "action.trigger_dag_run")
+
+
+def _fix_history(ctx: NodeContext) -> tuple[int, int]:
+    """(fixes carried out, verifications that failed) on this incident, by any live run."""
+    rows = ctx.db.execute(
+        select(WorkflowStep.node_type, WorkflowStep.port)
+        .join(WorkflowRun, WorkflowRun.id == WorkflowStep.run_id)
+        .where(
+            WorkflowRun.incident_id == ctx.the_incident.id,
+            WorkflowRun.dry_run.is_(False),
+            WorkflowStep.node_type.in_((*_FIX_ACTIONS, "verify.run_success")),
+        )
+    ).all()
+    attempts = sum(1 for t, p in rows if t in _FIX_ACTIONS and p == "success")
+    failed = sum(1 for t, p in rows if t == "verify.run_success" and p == "failed")
+    return attempts, failed
+
+
+def _fix_facts(ctx: NodeContext, node: Node, diagnosis: dict[str, Any]) -> remediation.Facts:
+    incident = ctx.the_incident
+    dag_state = "unknown"
+    if node.config["check_dag_state"]:
+        try:
+            dag_state = _dag_state(ctx, node).port or "unknown"
+        except (NodeError, AppError) as exc:
+            logger.info("Choose the fix: DAG state unavailable for %s: %s", incident.dag_id, exc)
+    attempts, failed = _fix_history(ctx)
+    return remediation.Facts(
+        incident_type=str(incident.type),
+        incident_status=str(incident.status),
+        dag_id=incident.dag_id,
+        environment=ctx.environment,
+        severity=str(incident.severity),
+        occurrences=incident.occurrence_count,
+        category=str(diagnosis.get("category") or FailureCategory.UNKNOWN),
+        confidence=float(diagnosis.get("confidence") or 0),
+        source=str(diagnosis.get("source") or "regex"),
+        has_failed_run=incident.type == IncidentType.DAG_RUN_FAILED
+        and bool(incident.last_run_id or incident.run_id),
+        fix_attempts=attempts,
+        failed_verifications=failed,
+        actions_today=_actions_last_24h(ctx),
+        max_actions_per_day=ctx.settings.AUTOMATION_MAX_ACTIONS_PER_DAG_PER_DAY,
+        dag_state=dag_state,
+    )
+
+
+def decision_advisor(settings: Settings) -> DecisionLLM | None:
+    """The local LLM for "Choose the fix" blocks, or None when it is switched off."""
+    return get_decision_llm() if settings.DECISION_LLM_ENABLED else None
+
+
+def _choose_fix(ctx: NodeContext, node: Node) -> NodeResult:
+    cfg = node.config
+    diagnosis = ctx.get_context("diagnosis") or _load_diagnosis(ctx)
+    facts = _fix_facts(ctx, node, diagnosis)
+    choice = remediation.choose_fix(
+        facts,
+        remediation.Settings(
+            max_attempts=cfg["max_attempts"],
+            min_confidence_pct=cfg["min_confidence_pct"],
+            retry_unknown_once=cfg["retry_unknown_once"],
+            pause_on_bad_data=cfg["pause_on_bad_data"],
+            pause_after_failures=cfg["pause_after_failures"],
+        ),
+    )
+    advisor = decision_advisor(ctx.settings) if cfg["ai_mode"] != "off" else None
+    ask: Callable[[], remediation.Advice] | None = None
+    if advisor is not None:
+
+        def ask_advisor() -> remediation.Advice:
+            logs = diagnosis_service.task_logs(ctx.db, ctx.the_incident)
+            return advisor.advise(facts, choice, diagnosis, logs)
+
+        ask = ask_advisor
+
+    advised = remediation.advise(choice, cfg["ai_mode"], ask, cfg["ai_min_confidence_pct"])
+    fix, reason = advised.fix, advised.reason
+    port = fix
+    if not ctx.graph.next_nodes(node.id, fix) and ctx.graph.next_nodes(node.id, "escalate"):
+        port = "escalate"
+        reason += f" Nothing is connected to '{fix}', so it goes to a person."
+    decision = {
+        "fix": port,
+        "chosen": fix,
+        "label": remediation.FIX_LABELS[port],
+        "rule": choice.rule,
+        "rules_fix": choice.fix,
+        "reason": reason,
+        "allowed": list(choice.allowed),
+        "ai": advised.ai,
+        "facts": facts.as_dict(),
+    }
+    ctx.set_context("decision", decision)
+    ctx.record_result(node.id, decision)
+    if port == "escalate":
+        ctx.set_context("last_error", reason)
+    ctx.event("fix_chosen", fix=port, rule=choice.rule, reason=reason, ai=advised.ai)
+    ctx.audit(
+        "automation.fix_chosen",
+        fix=port,
+        rule=choice.rule,
+        reason=reason,
+        ai=advised.ai,
+        facts=facts.as_dict(),
+    )
+    return NodeResult(port, decision, f"Chose to {remediation.FIX_LABELS[port]}: {reason}")
 
 
 # ---------------------------------------------------------------------- approval
@@ -634,10 +751,7 @@ def _trigger_dag_once(
                 lambda: ctx.airflow_adapter(conn).get_dag_run(dag_id, reservation.airflow_run_id)
             )
             if remote is not None and remote.state in ACTIVE_RUN_STATES:
-                if (
-                    reservation.workflow_run_id == ctx.run.id
-                    and reservation.node_id == node_id
-                ):
+                if reservation.workflow_run_id == ctx.run.id and reservation.node_id == node_id:
                     logger.info(
                         "Skipped duplicate DAG trigger for %s/%s; workflow run %s "
                         "already started %s",
@@ -707,9 +821,7 @@ def _trigger_dag_once(
         )
         raise ActionFailed(f"DAG {dag_id} trigger was reserved by another worker") from exc
 
-    run = run_async(
-        lambda: ctx.airflow_adapter(conn).trigger_dag_run(dag_id, note=note, conf=conf)
-    )
+    run = run_async(lambda: ctx.airflow_adapter(conn).trigger_dag_run(dag_id, note=note, conf=conf))
     reservation.airflow_run_id = run.run_id
     ctx.db.flush()
     return {"dag_id": dag_id, "run_id": run.run_id}
@@ -1256,6 +1368,7 @@ EXECUTORS: dict[str, Callable[[NodeContext, Node], NodeResult]] = {
     "condition.filter": _filter,
     "diagnose.classify_log": _classify,
     "check.dag_state": _dag_state,
+    "decide.choose_fix": _choose_fix,
     "approval.request": _approval,
     "action.clear_failed_tasks": _clear_failed_tasks,
     "action.trigger_dag_run": _trigger_dag_run,

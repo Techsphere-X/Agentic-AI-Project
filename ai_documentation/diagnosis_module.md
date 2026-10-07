@@ -658,3 +658,41 @@ docker-compose.yml                     ml-service under profile "ml"
 | **ECE** | Expected calibration error: average gap between confidence and accuracy |
 | **Macro-F1** | F1 averaged over categories equally, so rare categories count as much as common ones |
 | **Template split** | Validation holds out whole templates, so it measures generalisation, not memorisation |
+
+## Choose the fix + local AI
+
+The **Choose the fix** block (`decide.choose_fix`) turns the diagnosis, earlier fix attempts, the
+daily action limit and the DAG's state into one fix: retry, rerun, wait, pause, escalate or ignore
+(`backend/app/automation/remediation.py`). The rules also return `allowed`, every fix that is safe
+in that situation.
+
+A local LLM (Ollama) can take part, set per block with **Local AI**:
+
+| Mode | Effect |
+|---|---|
+| `off` (default) | The rules decide alone |
+| `suggest` | The rules route; the AI's pick, reason and confidence are stored in `decision.ai` |
+| `decide` | The AI's pick routes, if it is in `allowed` and above *Minimum AI confidence* |
+
+Guard rails:
+- The AI is only asked when more than one fix is allowed. Resolved incidents, paused DAGs and
+  failures that need a code or data change never reach it.
+- Ollama constrains the answer to a JSON schema whose `fix` is an enum of `allowed`. The backend
+  checks it again.
+- If the AI is down, slow, wrong or unsure, the rules' choice stands. `decision.ai.status` says why:
+  `used`, `rejected`, `low_confidence`, `unavailable`, `disabled` or `skipped`.
+- Logs are redacted before they are sent, and only the last 150 lines are sent. Nothing leaves the
+  machine.
+
+Setup:
+
+```
+ollama pull qwen3:4b          # ~2.5 GB; fits a 4 GB GPU next to DistilBERT
+# backend/.env
+DECISION_LLM_ENABLED=True
+DECISION_LLM_MODEL=qwen3:4b    # any Ollama model, e.g. llama3.2
+```
+
+Client: `backend/app/connectors/decision_llm.py`. It has the same circuit breaker as the ML
+client. The first call loads the model (~30 s), and the model then stays loaded for 30 minutes.
+Tests: `backend/tests/test_choose_fix_block.py`.
