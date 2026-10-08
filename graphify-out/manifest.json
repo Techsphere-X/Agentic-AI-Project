@@ -1103,5 +1103,15 @@
     "mtime": 1790833118.8608673,
     "ast_hash": "b3751fa5a2ec52e31b50c2eb4e1f8c06",
     "semantic_hash": ""
+  },
+  ".agents/rules/graphify.md": {
+    "mtime": 1791367487.2468197,
+    "ast_hash": "a0e4d192b9e2e17256124dbfc8e24e6a",
+    "semantic_hash": ""
+  },
+  ".agents/workflows/graphify.md": {
+    "mtime": 1791367487.266386,
+    "ast_hash": "637776aa6f7496d069afe7520c845c8a",
+    "semantic_hash": ""
   }
 }
