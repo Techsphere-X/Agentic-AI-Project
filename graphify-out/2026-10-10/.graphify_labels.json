@@ -110,6 +110,7 @@
   "108": "update_user",
   "109": "LoginRateLimiter",
   "110": "Backend",
+  "111": "ValueError",
   "112": "evaluate.py",
   "113": "9. Results",
   "114": "test_real_failure_is_fixed_and_bad_data_is_left_alone",
