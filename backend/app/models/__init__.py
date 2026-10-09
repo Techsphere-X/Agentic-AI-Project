@@ -8,6 +8,7 @@ from app.models.airflow import (
 from app.models.audit_log import ActorType, AuditLog
 from app.models.automation import (
     Approval,
+    DagRunCheck,
     Notification,
     Workflow,
     WorkflowRun,
@@ -37,6 +38,7 @@ __all__ = [
     "ChannelKind",
     "ChannelStatus",
     "ConnectionKind",
+    "DagRunCheck",
     "DatabaseConnection",
     "DatabaseEngine",
     "DeploymentEnvironment",

@@ -8,6 +8,7 @@ const PATHS = {
   workflows: 'M5 3h4v4H5zM15 10h4v4h-4zM5 17h4v4H5zM7 7v10M9 5h3a3 3 0 0 1 3 3v4M9 19h3a3 3 0 0 0 3-3v-2',
   runs: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM10 8.5v7l6-3.5z',
   approvals: 'M9 11l2.5 2.5L16 9M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z',
+  checks: 'M4 6h3M4 12h3M4 18h3M10 6l2 2 4-4M10 12l2 2 4-4M11 18h9',
   incidents: 'M12 3l9.5 17h-19zM12 10v4M12 17.5v.5',
   notifications: 'M6 16V11a6 6 0 1 1 12 0v5l2 2H4zM10 20.5a2 2 0 0 0 4 0',
   analyzer: 'M4 5h16M4 9h10M4 13h6M15.5 18a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM18 17.5l3 3',

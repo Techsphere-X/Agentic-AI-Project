@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.automation.types import (
     ApprovalStatus,
+    DagRunCheckStatus,
     NotificationLevel,
     RunStatus,
     StepStatus,
@@ -152,6 +153,40 @@ class Approval(TimestampMixin, Base):
     @property
     def workflow_name(self) -> str:
         return self.run.workflow_name if self.run else ""
+
+
+class DagRunCheck(TimestampMixin, Base):
+    """Validation status of one finished DAG run, recorded by the workflow it started."""
+
+    __tablename__ = "dag_run_checks"
+    __table_args__ = (
+        Index("ix_dag_run_checks_dag_created", "connection_id", "dag_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    connection_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("airflow_connections.id", ondelete="CASCADE")
+    )
+    monitored_dag_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("monitored_dags.id", ondelete="CASCADE"), index=True
+    )
+    dag_id: Mapped[str] = mapped_column(String(250))
+    run_id: Mapped[str] = mapped_column(String(250))
+    run_state: Mapped[str] = mapped_column(String(32))  # Airflow state: success / failed
+    workflow_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workflow_runs.id", ondelete="CASCADE"), unique=True
+    )
+    status: Mapped[DagRunCheckStatus] = mapped_column(
+        _enum(DagRunCheckStatus, "dag_run_check_status"), default=DagRunCheckStatus.PENDING
+    )
+    message: Mapped[str | None] = mapped_column(Text)
+    checked_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+
+    workflow_run: Mapped[WorkflowRun] = relationship()
+
+    @property
+    def workflow_name(self) -> str:
+        return self.workflow_run.workflow_name if self.workflow_run else ""
 
 
 class Notification(Base):

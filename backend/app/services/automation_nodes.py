@@ -22,12 +22,18 @@ from sqlalchemy.orm import Session
 from app.automation import policy, remediation
 from app.automation.graph import ACTION_TYPES, Graph, Node
 from app.automation.render import render
-from app.automation.types import ApprovalStatus, NotificationLevel
+from app.automation.types import (
+    ApprovalStatus,
+    DagRunCheckStatus,
+    NotificationLevel,
+    TriggerEvent,
+)
 from app.connectors import database as db_connector
 from app.connectors.decision_llm import DecisionLLM, get_decision_llm
 from app.connectors.notify import Message
 from app.core.config import Settings
 from app.core.exceptions import AppError
+from app.detection import severity
 from app.detection.types import (
     IncidentResolution,
     IncidentSeverity,
@@ -36,7 +42,13 @@ from app.detection.types import (
 )
 from app.diagnosis.log_classifier import RETRYABLE, FailureCategory
 from app.models.airflow import AirflowConnection, AirflowTriggerReservation, MonitoredDag
-from app.models.automation import Approval, Notification, WorkflowRun, WorkflowStep
+from app.models.automation import (
+    Approval,
+    DagRunCheck,
+    Notification,
+    WorkflowRun,
+    WorkflowStep,
+)
 from app.models.database_connection import DatabaseConnection
 from app.models.incident import Incident
 from app.models.notification_channel import NotificationChannel
@@ -212,6 +224,7 @@ class NodeContext:
             "decision": self.get_context("decision", {}),
             "results": self.get_context("results", {}),
             "workflow": {"name": self.run.workflow_name, "trigger": self.run.trigger_event},
+            "dag_run": self.get_context("dag_run", {}),
             "environment": self.environment,
             "last_error": self.get_context("last_error", ""),
             "links": {
@@ -240,6 +253,13 @@ _TRIGGER_TEXT = {"manual": "Started manually", "schedule": "Started by the sched
 
 def _trigger(ctx: NodeContext, node: Node) -> NodeResult:
     event = ctx.run.trigger_event
+    if event == TriggerEvent.DAG_RUN:
+        dag_run = ctx.get_context("dag_run", {})
+        return NodeResult(
+            "next",
+            {"dag_id": dag_run.get("dag_id"), "run_id": dag_run.get("run_id")},
+            f"Run {dag_run.get('run_id')} of {dag_run.get('dag_id')} {dag_run.get('state')}",
+        )
     return NodeResult("next", message=_TRIGGER_TEXT.get(event, f"Triggered by incident {event}"))
 
 
@@ -1355,11 +1375,137 @@ def _check_data(ctx: NodeContext, node: Node) -> NodeResult:
     return NodeResult("fail", output, f"Failed: {value} is not {op} {expected}")
 
 
+# ---------------------------------------------------------------------- DAG run checks
+
+
+def _record_check(ctx: NodeContext, node: Node) -> NodeResult:
+    cfg = node.config
+    dag_run = ctx.get_context("dag_run") or {}
+    check = ctx.db.scalar(select(DagRunCheck).where(DagRunCheck.workflow_run_id == ctx.run.id))
+    if check is None:
+        raise NodeError("This run has no DAG run to record a status for")
+    passed = cfg["result"] == "passed"
+    note = render(cfg["note"] or "", ctx.render_values()).strip()
+    label = "passed" if passed else "failed"
+    if ctx.dry_run:
+        return NodeResult("next", {"simulated": True}, f"Dry run: would mark the run as {label}")
+
+    check.status = DagRunCheckStatus.PASSED if passed else DagRunCheckStatus.FAILED
+    check.message = (note or ("Checks passed" if passed else "Checks failed"))[:2000]
+    check.checked_at = ctx.now
+    output: dict[str, Any] = {"status": str(check.status), "run_id": check.run_id}
+    message = f"Marked run {check.run_id} as {label}"
+
+    fingerprint = f"{IncidentType.DATA_CHECK_FAILED.value}:{check.connection_id}:{check.dag_id}"
+    open_incident = ctx.db.scalar(
+        select(Incident).where(
+            Incident.fingerprint == fingerprint,
+            Incident.status.in_(incident_service.OPEN_STATUSES),
+        )
+    )
+    if passed and open_incident is not None:
+        incident_service.mark_resolved(
+            open_incident, IncidentResolution.AUTO_RECOVERED, note=f"Run {check.run_id} passed"
+        )
+        incident_service.add_event(
+            ctx.db, open_incident, "auto_resolved", details={"recovered_by_run": check.run_id}
+        )
+        output["resolved_incident"] = str(open_incident.id)
+        message += "; the data check incident is resolved"
+    elif not passed and cfg["open_incident"] and check.monitored_dag_id is not None:
+        incident = _data_check_incident(ctx, check, open_incident, fingerprint, dag_run, note)
+        output["incident_id"] = str(incident.id)
+        message += f"; incident {'updated' if open_incident else 'opened'}"
+    ctx.audit("dag_run_check.recorded", dag_id=check.dag_id, run_id=check.run_id, status=label)
+    return NodeResult("next", output, message)
+
+
+def _data_check_incident(
+    ctx: NodeContext,
+    check: DagRunCheck,
+    incident: Incident | None,
+    fingerprint: str,
+    dag_run: dict[str, Any],
+    note: str,
+) -> Incident:
+    """Open (or record again) the DAG's "Data check failed" incident and queue its workflows."""
+    from app.services import automation_service  # imports this module
+
+    summary = note or f"Run {check.run_id} failed its data checks"
+    if incident is not None:
+        incident.occurrence_count += 1
+        incident.last_seen_at = ctx.now
+        incident.occurred_at = ctx.now
+        incident.last_run_id = check.run_id
+        incident.summary = summary
+        incident_service.add_event(
+            ctx.db,
+            incident,
+            "recurred",
+            details={"run_id": check.run_id, "count": incident.occurrence_count},
+        )
+        event = TriggerEvent.RECURRED
+    else:
+        dag = ctx.db.get(MonitoredDag, check.monitored_dag_id)
+        score = severity.score(
+            IncidentType.DATA_CHECK_FAILED,
+            environment=dag_run.get("environment", ""),
+            tags=dag.tags if dag else None,
+            recent_failures=0,
+        )
+        incident = Incident(
+            id=uuid.uuid4(),
+            connection_id=check.connection_id,
+            monitored_dag_id=check.monitored_dag_id,
+            dag_id=check.dag_id,
+            run_id=check.run_id,
+            last_run_id=check.run_id,
+            type=IncidentType.DATA_CHECK_FAILED,
+            severity=score.severity,
+            title=f"{check.dag_id}: data check failed",
+            summary=summary,
+            fingerprint=fingerprint,
+            occurred_at=ctx.now,
+            first_seen_at=ctx.now,
+            last_seen_at=ctx.now,
+        )
+        ctx.db.add(incident)
+        ctx.db.flush()
+        incident_service.add_event(
+            ctx.db,
+            incident,
+            "opened",
+            details={
+                "severity": incident.severity,
+                "severity_reasons": score.reasons,
+                "run_id": check.run_id,
+                "workflow": ctx.run.workflow_name,
+            },
+        )
+        audit_service.record(
+            ctx.db,
+            action="incident.opened",
+            entity_type="incident",
+            entity_id=incident.id,
+            details={
+                "dag_id": check.dag_id,
+                "type": IncidentType.DATA_CHECK_FAILED,
+                "severity": incident.severity,
+                "run_id": check.run_id,
+            },
+        )
+        event = TriggerEvent.OPENED
+    ctx.db.flush()
+    automation_service.enqueue_for_incident(ctx.db, incident, event, now=ctx.now)
+    return incident
+
+
 EXECUTORS: dict[str, Callable[[NodeContext, Node], NodeResult]] = {
     "trigger.incident": _trigger,
     "trigger.incident_stale": _trigger,
     "trigger.manual": _trigger,
     "trigger.schedule": _trigger,
+    "trigger.dag_run": _trigger,
     "flow.wait": _wait,
     "pipeline.run_dag": _run_dag,
     "pipeline.wait_for_dag": _wait_for_dag,
@@ -1376,4 +1522,5 @@ EXECUTORS: dict[str, Callable[[NodeContext, Node], NodeResult]] = {
     "verify.run_success": _verify,
     "incident.update": _incident_update,
     "notify": _notify,
+    "check.record": _record_check,
 }

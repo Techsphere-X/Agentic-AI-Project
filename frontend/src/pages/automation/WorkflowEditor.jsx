@@ -64,6 +64,17 @@ const POPOVER_GAP = 12
 const DIRTY_CHANGES = new Set(['position', 'remove', 'add', 'replace'])
 // Replaced in the palette by the real DAGs and databases (still valid in saved workflows).
 const HIDDEN_IN_PALETTE = new Set(['pipeline.run_dag', 'pipeline.wait_for_dag', 'database.run_sql', 'database.check'])
+
+// Triggers fed by monitoring (incidents, finished DAG runs) rather than by people or the clock.
+const isMonitoringTrigger = (def) => Boolean(def?.needs_incident || def?.needs_dag_run)
+
+/** Why a block cannot be used under `trigger`, or null when it can. */
+function triggerMismatch(def, trigger) {
+  if (!trigger || def.category === 'trigger') return null
+  if (def.needs_incident && !trigger.needs_incident) return 'Works on an incident: needs an incident trigger'
+  if (def.needs_dag_run && !trigger.needs_dag_run) return "Works on a finished DAG run: needs 'When a DAG run finishes'"
+  return null
+}
 // What a DAG or database block can be switched between in its settings.
 const SWITCHES = {
   pipeline: [
@@ -307,12 +318,12 @@ function TriggerItem({ def, current, stageId, onAdd }) {
 }
 
 /**
- * "Start when…": incident triggers (monitoring) first; "Run on demand" and "On a schedule" sit in a
+ * "Start when…": monitoring triggers (incidents, finished DAG runs) first; "Run on demand" and "On a schedule" sit in a
  * collapsed Orchestration group that opens when the workflow uses one of them. A workflow has one
  * trigger, so picking another replaces it.
  */
 function TriggerItems({ items, current, stageId, onAdd }) {
-  const usesOrchestration = Boolean(current && !current.needs_incident)
+  const usesOrchestration = Boolean(current && !isMonitoringTrigger(current))
   const [open, setOpen] = useState(usesOrchestration)
   // Open the group when the workflow switches to one of its triggers (state adjusted during render).
   const [wasUsing, setWasUsing] = useState(usesOrchestration)
@@ -323,10 +334,10 @@ function TriggerItems({ items, current, stageId, onAdd }) {
   const item = (def) => (
     <TriggerItem key={def.type} def={def} current={current?.type === def.type} stageId={stageId} onAdd={onAdd} />
   )
-  const orchestration = items.filter((d) => !d.needs_incident)
+  const orchestration = items.filter((d) => !isMonitoringTrigger(d))
   return (
     <>
-      {items.filter((d) => d.needs_incident).map(item)}
+      {items.filter(isMonitoringTrigger).map(item)}
       {orchestration.length > 0 && (
         <details className="palette-sub" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
           <summary className="palette-sub-title">Orchestration</summary>
@@ -339,8 +350,7 @@ function TriggerItems({ items, current, stageId, onAdd }) {
 }
 
 function Palette({ catalog, trigger, sources, onAdd }) {
-  // Blocks that work on an incident only make sense under an incident trigger.
-  const incidentOnly = trigger && !trigger.needs_incident
+  // Blocks that work on an incident (or a finished DAG run) only make sense under that trigger.
   return (
     <aside className="editor-palette" aria-label="Blocks">
       <p className="muted small">Drag a block onto the canvas, or click to add it.</p>
@@ -359,8 +369,8 @@ function Palette({ catalog, trigger, sources, onAdd }) {
                 {category === 'trigger' && <TriggerItems items={items} current={trigger} stageId={stage.id} onAdd={onAdd} />}
                 {category !== 'trigger' &&
                   items.map((def) => {
-                  const disabled = incidentOnly && def.needs_incident
-                  const why = 'Works on an incident: needs an incident trigger'
+                  const why = triggerMismatch(def, trigger)
+                  const disabled = Boolean(why)
                   return (
                     <button
                       key={def.type}
@@ -657,21 +667,15 @@ function Editor() {
     const def = defs[type]
     if (!def || type === triggerNode.data.nodeType) return
     changeType(triggerNode, type)
-    if (def.needs_incident) {
-      applyProblems([])
-      return
-    }
-    const blocked = nodes.filter((n) => !isTrigger(n.data.nodeType) && defs[n.data.nodeType]?.needs_incident)
+    const blocked = nodes
+      .filter((n) => !isTrigger(n.data.nodeType) && defs[n.data.nodeType])
+      .map((n) => ({ node: n, why: triggerMismatch(defs[n.data.nodeType], def) }))
+      .filter((b) => b.why)
+    applyProblems(blocked.map(({ node, why }) => ({ node: node.id, message: `'${defs[node.data.nodeType].label}': ${why}` })))
     if (blocked.length) {
-      applyProblems(
-        blocked.map((n) => ({
-          node: n.id,
-          message: `'${defs[n.data.nodeType].label}' works on an incident, so it needs an incident trigger`,
-        })),
-      )
       toast.error(
-        `${blocked.length} block${blocked.length === 1 ? '' : 's'} need${blocked.length === 1 ? 's' : ''} an incident: ` +
-          'switch back to an incident trigger or remove them',
+        `${blocked.length} block${blocked.length === 1 ? '' : 's'} cannot run under this trigger: ` +
+          'switch back or remove them',
       )
     }
   }
@@ -973,7 +977,7 @@ function Editor() {
                     >
                       <optgroup label="Monitoring">
                         {catalog
-                          .filter((d) => d.category === 'trigger' && d.needs_incident)
+                          .filter((d) => d.category === 'trigger' && isMonitoringTrigger(d))
                           .map((d) => (
                             <option key={d.type} value={d.type}>
                               {d.label}
@@ -982,7 +986,7 @@ function Editor() {
                       </optgroup>
                       <optgroup label="Orchestration">
                         {catalog
-                          .filter((d) => d.category === 'trigger' && !d.needs_incident)
+                          .filter((d) => d.category === 'trigger' && !isMonitoringTrigger(d))
                           .map((d) => (
                             <option key={d.type} value={d.type}>
                               {d.label}

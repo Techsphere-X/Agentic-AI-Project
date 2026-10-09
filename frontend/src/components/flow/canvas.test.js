@@ -179,6 +179,37 @@ test('pipeline diagram wires connection → DAG → monitors → workflows', () 
   assert.ok(edges.some((e) => e.source === 'conn:c1' && e.target === 'dag:d1'))
 })
 
+test('"When a DAG run finishes" workflows are fed by the DAGs they name', () => {
+  const runGraph = (dagIds) => ({
+    nodes: [{ id: 't', type: 'trigger.dag_run', config: { states: ['success'], dag_ids: dagIds } }],
+    edges: [],
+  })
+  const named = workflowFeeds({ graph: runGraph(['orders']) })
+  assert.equal(named.dagRun, true)
+  assert.deepEqual([...named.dagIds], ['orders'])
+  assert.equal(workflowFeeds({ graph: runGraph([]) }).dagIds, null)
+
+  const conn = { id: 'c1', name: 'dev', environment: 'DEV', is_active: true, is_live: true }
+  const { nodes, edges } = buildPipeline({
+    connections: [conn],
+    dagsByConnection: { c1: [dag(), dag({ id: 'd2', dag_id: 'other' })] },
+    workflows: [
+      { id: 'w1', name: 'Validate orders', mode: 'LIVE', graph: runGraph(['orders']) },
+      { id: 'w2', name: 'Validate all', mode: 'LIVE', graph: runGraph([]) },
+    ],
+    counts: {},
+    checks: { 'c1:orders': { status: 'FAILED', run_id: 'r1' } },
+    drafts: [],
+    showUnmonitored: false,
+    canEdit: false,
+  })
+  const sources = (wf) => edges.filter((e) => e.target === wf).map((e) => e.source).sort()
+  assert.deepEqual(sources('wf:w1'), ['dag:d1'])
+  assert.deepEqual(sources('wf:w2'), ['dag:d1', 'dag:d2'])
+  assert.equal(nodes.find((n) => n.id === 'dag:d1').data.lastCheck.status, 'FAILED')
+  assert.equal(nodes.find((n) => n.id === 'dag:d2').data.lastCheck, null)
+})
+
 test('an offline connection shows alone, without its cached DAGs', () => {
   const conn = {
     id: 'c1',

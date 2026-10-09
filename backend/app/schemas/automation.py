@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.automation.types import (
     ApprovalStatus,
+    DagRunCheckStatus,
     NotificationLevel,
     RunStatus,
     StepStatus,
@@ -22,6 +23,7 @@ class NodeTypeRead(BaseModel):
     ports: list[str]
     port_labels: dict[str, str]
     needs_incident: bool = False
+    needs_dag_run: bool = False
     config_schema: dict[str, Any]
 
 
@@ -120,6 +122,22 @@ class WorkflowRunRead(BaseModel):
     finished_at: datetime | None
     created_at: datetime
     context: dict[str, Any]
+
+
+class DagRunCheckRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    connection_id: uuid.UUID
+    dag_id: str
+    run_id: str
+    run_state: str
+    status: DagRunCheckStatus
+    message: str | None
+    checked_at: datetime | None
+    created_at: datetime
+    workflow_run_id: uuid.UUID
+    workflow_name: str
 
 
 class WorkflowStepRead(BaseModel):

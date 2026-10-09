@@ -51,3 +51,14 @@ class TriggerEvent(StrEnum):
     STALE = "stale"
     MANUAL = "manual"  # "Run now"
     SCHEDULE = "schedule"
+    DAG_RUN = "dag_run"  # a monitored DAG run finished
+
+
+class DagRunCheckStatus(StrEnum):
+    """Validation status of one finished DAG run, kept by the workflow it started."""
+
+    PENDING = "PENDING"
+    PASSED = "PASSED"
+    FAILED = "FAILED"
+    NOT_CHECKED = "NOT_CHECKED"  # the workflow ended without recording a result
+    ERROR = "ERROR"  # the workflow failed or was cancelled

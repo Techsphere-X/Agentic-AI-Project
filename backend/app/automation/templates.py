@@ -73,6 +73,35 @@ class RunVerifyDagParameters(BaseModel):
         return value or "{}"
 
 
+class ValidateRunParameters(BaseModel):
+    dag_id: str = Field(
+        min_length=1, max_length=250, json_schema_extra={"x-label": "DAG to validate"}
+    )
+    database_connection_id: str = Field(
+        min_length=1,
+        json_schema_extra={"x-label": "Database to check", "x-widget": "database_connection"},
+    )
+    sql: str = Field(
+        min_length=1,
+        max_length=20000,
+        json_schema_extra={
+            "x-label": "Check query (returns one value)",
+            "x-widget": "sql",
+            "x-hint": "e.g. SELECT count(*) FROM orders WHERE load_date = current_date",
+        },
+    )
+    operator: str = Field(default=">", pattern=r"^(>|>=|=|!=|<|<=)$")
+    expected: str = Field(default="0", max_length=200)
+    send_via: str = Field(
+        default="",
+        json_schema_extra={
+            "x-label": "Alert via",
+            "x-widget": "notification_channel",
+            "x-hint": "Where to send failed checks; empty = in-app only",
+        },
+    )
+
+
 def _n(node_id: str, node_type: str, name: str | None = None, **config: Any) -> dict[str, Any]:
     node: dict[str, Any] = {"id": node_id, "type": node_type, "config": config}
     if name:
@@ -435,6 +464,65 @@ TEMPLATES: tuple[Template, ...] = (
     ),
 )
 
+
+def _validate_run_graph(parameters: ValidateRunParameters) -> dict[str, Any]:
+    return {
+        "nodes": [
+            _n("trigger", "trigger.dag_run", states=["success"], dag_ids=[parameters.dag_id]),
+            _n(
+                "check",
+                "database.check",
+                "Is the data right?",
+                connection_id=parameters.database_connection_id,
+                sql=parameters.sql,
+                operator=parameters.operator,
+                expected=parameters.expected,
+            ),
+            _n(
+                "passed",
+                "check.record",
+                result="passed",
+                note=f"{{{{results.check.value}}}} {parameters.operator} {parameters.expected}",
+            ),
+            _n("failed", "check.record", result="failed", note="{{last_error}}"),
+            _n(
+                "notify",
+                "notify",
+                send_via=parameters.send_via,
+                level="WARNING",
+                title="Data check failed: {{dag_run.dag_id}}",
+                message="Run {{dag_run.run_id}} succeeded in Airflow but its data is wrong: "
+                "{{last_error}}",
+            ),
+        ],
+        "edges": [
+            _e("trigger", "next", "check"),
+            _e("check", "pass", "passed"),
+            _e("check", "fail", "failed"),
+            _e("failed", "next", "notify"),
+        ],
+    }
+
+
+VALIDATE_RUN_TEMPLATE = Template(
+    key="validate-every-run",
+    name="Validate every run",
+    description=(
+        "Each time the DAG succeeds, check its data with a query and record the run as passed "
+        "or failed. A failed check opens a 'Data check failed' incident and sends an alert."
+    ),
+    graph=_validate_run_graph(
+        ValidateRunParameters(
+            dag_id="template-dag",
+            database_connection_id="template-connection",
+            sql="SELECT 1",
+        )
+    ),
+    parameter_model=ValidateRunParameters,
+    builder=_validate_run_graph,
+    supported_trigger_types=("trigger.dag_run",),
+)
+
 RUN_VERIFY_TEMPLATE = Template(
     key="run-verify-dag",
     name="Run and verify a DAG",
@@ -447,5 +535,5 @@ RUN_VERIFY_TEMPLATE = Template(
     supported_trigger_types=("trigger.manual",),
 )
 
-ALL_TEMPLATES: tuple[Template, ...] = (*TEMPLATES, RUN_VERIFY_TEMPLATE)
+ALL_TEMPLATES: tuple[Template, ...] = (*TEMPLATES, RUN_VERIFY_TEMPLATE, VALIDATE_RUN_TEMPLATE)
 TEMPLATES_BY_KEY = {t.key: t for t in ALL_TEMPLATES}

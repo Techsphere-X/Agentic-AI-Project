@@ -76,6 +76,18 @@ def detect_failed_runs(
     ]
 
 
+def finished_runs(runs: list[AirflowDagRun], watermark: datetime | None) -> list[AirflowDagRun]:
+    """Runs that ended (succeeded or failed) after the watermark, oldest first.
+
+    On the first cycle for a DAG (no watermark) only the newest finished run is returned, so
+    history is not replayed into workflows.
+    """
+    terminal = [r for r in _terminal_sorted(runs) if r.state in (SUCCESS, FAILED)]
+    if watermark is None:
+        return terminal[-1:]
+    return [r for r in terminal if r.sort_date > watermark]  # type: ignore[operator]
+
+
 def _success_time(run: AirflowDagRun) -> datetime:
     return run.end_date or run.sort_date  # type: ignore[return-value]
 

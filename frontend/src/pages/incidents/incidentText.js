@@ -1,4 +1,4 @@
-const TYPE_LABELS = { DAG_RUN_FAILED: 'Run failed', SLA_MISSED: 'SLA missed' }
+const TYPE_LABELS = { DAG_RUN_FAILED: 'Run failed', SLA_MISSED: 'SLA missed', DATA_CHECK_FAILED: 'Data check failed' }
 
 export function typeLabel(type) {
   return TYPE_LABELS[type] ?? type

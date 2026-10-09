@@ -18,6 +18,7 @@ import { connectionState } from '../../connectionState'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { formatRelative } from '../../format'
+import { checkStatus } from '../automation/automationText'
 import { airflowApi, automationApi, incidentsApi } from '../../services/endpoints'
 import { ConnectionNode, DagNode, MonitorNode, WorkflowNode } from './pipelineNodes'
 import { attachBody, buildPipeline, detachBody } from './pipelineModel'
@@ -118,7 +119,8 @@ function Panel({
     )
   }
   if (node.type === 'dag') {
-    const { dag } = data
+    const { dag, lastCheck } = data
+    const check = lastCheck && checkStatus(lastCheck.status)
     const missing = ['failure', 'sla'].filter((kind) =>
       kind === 'failure' ? !(dag.is_monitored && dag.detect_failures) : !(dag.is_monitored && dag.sla_minutes != null),
     )
@@ -143,8 +145,17 @@ function Panel({
               Add {kind === 'failure' ? 'failure monitor' : 'freshness SLA'}
             </Button>
           ))}
+        {check && (
+          <p className="small">
+            Latest run <span className="mono">{lastCheck.run_id}</span>: <Badge tone={check.tone}>{check.label}</Badge>
+            {lastCheck.message && <span className="muted"> · {lastCheck.message}</span>}
+          </p>
+        )}
         <Link className="small" to={`/incidents?search=${encodeURIComponent(dag.dag_id)}`}>
           Incidents for this DAG
+        </Link>
+        <Link className="small" to={`/automation/run-checks?dag_id=${encodeURIComponent(dag.dag_id)}`}>
+          Run checks for this DAG
         </Link>
       </>
     )
@@ -193,7 +204,9 @@ function Panel({
       <p className="muted small">
         {data.stale
           ? 'Runs for any incident that stays unacknowledged too long.'
-          : 'Runs when a connected monitor opens or re-records an incident.'}
+          : data.dagRun
+            ? 'Runs for every finished run of the DAGs wired to it, and records whether each run passed.'
+            : 'Runs when a connected monitor opens or re-records an incident.'}
       </p>
       <Link className="small" to={`/automation/workflows/${workflow.id}`}>
         Open in the workflow editor
@@ -227,20 +240,23 @@ function Canvas() {
     if (loading.current) return
     loading.current = true
     try {
-      const [{ items: connections }, workflows, openCounts] = await Promise.all([
+      const [{ items: connections }, workflows, openCounts, latestChecks] = await Promise.all([
         airflowApi.listConnections(),
         automationApi.listWorkflows(),
         incidentsApi.openCounts(),
+        automationApi.latestRunChecks(),
       ])
       const dagPages = await Promise.all(connections.map((c) => airflowApi.listDags(c.id, { limit: 200 })))
       const counts = {}
       openCounts.forEach((c) => (counts[`${c.connection_id}:${c.dag_id}:${c.type}`] = c.count))
+      const checks = Object.fromEntries(latestChecks.map((c) => [`${c.connection_id}:${c.dag_id}`, c]))
       hasData.current = true
       setData({
         connections: connections.filter((c) => c.is_active),
         dagsByConnection: Object.fromEntries(connections.map((c, i) => [c.id, dagPages[i].items])),
         workflows: workflows.filter((w) => w.enabled),
         counts,
+        checks,
       })
       setError(null)
       setRefreshError(null)

@@ -3,6 +3,7 @@
 export const NODE_LABELS = {
   'trigger.incident': 'When an incident opens or recurs',
   'trigger.incident_stale': 'When an incident is ignored',
+  'trigger.dag_run': 'When a DAG run finishes',
   'trigger.manual': 'Run on demand',
   'trigger.schedule': 'On a schedule',
   'pipeline.run_dag': 'Run a DAG',
@@ -20,6 +21,7 @@ export const NODE_LABELS = {
   'action.set_dag_paused': 'Pause / unpause DAG',
   'verify.run_success': 'Check it worked',
   'incident.update': 'Update the incident',
+  'check.record': "Record the run's status",
   notify: 'Tell someone',
 }
 
@@ -96,6 +98,14 @@ export function describeConfig(type, config = {}) {
       break
     case 'trigger.incident_stale':
       parts.push(`open & unacknowledged for ${config.minutes} min`)
+      break
+    case 'trigger.dag_run':
+      parts.push(`on ${(config.states ?? ['success', 'failed']).join(' / ')}`)
+      parts.push(config.dag_ids?.length ? config.dag_ids.join(', ') : 'every monitored DAG')
+      break
+    case 'check.record':
+      parts.push(`mark ${config.result ?? 'passed'}`)
+      if (config.result === 'failed' && config.open_incident !== false) parts.push('opens an incident')
       break
     case 'trigger.manual':
       parts.push('when someone presses Run now')
@@ -176,11 +186,24 @@ export function describeConfig(type, config = {}) {
   return parts.filter(Boolean).join(' · ')
 }
 
-const TRIGGER_EVENTS = { manual: 'Run now', schedule: 'schedule' }
+const TRIGGER_EVENTS = { manual: 'Run now', schedule: 'schedule', dag_run: 'DAG run finished' }
 
 /** How a run started: "Run now", "schedule", or "incident opened" etc. */
 export function triggerText(event) {
   return TRIGGER_EVENTS[event] ?? `incident ${event}`
+}
+
+// Validation status of a finished DAG run (GET /automation/run-checks).
+export const CHECK_STATUS = {
+  PENDING: { label: 'Checking', tone: 'info' },
+  PASSED: { label: 'Passed', tone: 'success' },
+  FAILED: { label: 'Failed', tone: 'danger' },
+  NOT_CHECKED: { label: 'Not checked', tone: 'neutral' },
+  ERROR: { label: 'Workflow error', tone: 'warning' },
+}
+
+export function checkStatus(status) {
+  return CHECK_STATUS[status] ?? { label: status, tone: 'neutral' }
 }
 
 export function duration(run) {

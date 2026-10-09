@@ -6,6 +6,7 @@ import AuthLayout from './layouts/AuthLayout'
 import Login from './pages/auth/Login'
 import Approvals from './pages/automation/Approvals'
 import Notifications from './pages/automation/Notifications'
+import RunChecks from './pages/automation/RunChecks'
 import RunDetail from './pages/automation/RunDetail'
 import RunList from './pages/automation/RunList'
 import Workflows from './pages/automation/Workflows'
@@ -49,6 +50,7 @@ export default function App() {
           <Route path="/automation/approvals" element={<Approvals />} />
           <Route path="/automation/runs" element={<RunList />} />
           <Route path="/automation/runs/:id" element={<RunDetail />} />
+          <Route path="/automation/run-checks" element={<RunChecks />} />
           <Route path="/automation/workflows" element={<Workflows />} />
           <Route path="/automation/workflows/:id" element={<Lazy><WorkflowEditor /></Lazy>} />
           <Route path="/automation/notifications" element={<Notifications />} />

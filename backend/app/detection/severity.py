@@ -7,6 +7,7 @@ from app.detection.types import IncidentSeverity, IncidentType
 _BASE = {
     IncidentType.DAG_RUN_FAILED: IncidentSeverity.MEDIUM,
     IncidentType.SLA_MISSED: IncidentSeverity.LOW,
+    IncidentType.DATA_CHECK_FAILED: IncidentSeverity.MEDIUM,
 }
 CRITICAL_TAG = "tier-1"
 REPEAT_FAILURE_THRESHOLD = 3

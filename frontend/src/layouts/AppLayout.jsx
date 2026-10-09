@@ -25,6 +25,7 @@ const NAV = [
     items: [
       { to: '/automation/workflows', label: 'Workflows', icon: 'workflows' },
       { to: '/automation/runs', label: 'Runs', icon: 'runs' },
+      { to: '/automation/run-checks', label: 'Run checks', icon: 'checks' },
       {
         to: '/automation/approvals',
         label: 'Approvals',

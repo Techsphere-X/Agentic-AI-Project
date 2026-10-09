@@ -382,6 +382,13 @@ def _process_dag(
         )
         summary.auto_resolved += 1
 
+    # "When a DAG run finishes" workflows: one run each per finished DAG run.
+    for run in rules.finished_runs(runs, dag.detection_watermark):
+        db.flush()
+        summary.automation_queued += len(
+            automation_service.enqueue_for_dag_run(db, conn, dag, run, now=now)
+        )
+
     dag.detection_watermark = rules.next_watermark(runs, dag.detection_watermark)
 
 

@@ -6,6 +6,7 @@ from enum import StrEnum
 class IncidentType(StrEnum):
     DAG_RUN_FAILED = "DAG_RUN_FAILED"
     SLA_MISSED = "SLA_MISSED"
+    DATA_CHECK_FAILED = "DATA_CHECK_FAILED"  # a workflow found a finished run's data invalid
 
 
 class IncidentSeverity(StrEnum):

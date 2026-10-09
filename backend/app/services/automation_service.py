@@ -26,6 +26,7 @@ from app.automation.templates import TEMPLATES, TEMPLATES_BY_KEY
 from app.automation.types import (
     ACTIVE_RUN_STATUSES,
     ApprovalStatus,
+    DagRunCheckStatus,
     RunStatus,
     StepStatus,
     TriggerEvent,
@@ -35,9 +36,18 @@ from app.core.config import get_settings
 from app.core.exceptions import BadRequestError, ConflictError, NotFoundError
 from app.db.base import utcnow
 from app.detection.types import IncidentStatus
-from app.models.automation import Approval, Notification, Workflow, WorkflowRun, WorkflowStep
+from app.models.airflow import AirflowConnection, AirflowTriggerReservation, MonitoredDag
+from app.models.automation import (
+    Approval,
+    DagRunCheck,
+    Notification,
+    Workflow,
+    WorkflowRun,
+    WorkflowStep,
+)
 from app.models.incident import Incident
 from app.models.user import User
+from app.orchestration.airflow.base import AirflowDagRun
 from app.services import audit_service, incident_service
 from app.services.automation_nodes import EXECUTORS, NodeContext, NodeError, NodeResult
 
@@ -335,6 +345,85 @@ def enqueue_for_incident(
     return runs
 
 
+def enqueue_for_dag_run(
+    db: Session,
+    conn: AirflowConnection,
+    dag: MonitoredDag,
+    dag_run: AirflowDagRun,
+    *,
+    now: datetime | None = None,
+) -> list[WorkflowRun]:
+    """Create PENDING runs (each with a PENDING DagRunCheck) for enabled "When a DAG run
+    finishes" workflows that match this finished run. Called inside the detection cycle."""
+    if not get_settings().AUTOMATION_ENABLED:
+        return []
+    runs = []
+    dedup = f"dagrun:{conn.id}:{dag.dag_id}:{dag_run.run_id}"[:200]
+    for workflow in db.scalars(select(Workflow).where(Workflow.enabled.is_(True))).all():
+        try:
+            trigger = validate_graph(workflow.graph).trigger
+        except GraphError:
+            continue
+        if trigger.type != "trigger.dag_run":
+            continue
+        if dag_run.state not in trigger.config["states"]:
+            continue
+        if trigger.config["dag_ids"] and dag.dag_id not in trigger.config["dag_ids"]:
+            continue
+        if _started_by(db, workflow, conn, dag.dag_id, dag_run.run_id):
+            continue  # its own "Run a DAG" block started this run: do not loop
+        if db.scalar(
+            select(WorkflowRun.id).where(
+                WorkflowRun.workflow_id == workflow.id, WorkflowRun.dedup_key == dedup
+            )
+        ):
+            continue
+        run = _add_run(db, workflow, TriggerEvent.DAG_RUN, dedup)
+        if run is None:
+            continue
+        run.context = {
+            "dag_run": {
+                "connection_id": str(conn.id),
+                "monitored_dag_id": str(dag.id),
+                "dag_id": dag.dag_id,
+                "run_id": dag_run.run_id,
+                "state": dag_run.state,
+                "environment": str(conn.environment),
+            }
+        }
+        db.add(
+            DagRunCheck(
+                connection_id=conn.id,
+                monitored_dag_id=dag.id,
+                dag_id=dag.dag_id,
+                run_id=dag_run.run_id,
+                run_state=dag_run.state,
+                workflow_run_id=run.id,
+                status=DagRunCheckStatus.PENDING,
+            )
+        )
+        runs.append(run)
+    return runs
+
+
+def _started_by(
+    db: Session, workflow: Workflow, conn: AirflowConnection, dag_id: str, run_id: str
+) -> bool:
+    return (
+        db.scalar(
+            select(AirflowTriggerReservation.id)
+            .join(WorkflowRun, WorkflowRun.id == AirflowTriggerReservation.workflow_run_id)
+            .where(
+                AirflowTriggerReservation.connection_id == conn.id,
+                AirflowTriggerReservation.dag_id == dag_id,
+                AirflowTriggerReservation.airflow_run_id == run_id,
+                WorkflowRun.workflow_id == workflow.id,
+            )
+        )
+        is not None
+    )
+
+
 def _add_run(
     db: Session,
     workflow: Workflow,
@@ -398,6 +487,10 @@ def start_manual_run(
         trigger = validate_graph(workflow.graph).trigger
     except GraphError as exc:
         raise BadRequestError(f"The workflow is not valid: {exc}") from exc
+    if trigger.type == "trigger.dag_run":
+        raise BadRequestError(
+            "This workflow starts when a DAG run finishes; run the DAG in Airflow to start it"
+        )
     if trigger.type in INCIDENT_TRIGGER_TYPES:
         raise BadRequestError(
             "This workflow starts from incidents; only “Run on demand” or “On a schedule” "
@@ -496,6 +589,15 @@ def _finish(
         if approval.status == ApprovalStatus.PENDING:
             approval.status = ApprovalStatus.EXPIRED
             approval.decided_at = now
+    check = db.scalar(select(DagRunCheck).where(DagRunCheck.workflow_run_id == run.id))
+    if check is not None and check.status == DagRunCheckStatus.PENDING:
+        if status == RunStatus.COMPLETED:
+            check.status = DagRunCheckStatus.NOT_CHECKED
+            check.message = check.message or "The workflow ended without recording a result"
+        else:
+            check.status = DagRunCheckStatus.ERROR
+            check.message = error or f"The workflow was {status.value.lower()}"
+        check.checked_at = now
     if run.incident is not None:
         incident_service.add_event(
             db,
@@ -807,6 +909,54 @@ def cancel_run(
     )
     db.commit()
     return run
+
+
+# ---------------------------------------------------------------------- DAG run checks
+
+
+def list_run_checks(
+    db: Session,
+    *,
+    dag_id: str | None,
+    statuses: list[DagRunCheckStatus] | None,
+    limit: int,
+    offset: int,
+) -> tuple[list[DagRunCheck], int]:
+    query = select(DagRunCheck)
+    if dag_id:
+        query = query.where(DagRunCheck.dag_id == dag_id)
+    if statuses:
+        query = query.where(DagRunCheck.status.in_(statuses))
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    items = db.scalars(
+        query.options(selectinload(DagRunCheck.workflow_run).selectinload(WorkflowRun.workflow))
+        .order_by(DagRunCheck.created_at.desc(), DagRunCheck.id)
+        .limit(limit)
+        .offset(offset)
+    ).all()
+    return list(items), total
+
+
+def latest_checks(db: Session) -> dict[tuple[uuid.UUID, str], DagRunCheck]:
+    """Newest check per (connection, DAG), for status badges on monitored DAGs."""
+    newest = (
+        select(
+            DagRunCheck.connection_id,
+            DagRunCheck.dag_id,
+            func.max(DagRunCheck.created_at).label("created_at"),
+        )
+        .group_by(DagRunCheck.connection_id, DagRunCheck.dag_id)
+        .subquery()
+    )
+    rows = db.scalars(
+        select(DagRunCheck).join(
+            newest,
+            (DagRunCheck.connection_id == newest.c.connection_id)
+            & (DagRunCheck.dag_id == newest.c.dag_id)
+            & (DagRunCheck.created_at == newest.c.created_at),
+        )
+    ).all()
+    return {(c.connection_id, c.dag_id): c for c in rows}
 
 
 # ---------------------------------------------------------------------- approvals

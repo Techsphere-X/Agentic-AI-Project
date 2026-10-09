@@ -6,7 +6,7 @@ from fastapi import APIRouter, Query, Request
 
 from app.automation.graph import catalog
 from app.automation.templates import ALL_TEMPLATES
-from app.automation.types import ApprovalStatus, RunStatus
+from app.automation.types import ApprovalStatus, DagRunCheckStatus, RunStatus
 from app.core.config import get_settings
 from app.core.dependencies import (
     AdminUser,
@@ -21,6 +21,7 @@ from app.schemas.automation import (
     ApprovalRead,
     AutomationStatus,
     AutomationSummary,
+    DagRunCheckRead,
     DecisionRequest,
     GraphCheck,
     GraphCheckResult,
@@ -167,6 +168,33 @@ def list_runs(
         limit=page.limit,
         offset=page.offset,
     )
+
+
+@router.get("/run-checks", response_model=Page[DagRunCheckRead])
+def list_run_checks(
+    db: DbSession,
+    _: ViewerUser,
+    page: PageParams,
+    status: Annotated[list[DagRunCheckStatus] | None, Query()] = None,
+    dag_id: str | None = None,
+) -> Page[DagRunCheckRead]:
+    """Validation status of finished DAG runs, newest first."""
+    items, total = automation_service.list_run_checks(
+        db, dag_id=dag_id, statuses=status, limit=page.limit, offset=page.offset
+    )
+    return Page[DagRunCheckRead](
+        items=[DagRunCheckRead.model_validate(c) for c in items],
+        total=total,
+        limit=page.limit,
+        offset=page.offset,
+    )
+
+
+@router.get("/run-checks/latest", response_model=list[DagRunCheckRead])
+def latest_run_checks(db: DbSession, _: ViewerUser) -> list[DagRunCheckRead]:
+    """The newest check of each DAG (status badges)."""
+    checks = automation_service.latest_checks(db).values()
+    return [DagRunCheckRead.model_validate(c) for c in checks]
 
 
 @router.post("/workflows/{workflow_id}/run", response_model=WorkflowRunDetail, status_code=201)

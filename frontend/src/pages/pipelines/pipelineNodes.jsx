@@ -1,6 +1,7 @@
 import { Handle, Position } from '@xyflow/react'
 import { memo } from 'react'
 import { Badge, StatusPill } from '../../components/ui'
+import { checkStatus } from '../automation/automationText'
 
 // Node components for the pipeline canvas: Airflow connection → DAG → monitor → automation.
 
@@ -23,7 +24,8 @@ export const ConnectionNode = memo(function ConnectionNode({ data, selected }) {
 })
 
 export const DagNode = memo(function DagNode({ data, selected }) {
-  const { dag, canEdit } = data
+  const { dag, canEdit, lastCheck } = data
+  const check = lastCheck && checkStatus(lastCheck.status)
   const classes = ['pnode', 'pnode-dag', selected && 'pnode-selected', !dag.is_monitored && 'pnode-faded']
   return (
     <div className={classes.filter(Boolean).join(' ')}>
@@ -34,6 +36,11 @@ export const DagNode = memo(function DagNode({ data, selected }) {
         {dag.schedule_summary && <span className="muted small mono">{dag.schedule_summary}</span>}
         {dag.is_paused && <Badge tone="warning">paused</Badge>}
         {!dag.is_monitored && <span className="muted small">not monitored</span>}
+        {check && (
+          <Badge tone={check.tone} title={`Latest run ${lastCheck.run_id}${lastCheck.message ? `: ${lastCheck.message}` : ''}`}>
+            {check.label}
+          </Badge>
+        )}
       </div>
       <Handle
         type="source"

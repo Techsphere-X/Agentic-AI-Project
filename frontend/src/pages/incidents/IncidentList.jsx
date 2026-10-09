@@ -119,6 +119,7 @@ export default function IncidentList() {
             <option value="">All types</option>
             <option value="DAG_RUN_FAILED">Run failed</option>
             <option value="SLA_MISSED">SLA missed</option>
+            <option value="DATA_CHECK_FAILED">Data check failed</option>
           </select>
           {connections.length > 1 && (
             <select value={filters.connection_id} onChange={setFilter('connection_id')} aria-label="Connection">

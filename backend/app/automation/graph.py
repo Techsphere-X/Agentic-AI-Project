@@ -40,6 +40,21 @@ class StaleTriggerConfig(_Config):
     minutes: int = Field(default=30, ge=5, le=10080)
 
 
+class DagRunTriggerConfig(_Config):
+    states: list[Literal["success", "failed"]] = Field(
+        default=["success", "failed"], min_length=1, json_schema_extra={"x-label": "When the run"}
+    )
+    dag_ids: list[str] = Field(
+        default_factory=list,
+        json_schema_extra={"x-label": "DAGs", "x-hint": "Empty = every monitored DAG"},
+    )
+
+    @field_validator("dag_ids")
+    @classmethod
+    def _clean(cls, value: list[str]) -> list[str]:
+        return [v.strip() for v in value if v.strip()]
+
+
 class FilterConfig(_Config):
     """All criteria that are set must match; unset (empty/None) criteria are ignored."""
 
@@ -195,6 +210,28 @@ class VerifyConfig(_Config):
 class IncidentUpdateConfig(_Config):
     operation: Literal["resolve", "escalate", "acknowledge", "note"]
     note: str | None = Field(default=None, max_length=2000)
+
+
+class RecordCheckConfig(_Config):
+    result: Literal["passed", "failed"] = Field(
+        default="passed", json_schema_extra={"x-label": "Mark the run as"}
+    )
+    note: str = Field(
+        default="",
+        max_length=2000,
+        json_schema_extra={
+            "x-label": "Note",
+            "x-hint": "Shown next to the run, e.g. {{last_error}}",
+        },
+    )
+    open_incident: bool = Field(
+        default=True,
+        json_schema_extra={
+            "x-label": "Open an incident when failed",
+            "x-hint": "A 'Data check failed' incident, so incident workflows and alerts run; "
+            "a later passed run resolves it",
+        },
+    )
 
 
 class NotifyConfig(_Config):
@@ -356,6 +393,8 @@ class NodeType:
     port_labels: dict[str, str] = field(default_factory=dict)
     # Works on the incident that started the run (only valid under an incident trigger).
     needs_incident: bool = False
+    # Works on the finished DAG run that started the workflow (only under trigger.dag_run).
+    needs_dag_run: bool = False
     # Changes something outside the platform: policy-checked, simulated in dry runs.
     is_action: bool = False
 
@@ -368,6 +407,7 @@ class NodeType:
             "ports": list(self.ports),
             "port_labels": self.port_labels,
             "needs_incident": self.needs_incident,
+            "needs_dag_run": self.needs_dag_run,
             "config_schema": self.config_model.model_json_schema(),
         }
 
@@ -393,6 +433,16 @@ NODE_TYPES: dict[str, NodeType] = {
             ("next",),
             StaleTriggerConfig,
             needs_incident=True,
+        ),
+        NodeType(
+            "trigger.dag_run",
+            "When a DAG run finishes",
+            "trigger",
+            "Starts for every finished run (succeeded or failed) of the monitored DAGs, so the "
+            "workflow can check it and record its status.",
+            ("next",),
+            DagRunTriggerConfig,
+            needs_dag_run=True,
         ),
         NodeType(
             "trigger.manual",
@@ -572,6 +622,16 @@ NODE_TYPES: dict[str, NodeType] = {
             needs_incident=True,
         ),
         NodeType(
+            "check.record",
+            "Record the run's status",
+            "output",
+            "Marks the DAG run that started the workflow as passed or failed. A failed run can "
+            "open a 'Data check failed' incident; a passed one resolves it.",
+            ("next",),
+            RecordCheckConfig,
+            needs_dag_run=True,
+        ),
+        NodeType(
             "notify",
             "Tell someone",
             "output",
@@ -725,6 +785,18 @@ def validate_graph(raw: Any) -> Graph:
             )
             for n in graph.nodes.values()
             if NODE_TYPES[n.type].needs_incident
+        ]
+        if needs:
+            raise GraphError(needs)
+    if graph.trigger.type != "trigger.dag_run":
+        needs = [
+            _problem(
+                f"'{NODE_TYPES[n.type].label}' works on a finished DAG run, so it needs the "
+                "'When a DAG run finishes' trigger",
+                node=n.id,
+            )
+            for n in graph.nodes.values()
+            if NODE_TYPES[n.type].needs_dag_run
         ]
         if needs:
             raise GraphError(needs)
