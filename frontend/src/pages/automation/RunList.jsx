@@ -70,10 +70,12 @@ export default function RunList() {
   const [offset, setOffset] = useState(0)
   const [page, setPage] = useState(null)
   const [ticking, setTicking] = useState(false)
+  const [error, setError] = useState(null)
   const [params, setParams] = useSearchParams()
   const workflowId = params.get('workflow_id')
 
   const load = useCallback(async () => {
+    setError(null)
     try {
       setPage(
         await automationApi.listRuns({
@@ -84,7 +86,9 @@ export default function RunList() {
         }),
       )
     } catch (err) {
-      toast.error(err.message)
+      const message = err.message || 'Unable to load automation runs'
+      setError(message)
+      toast.error(message)
     }
   }, [status, workflowId, offset, toast])
 
@@ -146,7 +150,14 @@ export default function RunList() {
             </span>
           )}
         </div>
-        {!page ? (
+        {error && !page ? (
+          <div role="alert">
+            <p className="muted">Unable to load automation runs: {error}</p>
+            <Button size="sm" onClick={load}>
+              Retry
+            </Button>
+          </div>
+        ) : !page ? (
           <p className="muted">Loading…</p>
         ) : page.total === 0 ? (
           <EmptyState title="No runs yet">Runs appear when you press Run now, on a schedule, or when an incident starts a workflow.</EmptyState>

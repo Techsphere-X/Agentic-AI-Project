@@ -50,8 +50,8 @@ const DRAG_TYPE = 'application/x-workflow-block'
 const CATEGORY_TITLES = {
   pipeline: 'Pipelines (Airflow)',
   database: 'Databases',
-  logic: 'Decide & wait',
-  diagnosis: 'Diagnose an incident',
+  logic: 'Decide & AI solution',
+  diagnosis: 'Diagnose & analyze logs',
   approval: 'Ask a human',
   action: "Fix the incident's DAG",
   verify: 'Check',

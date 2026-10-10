@@ -16,8 +16,10 @@ export default function RunChecks() {
   const [status, setStatus] = useState('')
   const [offset, setOffset] = useState(0)
   const [page, setPage] = useState(null)
+  const [error, setError] = useState(null)
 
   const load = useCallback(async () => {
+    setError(null)
     try {
       setPage(
         await automationApi.listRunChecks({
@@ -28,7 +30,9 @@ export default function RunChecks() {
         }),
       )
     } catch (err) {
-      toast.error(err.message)
+      const message = err.message || 'Unable to load run checks'
+      setError(message)
+      toast.error(message)
     }
   }, [status, dagId, offset, toast])
 
@@ -73,7 +77,14 @@ export default function RunChecks() {
             </span>
           )}
         </div>
-        {!page ? (
+        {error && !page ? (
+          <div role="alert">
+            <p className="muted">Unable to load run checks: {error}</p>
+            <Button size="sm" onClick={load}>
+              Retry
+            </Button>
+          </div>
+        ) : !page ? (
           <p className="muted">Loading…</p>
         ) : page.total === 0 ? (
           <EmptyState title="No run checks yet">

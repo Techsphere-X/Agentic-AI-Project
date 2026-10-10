@@ -323,22 +323,25 @@ def enqueue_for_incident(
     for workflow in workflows:
         if not _trigger_matches(workflow, incident, event, now):
             continue
-        busy = db.scalar(
-            select(WorkflowRun.id).where(
-                WorkflowRun.workflow_id == workflow.id,
-                WorkflowRun.incident_id == incident.id,
-                WorkflowRun.status.in_(ACTIVE_RUN_STATUSES),
-            )
-        )
-        if busy:
-            continue  # one active run per workflow and incident
-        dedup = _dedup_key(incident, event)
-        if db.scalar(
-            select(WorkflowRun.id).where(
-                WorkflowRun.workflow_id == workflow.id, WorkflowRun.dedup_key == dedup
-            )
-        ):
-            continue
+        # Testing mode: bypass busy and dedup checks so multiple runs can be tested freely
+        # busy = db.scalar(
+        #     select(WorkflowRun.id).where(
+        #         WorkflowRun.workflow_id == workflow.id,
+        #         WorkflowRun.incident_id == incident.id,
+        #         WorkflowRun.status.in_(ACTIVE_RUN_STATUSES),
+        #     )
+        # )
+        # if busy:
+        #     continue  # one active run per workflow and incident
+        # dedup = _dedup_key(incident, event)
+        # if db.scalar(
+        #     select(WorkflowRun.id).where(
+        #         WorkflowRun.workflow_id == workflow.id, WorkflowRun.dedup_key == dedup
+        #     )
+        # ):
+        #     continue
+        base_dedup = _dedup_key(incident, event)
+        dedup = f"{base_dedup}:{uuid.uuid4().hex[:8]}"[:200]
         run = _add_run(db, workflow, event, dedup, incident_id=incident.id)
         if run is not None:
             runs.append(run)
@@ -358,7 +361,7 @@ def enqueue_for_dag_run(
     if not get_settings().AUTOMATION_ENABLED:
         return []
     runs = []
-    dedup = f"dagrun:{conn.id}:{dag.dag_id}:{dag_run.run_id}"[:200]
+    base_dedup = f"dagrun:{conn.id}:{dag.dag_id}:{dag_run.run_id}"
     for workflow in db.scalars(select(Workflow).where(Workflow.enabled.is_(True))).all():
         try:
             trigger = validate_graph(workflow.graph).trigger
@@ -372,12 +375,14 @@ def enqueue_for_dag_run(
             continue
         if _started_by(db, workflow, conn, dag.dag_id, dag_run.run_id):
             continue  # its own "Run a DAG" block started this run: do not loop
-        if db.scalar(
-            select(WorkflowRun.id).where(
-                WorkflowRun.workflow_id == workflow.id, WorkflowRun.dedup_key == dedup
-            )
-        ):
-            continue
+        # Testing mode: bypass dedup check so multiple runs can be tested freely
+        # if db.scalar(
+        #     select(WorkflowRun.id).where(
+        #         WorkflowRun.workflow_id == workflow.id, WorkflowRun.dedup_key == dedup
+        #     )
+        # ):
+        #     continue
+        dedup = f"{base_dedup}:{uuid.uuid4().hex[:8]}"[:200]
         run = _add_run(db, workflow, TriggerEvent.DAG_RUN, dedup)
         if run is None:
             continue

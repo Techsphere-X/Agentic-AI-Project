@@ -131,6 +131,42 @@ class DiagnoseConfig(_Config):
     )
 
 
+class AnalyzeLogsConfig(_Config):
+    max_log_lines: int = Field(
+        default=100,
+        ge=10,
+        le=500,
+        json_schema_extra=_ui(
+            "Max log lines to analyze",
+            hint="Number of recent log lines to inspect for error traces (10-500)",
+        ),
+    )
+    redact_secrets: bool = Field(
+        default=True,
+        json_schema_extra=_ui("Redact secrets and tokens", hint="Mask passwords, tokens, and URIs"),
+    )
+
+
+class AiGenerateFixConfig(_Config):
+    min_confidence_pct: int = Field(
+        default=70,
+        ge=0,
+        le=100,
+        json_schema_extra=_ui(
+            "Minimum confidence (%)",
+            hint="Below this, follow the 'uncertain' port to escalate or ask human",
+        ),
+    )
+    instruction: str = Field(
+        default="",
+        max_length=1000,
+        json_schema_extra=_ui(
+            "Custom instructions",
+            hint="Optional extra prompt instructions for the AI advisor",
+        ),
+    )
+
+
 class ChooseFixConfig(_Config):
     max_attempts: int = Field(
         default=2,
@@ -531,6 +567,17 @@ NODE_TYPES: dict[str, NodeType] = {
         ),
         # ------------------------------------------------------------ incident handling
         NodeType(
+            "analyze.task_logs",
+            "Analyze logs",
+            "diagnosis",
+            "Extracts and parses task logs to synthesize error headlines, stack traces, and failure "
+            "symptoms into the workflow context, without making routing assumptions.",
+            ("analyzed", "no_logs"),
+            AnalyzeLogsConfig,
+            {"analyzed": "logs analyzed", "no_logs": "no logs found"},
+            needs_incident=True,
+        ),
+        NodeType(
             "diagnose.classify_log",
             "Diagnose failure",
             "diagnosis",
@@ -545,6 +592,17 @@ NODE_TYPES: dict[str, NodeType] = {
                 "unknown": "unknown",
                 "next": "any outcome",
             },
+            needs_incident=True,
+        ),
+        NodeType(
+            "ai.generate_fix",
+            "AI solution",
+            "logic",
+            "Sends the analyzed error message and incident context to the AI model to explain the root "
+            "cause and propose an actionable fix plan.",
+            ("solution_ready", "uncertain"),
+            AiGenerateFixConfig,
+            {"solution_ready": "solution ready", "uncertain": "uncertain / low confidence"},
             needs_incident=True,
         ),
         NodeType(

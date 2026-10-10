@@ -7,6 +7,7 @@ and returns a NodeResult naming the output port to follow, or a time to wait unt
 import json
 import logging
 import operator
+import re
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -34,6 +35,7 @@ from app.connectors.notify import Message
 from app.core.config import Settings
 from app.core.exceptions import AppError
 from app.detection import severity
+from app.detection.evidence import scrub
 from app.detection.types import (
     IncidentResolution,
     IncidentSeverity,
@@ -221,6 +223,8 @@ class NodeContext:
             if incident is not None
             else {},
             "diagnosis": self.get_context("diagnosis", {}),
+            "analysis": self.get_context("analysis", {}),
+            "ai_solution": self.get_context("ai_solution", {}),
             "decision": self.get_context("decision", {}),
             "results": self.get_context("results", {}),
             "workflow": {"name": self.run.workflow_name, "trigger": self.run.trigger_event},
@@ -366,6 +370,99 @@ def _classify(ctx: NodeContext, node: Node) -> NodeResult:
     return NodeResult(port, diagnosis, message)
 
 
+def _extract_log_error(raw_log: str, max_lines: int = 100) -> tuple[str, str, str, str]:
+    """Extract (headline, stack_trace, snippet, task_id) from raw log text."""
+    lines = [line.strip() for line in raw_log.splitlines() if line.strip()]
+    if not lines:
+        return "", "", "", ""
+    snippet = "\n".join(lines[-max_lines:])
+
+    task_id = ""
+    for line in lines[:30]:
+        m = re.search(r"task_id[=:]\s*['\"]?([A-Za-z0-9_.-]+)", line, re.I) or re.search(
+            r"Task (?:instance: )?([A-Za-z0-9_.-]+)", line, re.I
+        )
+        if m:
+            task_id = m.group(1)
+            break
+
+    stack_trace_lines: list[str] = []
+    headline = ""
+    in_traceback = False
+    for line in lines:
+        if "Traceback (most recent call last):" in line:
+            in_traceback = True
+            stack_trace_lines = [line]
+            continue
+        if in_traceback:
+            stack_trace_lines.append(line)
+            if (
+                line
+                and not line.startswith("File ")
+                and not line.startswith("  ")
+                and (
+                    "Error:" in line
+                    or "Exception:" in line
+                    or re.match(r"^[A-Za-z0-9_.]+(?:Error|Exception|Exit|Interrupt):", line)
+                )
+            ):
+                headline = line
+                in_traceback = False
+
+    stack_trace = "\n".join(stack_trace_lines) if stack_trace_lines else ""
+
+    if not headline:
+        for line in reversed(lines):
+            lower = line.lower()
+            if any(term in lower for term in ("error:", "exception:", "failed:", "fatal:", "critical:")):
+                headline = line
+                break
+        if not headline and lines:
+            headline = lines[-1]
+
+    return headline[:300], stack_trace, snippet, task_id
+
+
+def _analyze_task_logs(ctx: NodeContext, node: Node) -> NodeResult:
+    cfg = node.config
+    incident = ctx.the_incident
+    logs = diagnosis_service.task_logs(ctx.db, incident)
+    if not logs:
+        output = {
+            "headline": "",
+            "stack_trace": "",
+            "log_snippet": "",
+            "task_id": "",
+            "dag_id": incident.dag_id,
+            "run_id": incident.last_run_id or incident.run_id or "",
+            "incident_id": str(incident.id),
+        }
+        ctx.set_context("analysis", output)
+        ctx.record_result(node.id, output)
+        return NodeResult("no_logs", output, "No task logs found for incident")
+
+    raw_log = logs[0]
+    if cfg.get("redact_secrets", True):
+        raw_log = scrub(raw_log)
+
+    max_lines = cfg.get("max_log_lines", 100)
+    headline, stack_trace, snippet, task_id = _extract_log_error(raw_log, max_lines=max_lines)
+
+    output = {
+        "headline": headline,
+        "stack_trace": stack_trace,
+        "log_snippet": snippet,
+        "task_id": task_id,
+        "dag_id": incident.dag_id,
+        "run_id": incident.last_run_id or incident.run_id or "",
+        "incident_id": str(incident.id),
+    }
+    ctx.set_context("analysis", output)
+    ctx.record_result(node.id, output)
+    ctx.event("logs_analyzed", headline=headline, task_id=task_id)
+    return NodeResult("analyzed", output, f"Analyzed logs: {headline}")
+
+
 def _dag_state(ctx: NodeContext, node: Node) -> NodeResult:
     dag_id = ctx.the_incident.dag_id
     cache_key = (ctx.the_incident.connection_id, dag_id)
@@ -421,7 +518,7 @@ def _fix_history(ctx: NodeContext) -> tuple[int, int]:
 def _fix_facts(ctx: NodeContext, node: Node, diagnosis: dict[str, Any]) -> remediation.Facts:
     incident = ctx.the_incident
     dag_state = "unknown"
-    if node.config["check_dag_state"]:
+    if node.config.get("check_dag_state", False):
         try:
             dag_state = _dag_state(ctx, node).port or "unknown"
         except (NodeError, AppError) as exc:
@@ -509,6 +606,67 @@ def _choose_fix(ctx: NodeContext, node: Node) -> NodeResult:
     return NodeResult(port, decision, f"Chose to {remediation.FIX_LABELS[port]}: {reason}")
 
 
+def _ai_generate_fix(ctx: NodeContext, node: Node) -> NodeResult:
+    cfg = node.config
+    min_conf = cfg.get("min_confidence_pct", 70)
+    instruction = cfg.get("instruction", "")
+    incident = ctx.the_incident
+    analysis = ctx.get_context("analysis") or {}
+    diagnosis = ctx.get_context("diagnosis") or _load_diagnosis(ctx)
+
+    headline = analysis.get("headline") or diagnosis.get("label") or incident.title
+    stack_trace = analysis.get("stack_trace") or analysis.get("log_snippet") or ""
+
+    advisor = decision_advisor(ctx.settings)
+    if advisor is None or not advisor.enabled:
+        output = {
+            "headline": headline,
+            "explanation": "AI advisor is disabled or unavailable.",
+            "recommended_action": "escalate",
+            "confidence": 0.0,
+            "model": "disabled",
+            "reasoning": "Decision LLM is not enabled in settings.",
+            "instruction": instruction,
+        }
+        ctx.set_context("ai_solution", output)
+        ctx.record_result(node.id, output)
+        return NodeResult("uncertain", output, "AI advisor disabled; following uncertain")
+
+    try:
+        facts = _fix_facts(ctx, node, diagnosis)
+        choice = remediation.choose_fix(facts, remediation.Settings())
+        logs = [stack_trace] if stack_trace else diagnosis_service.task_logs(ctx.db, incident)
+        advice = advisor.advise(facts, choice, diagnosis, logs)
+        conf_pct = round(advice.confidence * 100)
+        output = {
+            "headline": headline,
+            "explanation": advice.reason,
+            "recommended_action": advice.fix,
+            "confidence": advice.confidence,
+            "model": advice.model,
+            "instruction": instruction,
+        }
+        ctx.set_context("ai_solution", output)
+        ctx.record_result(node.id, output)
+        port = "solution_ready" if conf_pct >= min_conf else "uncertain"
+        msg = f"AI ({advice.model}): {advice.fix} - {advice.reason} ({conf_pct}%)"
+        ctx.event("ai_solution_generated", fix=advice.fix, confidence=advice.confidence)
+        return NodeResult(port, output, msg)
+    except Exception as exc:
+        logger.warning("AI solution generation error: %s", exc)
+        output = {
+            "headline": headline,
+            "explanation": f"AI generation error: {exc}",
+            "recommended_action": "escalate",
+            "confidence": 0.0,
+            "model": "error",
+            "instruction": instruction,
+        }
+        ctx.set_context("ai_solution", output)
+        ctx.record_result(node.id, output)
+        return NodeResult("uncertain", output, f"AI generation error: {exc}")
+
+
 # ---------------------------------------------------------------------- approval
 
 
@@ -592,11 +750,17 @@ def _approval(ctx: NodeContext, node: Node) -> NodeResult:
             )
         )
         diagnosis = ctx.get_context("diagnosis", {})
+        analysis = ctx.get_context("analysis", {})
+        ai_sol = ctx.get_context("ai_solution", {})
         summary = f"The workflow wants to {what} on {environment}."
-        if diagnosis:
+        if analysis and analysis.get("headline"):
+            summary += f" Error: {analysis['headline']}."
+        elif diagnosis:
             summary += f" Diagnosis: {diagnosis.get('label')}."
             if diagnosis.get("matched_line"):
                 summary += f" Evidence: {diagnosis['matched_line']}"
+        if ai_sol and ai_sol.get("explanation"):
+            summary += f" AI Solution: {ai_sol['explanation']}"
         expires = ctx.now + timedelta(minutes=node.config["timeout_minutes"])
         subject = ctx.incident.dag_id if ctx.incident is not None else ctx.run.workflow_name
         approval = Approval(
@@ -1512,8 +1676,10 @@ EXECUTORS: dict[str, Callable[[NodeContext, Node], NodeResult]] = {
     "database.run_sql": _run_sql,
     "database.check": _check_data,
     "condition.filter": _filter,
+    "analyze.task_logs": _analyze_task_logs,
     "diagnose.classify_log": _classify,
     "check.dag_state": _dag_state,
+    "ai.generate_fix": _ai_generate_fix,
     "decide.choose_fix": _choose_fix,
     "approval.request": _approval,
     "action.clear_failed_tasks": _clear_failed_tasks,
