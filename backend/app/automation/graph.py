@@ -231,6 +231,66 @@ class ChooseFixConfig(_Config):
     )
 
 
+class SlaCheckConfig(_Config):
+    dag_id: str = Field(
+        default="",
+        max_length=250,
+        json_schema_extra=_ui(
+            "DAG ID",
+            "dag",
+            hint="Optional; defaults to the DAG from the trigger or upstream step",
+        ),
+    )
+    metric: Literal["duration", "freshness"] = Field(
+        default="duration",
+        json_schema_extra=_ui(
+            "SLA Metric",
+            hint="duration = run execution time; freshness = elapsed time since previous successful run",
+        ),
+    )
+    margin_pct: int = Field(
+        default=20,
+        ge=0,
+        le=500,
+        json_schema_extra=_ui(
+            "Buffer margin (%)",
+            hint="Safety margin above historical baseline before considering it breached (e.g. 20%)",
+        ),
+    )
+    sample_size: int = Field(
+        default=10,
+        ge=2,
+        le=50,
+        json_schema_extra=_ui(
+            "Historical sample size",
+            hint="Number of past successful runs to analyze for historical baseline",
+        ),
+    )
+    calculation_method: Literal["median", "mean", "p95"] = Field(
+        default="median",
+        json_schema_extra=_ui(
+            "Calculation method",
+            hint="Statistical method to compute baseline from past runs",
+        ),
+    )
+    fallback_minutes: float = Field(
+        default=60.0,
+        ge=0.1,
+        le=10080.0,
+        json_schema_extra=_ui(
+            "Fallback SLA (minutes)",
+            hint="Used if no historical runs are available in Airflow",
+        ),
+    )
+    only_in_flight: bool = Field(
+        default=False,
+        json_schema_extra=_ui(
+            "Only check in-flight runs",
+            hint="When enabled (or during scheduled runs), only inspect currently running DAG runs. If idle, status is met.",
+        ),
+    )
+
+
 class ClearTasksConfig(_Config):
     include_downstream: bool = True
 
@@ -514,6 +574,16 @@ NODE_TYPES: dict[str, NodeType] = {
             ("ready", "paused", "busy"),
             port_labels={"ready": "not paused, idle", "paused": "paused", "busy": "run active"},
             needs_incident=True,
+        ),
+        NodeType(
+            "check.sla",
+            "Estimate & check SLA",
+            "logic",
+            "Estimates expected execution or freshness SLA from past historical runs in Airflow. "
+            "If the elapsed time exceeds the estimated threshold, branches to 'exceeded'.",
+            ("exceeded", "met"),
+            SlaCheckConfig,
+            port_labels={"exceeded": "exceeded SLA", "met": "within SLA"},
         ),
         NodeType(
             "flow.wait",

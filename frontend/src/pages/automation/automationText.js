@@ -24,6 +24,7 @@ export const NODE_LABELS = {
   'verify.run_success': 'Check it worked',
   'incident.update': 'Update the incident',
   'check.record': "Record the run's status",
+  'check.sla': 'Estimate & check SLA',
   notify: 'Tell someone',
 }
 
@@ -47,6 +48,7 @@ export const NODE_ICONS = {
   analyze: '📄',
   diagnose: '🔎',
   check: '⋔',
+  sla: '⏱',
   ai: '🤖',
   decide: '⚖',
   approval: '✋',
@@ -140,6 +142,12 @@ export function describeConfig(type, config = {}) {
       break
     case 'flow.wait':
       parts.push(`${config.minutes} min`)
+      break
+    case 'check.sla':
+      if (config.dag_id) parts.push(config.dag_id)
+      parts.push(`metric: ${config.metric ?? 'duration'}`)
+      parts.push(`baseline: ${config.calculation_method ?? 'median'}`)
+      parts.push(`+${config.margin_pct ?? 20}% buffer`)
       break
     case 'condition.filter':
       if (config.diagnosis_categories?.length) parts.push(list(config.diagnosis_categories))

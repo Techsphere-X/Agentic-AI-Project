@@ -6,8 +6,10 @@ and returns a NodeResult naming the output port to follow, or a time to wait unt
 
 import json
 import logging
+import math
 import operator
 import re
+import statistics
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -226,6 +228,7 @@ class NodeContext:
             "analysis": self.get_context("analysis", {}),
             "ai_solution": self.get_context("ai_solution", {}),
             "decision": self.get_context("decision", {}),
+            "sla": self.get_context("sla", {}),
             "results": self.get_context("results", {}),
             "workflow": {"name": self.run.workflow_name, "trigger": self.run.trigger_event},
             "dag_run": self.get_context("dag_run", {}),
@@ -425,17 +428,80 @@ def _extract_log_error(raw_log: str, max_lines: int = 100) -> tuple[str, str, st
 
 def _analyze_task_logs(ctx: NodeContext, node: Node) -> NodeResult:
     cfg = node.config
-    incident = ctx.the_incident
-    logs = diagnosis_service.task_logs(ctx.db, incident)
+    incident = ctx.incident
+    logs: list[str] = []
+    dag_id = incident.dag_id if incident else ""
+    run_id = (incident.last_run_id or incident.run_id or "") if incident else ""
+    conn_id = str(incident.connection_id) if incident else None
+
+    # Check upstream node results (e.g. from pipeline.run_dag)
+    results = ctx.get_context("results", {})
+    action_target = ctx.get_context("action_target", {})
+    for node_res in results.values():
+        if isinstance(node_res, dict) and "run_id" in node_res:
+            run_id = node_res["run_id"] or run_id
+            dag_id = node_res.get("dag_id") or dag_id
+    if action_target:
+        run_id = action_target.get("run_id") or run_id
+        dag_id = action_target.get("dag_id") or dag_id
+        conn_id = action_target.get("connection_id") or conn_id
+
+    # 1. First try database task_logs if incident is available
+    if incident:
+        logs = diagnosis_service.task_logs(ctx.db, incident)
+
+    # 2. If no logs attached yet, fetch directly from Airflow adapter
+    if not logs and dag_id and run_id:
+        conn = None
+        if conn_id:
+            conn = ctx.db.get(AirflowConnection, _uuid(conn_id))
+        elif incident is not None:
+            conn = ctx.connection
+        if conn is not None:
+            try:
+                adapter = ctx.airflow_adapter(conn)
+                instances = run_async(lambda: adapter.list_task_instances(dag_id, run_id))
+                failed = [ti for ti in instances if ti.state == "failed"]
+                target_tis = failed if failed else instances
+                for ti in target_tis:
+                    try:
+                        log_obj = run_async(
+                            lambda ti=ti: adapter.get_task_log(
+                                dag_id, run_id, ti.task_id, ti.try_number, max_bytes=65536
+                            )
+                        )
+                        if log_obj and log_obj.content:
+                            logs.append(log_obj.content)
+                            if incident is not None:
+                                from app.detection.types import EvidenceKind
+                                from app.models.incident import IncidentEvidence
+
+                                ctx.db.add(
+                                    IncidentEvidence(
+                                        incident_id=incident.id,
+                                        kind=EvidenceKind.TASK_LOG,
+                                        task_id=ti.task_id,
+                                        try_number=ti.try_number,
+                                        content=log_obj.content,
+                                        collected_at=ctx.now,
+                                    )
+                                )
+                    except Exception as err:
+                        logger.warning("Failed to fetch log for task %s: %s", ti.task_id, err)
+            except Exception as exc:
+                logger.warning(
+                    "Could not fetch Airflow task instances for %s/%s: %s", dag_id, run_id, exc
+                )
+
     if not logs:
         output = {
             "headline": "",
             "stack_trace": "",
             "log_snippet": "",
             "task_id": "",
-            "dag_id": incident.dag_id,
-            "run_id": incident.last_run_id or incident.run_id or "",
-            "incident_id": str(incident.id),
+            "dag_id": dag_id,
+            "run_id": run_id,
+            "incident_id": str(incident.id) if incident else "",
         }
         ctx.set_context("analysis", output)
         ctx.record_result(node.id, output)
@@ -446,21 +512,35 @@ def _analyze_task_logs(ctx: NodeContext, node: Node) -> NodeResult:
         raw_log = scrub(raw_log)
 
     max_lines = cfg.get("max_log_lines", 100)
-    headline, stack_trace, snippet, task_id = _extract_log_error(raw_log, max_lines=max_lines)
+    headline, stack_trace, snippet, extracted_task = _extract_log_error(raw_log, max_lines=max_lines)
+    task_id = extracted_task or ""
+
+    # Classify the logs so {{diagnosis.label}}, {{diagnosis.category}} are also populated:
+    try:
+        from app.diagnosis.hybrid import decide
+        from app.services.diagnosis_service import model_client
+
+        diagnosis_payload, _ = decide(logs, model_client(), 0.85)
+        ctx.set_context("diagnosis", diagnosis_payload)
+        if incident and not incident.diagnosis:
+            incident.diagnosis = diagnosis_payload
+    except Exception as exc:
+        logger.info("Log classification in analyze_task_logs skipped: %s", exc)
 
     output = {
         "headline": headline,
         "stack_trace": stack_trace,
         "log_snippet": snippet,
         "task_id": task_id,
-        "dag_id": incident.dag_id,
-        "run_id": incident.last_run_id or incident.run_id or "",
-        "incident_id": str(incident.id),
+        "dag_id": dag_id,
+        "run_id": run_id,
+        "incident_id": str(incident.id) if incident else "",
     }
     ctx.set_context("analysis", output)
     ctx.record_result(node.id, output)
     ctx.event("logs_analyzed", headline=headline, task_id=task_id)
     return NodeResult("analyzed", output, f"Analyzed logs: {headline}")
+
 
 
 def _dag_state(ctx: NodeContext, node: Node) -> NodeResult:
@@ -494,6 +574,232 @@ def _dag_state(ctx: NodeContext, node: Node) -> NodeResult:
         result = NodeResult("ready", {"is_paused": False}, f"{dag_id} is idle and not paused")
     ctx._dag_state_cache[cache_key] = result
     return result
+
+
+def _check_sla(ctx: NodeContext, node: Node) -> NodeResult:
+    cfg = node.config
+    dag_id = cfg.get("dag_id", "").strip()
+    run_id = ""
+    conn_id = None
+    metric = cfg.get("metric", "duration")
+    margin_pct = cfg.get("margin_pct", 20)
+    sample_size = cfg.get("sample_size", 10)
+    calc_method = cfg.get("calculation_method", "median")
+    fallback_minutes = float(cfg.get("fallback_minutes", 60.0))
+
+    results = ctx.get_context("results", {})
+    action_target = ctx.get_context("action_target", {})
+    dag_run_ctx = ctx.get_context("dag_run", {})
+
+    for node_res in results.values():
+        if isinstance(node_res, dict):
+            if not dag_id and node_res.get("dag_id"):
+                dag_id = node_res["dag_id"]
+            if not run_id and node_res.get("run_id"):
+                run_id = node_res["run_id"]
+            if not conn_id and node_res.get("connection_id"):
+                conn_id = node_res["connection_id"]
+
+    if action_target:
+        if not dag_id:
+            dag_id = action_target.get("dag_id") or ""
+        if not run_id:
+            run_id = action_target.get("run_id") or ""
+        if not conn_id:
+            conn_id = action_target.get("connection_id")
+
+    if dag_run_ctx:
+        if not dag_id:
+            dag_id = dag_run_ctx.get("dag_id") or ""
+        if not run_id:
+            run_id = dag_run_ctx.get("run_id") or ""
+
+    if ctx.incident:
+        if not dag_id:
+            dag_id = ctx.incident.dag_id or ""
+        if not run_id:
+            run_id = ctx.incident.last_run_id or ctx.incident.run_id or ""
+        if not conn_id:
+            conn_id = str(ctx.incident.connection_id)
+
+    if not dag_id:
+        raise NodeError("No DAG specified or found in context to check SLA for")
+
+    conn = None
+    if conn_id:
+        conn = ctx.db.get(AirflowConnection, _uuid(conn_id))
+    if conn is None and ctx.incident is not None:
+        conn = ctx.connection
+    if conn is None:
+        conn = ctx.db.scalar(select(AirflowConnection).where(AirflowConnection.is_default.is_(True)))
+    if conn is None:
+        conn = ctx.db.scalar(select(AirflowConnection).where(AirflowConnection.is_active.is_(True)))
+    if conn is None:
+        raise NodeError("No active Airflow connection found")
+
+    adapter = ctx.airflow_adapter(conn)
+
+    try:
+        past_runs = run_async(lambda: adapter.list_dag_runs(dag_id, limit=sample_size + 20))
+    except AirflowAdapterError as exc:
+        raise NodeError(f"Could not fetch historical runs for {dag_id}: {exc.result.message}") from exc
+
+    historical_successes = [
+        r
+        for r in past_runs
+        if r.state == "success" and r.start_date and r.end_date and (not run_id or r.run_id != run_id)
+    ]
+
+    actual_minutes = 0.0
+    baseline = fallback_minutes
+    history_count = 0
+
+    only_in_flight = bool(cfg.get("only_in_flight", False) or (ctx.run.trigger_event == TriggerEvent.SCHEDULE))
+    is_in_flight = False
+
+    if metric == "duration":
+        durations = [
+            (r.end_date - r.start_date).total_seconds() / 60.0
+            for r in historical_successes[:sample_size]
+        ]
+        history_count = len(durations)
+        if durations:
+            if calc_method == "median":
+                baseline = statistics.median(durations)
+            elif calc_method == "mean":
+                baseline = statistics.mean(durations)
+            elif calc_method == "p95":
+                s = sorted(durations)
+                idx = int(math.ceil(0.95 * len(s))) - 1
+                baseline = s[max(0, min(idx, len(s) - 1))]
+        else:
+            baseline = fallback_minutes
+
+        for node_res in results.values():
+            if isinstance(node_res, dict) and "duration_seconds" in node_res:
+                actual_minutes = float(node_res["duration_seconds"]) / 60.0
+                break
+
+        if not actual_minutes and run_id:
+            curr = next((r for r in past_runs if r.run_id == run_id), None)
+            if not curr:
+                try:
+                    curr = run_async(lambda: adapter.get_dag_run(dag_id, run_id))
+                except Exception:
+                    curr = None
+            if curr:
+                if curr.state == "running" and curr.start_date:
+                    actual_minutes = (ctx.now - curr.start_date).total_seconds() / 60.0
+                    is_in_flight = True
+                elif curr.start_date and curr.end_date:
+                    actual_minutes = (curr.end_date - curr.start_date).total_seconds() / 60.0
+                elif curr.start_date:
+                    actual_minutes = (ctx.now - curr.start_date).total_seconds() / 60.0
+                    is_in_flight = True
+
+        if not actual_minutes and not run_id:
+            running = next((r for r in past_runs if r.state == "running" and r.start_date), None)
+            if running:
+                actual_minutes = (ctx.now - running.start_date).total_seconds() / 60.0
+                run_id = running.run_id
+                is_in_flight = True
+            elif only_in_flight:
+                actual_minutes = 0.0
+                run_id = ""
+                is_in_flight = False
+            elif past_runs and past_runs[0].start_date and past_runs[0].end_date:
+                actual_minutes = (past_runs[0].end_date - past_runs[0].start_date).total_seconds() / 60.0
+                run_id = past_runs[0].run_id
+
+    else:
+        sorted_success = sorted(
+            [r for r in historical_successes if r.end_date],
+            key=lambda r: r.end_date,  # type: ignore[arg-type]
+            reverse=True,
+        )
+        gaps = [
+            (sorted_success[i].end_date - sorted_success[i + 1].end_date).total_seconds() / 60.0  # type: ignore[operator]
+            for i in range(len(sorted_success) - 1)
+        ][:sample_size]
+        history_count = len(gaps)
+        if gaps:
+            if calc_method == "median":
+                baseline = statistics.median(gaps)
+            elif calc_method == "mean":
+                baseline = statistics.mean(gaps)
+            elif calc_method == "p95":
+                s = sorted(gaps)
+                idx = int(math.ceil(0.95 * len(s))) - 1
+                baseline = s[max(0, min(idx, len(s) - 1))]
+        else:
+            baseline = fallback_minutes
+
+        latest_success = sorted_success[0] if sorted_success else None
+        if latest_success and latest_success.end_date:
+            actual_minutes = (ctx.now - latest_success.end_date).total_seconds() / 60.0
+        else:
+            actual_minutes = baseline + 1.0
+
+    threshold = baseline * (1.0 + margin_pct / 100.0)
+    if only_in_flight and not run_id:
+        exceeded = False
+        status_str = "met"
+        summary = (
+            f"DAG '{dag_id}' has no active in-flight run. Estimated SLA baseline is "
+            f"{baseline:.1f} min (threshold: {threshold:.1f} min across {history_count} past runs). Status: MET (idle)."
+        )
+    else:
+        exceeded = actual_minutes > threshold
+        status_str = "exceeded" if exceeded else "met"
+        if is_in_flight:
+            summary = (
+                f"DAG '{dag_id}' in-flight run '{run_id}' has been running for {actual_minutes:.1f} min vs "
+                f"estimated SLA {threshold:.1f} min (baseline: {baseline:.1f} min + {margin_pct}% buffer "
+                f"across {history_count} past runs). Status: {status_str.upper()}."
+            )
+        else:
+            summary = (
+                f"DAG '{dag_id}' {metric} is {actual_minutes:.1f} min vs estimated SLA {threshold:.1f} min "
+                f"(baseline: {baseline:.1f} min + {margin_pct}% buffer across {history_count} past runs). "
+                f"Status: {status_str.upper()}."
+            )
+
+    output = {
+        "dag_id": dag_id,
+        "run_id": run_id,
+        "metric": metric,
+        "actual_minutes": round(actual_minutes, 2),
+        "estimated_baseline_minutes": round(baseline, 2),
+        "threshold_minutes": round(threshold, 2),
+        "margin_pct": margin_pct,
+        "sample_count": history_count,
+        "calculation_method": calc_method,
+        "exceeded": exceeded,
+        "is_in_flight": is_in_flight,
+        "summary": summary,
+    }
+
+    ctx.set_context("sla", output)
+    ctx.record_result(node.id, output)
+
+    if exceeded:
+        ctx.event(
+            "sla_exceeded",
+            dag_id=dag_id,
+            run_id=run_id,
+            actual_minutes=round(actual_minutes, 2),
+            threshold_minutes=round(threshold, 2),
+        )
+        return NodeResult("exceeded", output, summary)
+    else:
+        ctx.event(
+            "sla_met",
+            dag_id=dag_id,
+            run_id=run_id,
+            actual_minutes=round(actual_minutes, 2),
+            threshold_minutes=round(threshold, 2),
+        )
+        return NodeResult("met", output, summary)
 
 
 _FIX_ACTIONS = ("action.clear_failed_tasks", "action.trigger_dag_run")
@@ -1689,4 +1995,5 @@ EXECUTORS: dict[str, Callable[[NodeContext, Node], NodeResult]] = {
     "incident.update": _incident_update,
     "notify": _notify,
     "check.record": _record_check,
+    "check.sla": _check_sla,
 }

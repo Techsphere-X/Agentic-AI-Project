@@ -156,6 +156,19 @@ export default function RunDetail() {
               <dd>{diagnosis.label}</dd>
             </div>
           )}
+          {run.context?.sla && (
+            <div className="kv-row">
+              <dt>SLA Check</dt>
+              <dd>
+                <Badge tone={run.context.sla.exceeded ? 'warning' : 'success'}>
+                  {run.context.sla.exceeded ? 'SLA Exceeded' : 'Within SLA'}
+                </Badge>{' '}
+                <span className="small muted">
+                  {run.context.sla.actual_minutes} min vs {run.context.sla.threshold_minutes} min threshold ({run.context.sla.metric})
+                </span>
+              </dd>
+            </div>
+          )}
           <div className="kv-row">
             <dt>Workflow version</dt>
             <dd>

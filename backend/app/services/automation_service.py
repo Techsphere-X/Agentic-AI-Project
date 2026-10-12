@@ -496,14 +496,17 @@ def start_manual_run(
         raise BadRequestError(
             "This workflow starts when a DAG run finishes; run the DAG in Airflow to start it"
         )
+    incident_id = None
     if trigger.type in INCIDENT_TRIGGER_TYPES:
-        raise BadRequestError(
-            "This workflow starts from incidents; only “Run on demand” or “On a schedule” "
-            "workflows can be run by hand"
+        # Attach the run to the latest open/recent incident if available
+        incident_id = db.scalar(
+            select(Incident.id).order_by(Incident.created_at.desc())
         )
     if _has_active_run(db, workflow.id):
         raise ConflictError("This workflow is already running; wait for it or cancel it first")
-    run = _add_run(db, workflow, TriggerEvent.MANUAL, f"manual:{uuid.uuid4()}", dry_run=dry_run)
+    run = _add_run(
+        db, workflow, TriggerEvent.MANUAL, f"manual:{uuid.uuid4()}", incident_id=incident_id, dry_run=dry_run
+    )
     assert run is not None  # a fresh random dedup key cannot collide
     audit_service.record(
         db,

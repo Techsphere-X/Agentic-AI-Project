@@ -535,5 +535,89 @@ RUN_VERIFY_TEMPLATE = Template(
     supported_trigger_types=("trigger.manual",),
 )
 
-ALL_TEMPLATES: tuple[Template, ...] = (*TEMPLATES, RUN_VERIFY_TEMPLATE, VALIDATE_RUN_TEMPLATE)
+ADAPTIVE_SLA_TEMPLATE = Template(
+    key="adaptive-sla-alert",
+    name="Adaptive SLA monitor & alert",
+    description=(
+        "Estimates the expected execution SLA dynamically from historical runs in Airflow. "
+        "If a DAG run exceeds the estimated threshold, alerts via Slack or email."
+    ),
+    graph={
+        "nodes": [
+            _n("trigger", "trigger.dag_run", states=["success", "failed"], dag_ids=[]),
+            _n("sla_check", "check.sla", metric="duration", margin_pct=20, sample_size=10),
+            _n(
+                "notify_sla",
+                "notify",
+                level="WARNING",
+                title="⚠️ SLA Exceeded: {{sla.dag_id}} ({{sla.actual_minutes}} min)",
+                message=(
+                    "*Dynamic SLA Breach Detected:*\n"
+                    "• *DAG:* `{{sla.dag_id}}`\n"
+                    "• *Run ID:* `{{sla.run_id}}`\n"
+                    "• *Actual Duration:* `{{sla.actual_minutes}} min`\n"
+                    "• *Estimated Baseline:* `{{sla.estimated_baseline_minutes}} min` (across {{sla.sample_count}} past runs)\n"
+                    "• *Threshold (+{{sla.margin_pct}}% buffer):* `{{sla.threshold_minutes}} min`\n\n"
+                    "> {{sla.summary}}"
+                ),
+            ),
+        ],
+        "edges": [
+            _e("trigger", "next", "sla_check"),
+            _e("sla_check", "exceeded", "notify_sla"),
+        ],
+    },
+    supported_trigger_types=("trigger.dag_run", "trigger.manual", "trigger.schedule"),
+)
+
+IN_FLIGHT_SLA_TEMPLATE = Template(
+    key="in-flight-sla-monitor",
+    name="In-flight SLA monitor & alert (Option 1)",
+    description=(
+        "Periodically polls Airflow on a schedule (e.g. every 5 min) to detect any running pipeline "
+        "that exceeds its historical execution baseline + buffer margin, and sends an alert to Slack."
+    ),
+    graph={
+        "nodes": [
+            _n("trigger", "trigger.schedule", every_minutes=5),
+            _n(
+                "sla_check",
+                "check.sla",
+                metric="duration",
+                margin_pct=20,
+                sample_size=10,
+                only_in_flight=True,
+            ),
+            _n(
+                "notify_sla",
+                "notify",
+                level="WARNING",
+                title="⚠️ In-flight SLA Breach: {{sla.dag_id}} ({{sla.actual_minutes}} min)",
+                message=(
+                    "*Dynamic SLA Breach Detected (In-flight Run):*\n"
+                    "• *DAG:* `{{sla.dag_id}}`\n"
+                    "• *Run ID:* `{{sla.run_id}}`\n"
+                    "• *Elapsed Time:* `{{sla.actual_minutes}} min`\n"
+                    "• *Estimated Baseline:* `{{sla.estimated_baseline_minutes}} min` (across {{sla.sample_count}} past runs)\n"
+                    "• *Threshold (+{{sla.margin_pct}}% buffer):* `{{sla.threshold_minutes}} min`\n\n"
+                    "> {{sla.summary}}"
+                ),
+            ),
+        ],
+        "edges": [
+            _e("trigger", "next", "sla_check"),
+            _e("sla_check", "exceeded", "notify_sla"),
+        ],
+    },
+    supported_trigger_types=("trigger.schedule", "trigger.manual"),
+)
+
+ALL_TEMPLATES: tuple[Template, ...] = (
+    *TEMPLATES,
+    RUN_VERIFY_TEMPLATE,
+    VALIDATE_RUN_TEMPLATE,
+    ADAPTIVE_SLA_TEMPLATE,
+    IN_FLIGHT_SLA_TEMPLATE,
+)
 TEMPLATES_BY_KEY = {t.key: t for t in ALL_TEMPLATES}
+
