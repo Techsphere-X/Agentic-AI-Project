@@ -102,6 +102,40 @@ class ValidateRunParameters(BaseModel):
     )
 
 
+class ReconcileParameters(BaseModel):
+    source_connection_id: str = Field(
+        min_length=1,
+        json_schema_extra={"x-label": "Source database", "x-widget": "database_connection"},
+    )
+    source_sql: str = Field(
+        min_length=1,
+        max_length=20000,
+        json_schema_extra={"x-label": "Source SQL", "x-widget": "sql"},
+    )
+    destination_connection_id: str = Field(
+        min_length=1,
+        json_schema_extra={"x-label": "Destination database", "x-widget": "database_connection"},
+    )
+    destination_sql: str = Field(
+        min_length=1,
+        max_length=20000,
+        json_schema_extra={"x-label": "Destination SQL", "x-widget": "sql"},
+    )
+    comparison_mode: str = Field(default="row_count", pattern=r"^(row_count|rows)$")
+    key_columns: list[str] = Field(default_factory=list)
+    timeout_seconds: int = Field(default=60, ge=1, le=3600)
+    max_rows: int = Field(default=1000, ge=1, le=10000)
+
+
+class AirflowReconcileParameters(ReconcileParameters):
+    dag_id: str = Field(
+        default="agentic_reconciliation_pipeline",
+        min_length=1,
+        max_length=250,
+        json_schema_extra={"x-label": "Airflow DAG", "x-widget": "dag"},
+    )
+
+
 def _n(node_id: str, node_type: str, name: str | None = None, **config: Any) -> dict[str, Any]:
     node: dict[str, Any] = {"id": node_id, "type": node_type, "config": config}
     if name:
@@ -523,6 +557,89 @@ VALIDATE_RUN_TEMPLATE = Template(
     supported_trigger_types=("trigger.dag_run",),
 )
 
+
+def _reconcile_graph(
+    parameters: ReconcileParameters, *, trigger_type: str = "trigger.manual", dag_id: str | None = None
+) -> dict[str, Any]:
+    trigger_config = {}
+    if trigger_type == "trigger.dag_run":
+        trigger_config = {"states": ["success"], "dag_ids": [dag_id]}
+    return {
+        "nodes": [
+            _n("trigger", trigger_type, **trigger_config),
+            _n(
+                "reconcile",
+                "database.reconcile",
+                source_connection_id=parameters.source_connection_id,
+                source_sql=parameters.source_sql,
+                destination_connection_id=parameters.destination_connection_id,
+                destination_sql=parameters.destination_sql,
+                comparison_mode=parameters.comparison_mode,
+                key_columns=parameters.key_columns,
+                timeout_seconds=parameters.timeout_seconds,
+                max_rows=parameters.max_rows,
+            ),
+            _n(
+                "matched",
+                "notify",
+                level="INFO",
+                title="Database reconciliation passed",
+                message="Source and destination database results match.",
+            ),
+            _n(
+                "mismatched",
+                "notify",
+                level="WARNING",
+                title="Database reconciliation mismatch",
+                message=(
+                    "Source and destination database results differ: "
+                    "{{results.reconcile.difference_count}} difference(s)."
+                ),
+            ),
+            _n(
+                "failed",
+                "notify",
+                level="CRITICAL",
+                title="Database reconciliation failed",
+                message="The reconciliation query could not run: {{last_error}}",
+            ),
+        ],
+        "edges": [
+            _e("trigger", "next", "reconcile"),
+            _e("reconcile", "matched", "matched"),
+            _e("reconcile", "mismatched", "mismatched"),
+            _e("reconcile", "failed", "failed"),
+        ],
+    }
+
+
+def _airflow_reconcile_graph(parameters: AirflowReconcileParameters) -> dict[str, Any]:
+    return _reconcile_graph(parameters, trigger_type="trigger.dag_run", dag_id=parameters.dag_id)
+
+
+RECONCILE_TEMPLATE = Template(
+    key="reconcile-databases",
+    name="Reconcile two databases",
+    description=(
+        "Run read-only queries against two databases and notify when their results match or differ."
+    ),
+    parameter_model=ReconcileParameters,
+    builder=_reconcile_graph,
+    supported_trigger_types=("trigger.manual", "trigger.schedule"),
+)
+
+AIRFLOW_RECONCILE_TEMPLATE = Template(
+    key="reconcile-airflow-dag",
+    name="Reconcile Airflow DAG output",
+    description=(
+        "After a selected Airflow DAG succeeds, compare read-only source and destination queries "
+        "and notify on a match, mismatch, or query failure."
+    ),
+    parameter_model=AirflowReconcileParameters,
+    builder=_airflow_reconcile_graph,
+    supported_trigger_types=("trigger.dag_run",),
+)
+
 RUN_VERIFY_TEMPLATE = Template(
     key="run-verify-dag",
     name="Run and verify a DAG",
@@ -616,6 +733,8 @@ ALL_TEMPLATES: tuple[Template, ...] = (
     *TEMPLATES,
     RUN_VERIFY_TEMPLATE,
     VALIDATE_RUN_TEMPLATE,
+    RECONCILE_TEMPLATE,
+    AIRFLOW_RECONCILE_TEMPLATE,
     ADAPTIVE_SLA_TEMPLATE,
     IN_FLIGHT_SLA_TEMPLATE,
 )

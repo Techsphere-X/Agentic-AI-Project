@@ -225,7 +225,10 @@ def test_sla_validation_and_clearing(
 ) -> None:
     dag_id = setup["dags"]["quality_checks"]["id"]
     url = f"/api/v1/airflow/dags/{dag_id}"
-    assert client.patch(url, json={"sla_minutes": 1}, headers=operator_headers).status_code == 422
+    assert (
+        client.patch(url, json={"sla_minutes": 1}, headers=operator_headers).json()["sla_minutes"]
+        == 1
+    )
     assert (
         client.patch(url, json={"sla_minutes": 30}, headers=operator_headers).json()["sla_minutes"]
         == 30

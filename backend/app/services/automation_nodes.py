@@ -4,6 +4,7 @@ Each executor takes a NodeContext and the node, performs its work (policy-checke
 and returns a NodeResult naming the output port to follow, or a time to wait until.
 """
 
+import hashlib
 import json
 import logging
 import math
@@ -1743,6 +1744,158 @@ def _sql_message(summary: dict[str, Any]) -> str:
     return f"Returned {summary['row_count'] - (1 if more else 0)}{more} row(s)"
 
 
+RECONCILIATION_MAX_DIFFERENCES = 25
+
+
+def _stable_json(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _fingerprint_value(value: Any) -> str:
+    return hashlib.sha256(_stable_json(value).encode()).hexdigest()[:16]
+
+
+def _normalized_rows(result: db_connector.SqlResult) -> list[dict[str, Any]]:
+    if not result.returns_rows:
+        raise ValueError("reconciliation queries must return rows")
+    columns = [str(column) for column in result.columns]
+    if len(set(columns)) != len(columns):
+        raise ValueError("reconciliation queries must return unique column names")
+    rows = []
+    for values in result.rows:
+        if len(values) != len(columns):
+            raise ValueError("reconciliation query returned an invalid row")
+        rows.append(dict(sorted(zip(columns, values, strict=True))))
+    return rows
+
+
+def _compare_reconciliation(
+    source: db_connector.SqlResult,
+    destination: db_connector.SqlResult,
+    *,
+    mode: str,
+    key_columns: list[str],
+) -> tuple[bool, list[dict[str, Any]]]:
+    if not source.returns_rows or not destination.returns_rows:
+        raise ValueError("reconciliation queries must return rows")
+    if mode == "row_count":
+        matched = source.row_count == destination.row_count and source.truncated == destination.truncated
+        differences = [] if matched else [
+            {
+                "source_row_count": source.row_count,
+                "destination_row_count": destination.row_count,
+                "source_truncated": source.truncated,
+                "destination_truncated": destination.truncated,
+            }
+        ]
+        return matched, differences
+
+    source_rows = _normalized_rows(source)
+    destination_rows = _normalized_rows(destination)
+    differences: list[dict[str, Any]] = []
+    if key_columns:
+        source_by_key: dict[str, list[dict[str, Any]]] = {}
+        destination_by_key: dict[str, list[dict[str, Any]]] = {}
+        for row in source_rows:
+            missing = [column for column in key_columns if column not in row]
+            if missing:
+                raise ValueError(f"key column is missing from source query: {missing[0]}")
+            source_by_key.setdefault(_stable_json([row[column] for column in key_columns]), []).append(row)
+        for row in destination_rows:
+            missing = [column for column in key_columns if column not in row]
+            if missing:
+                raise ValueError(f"key column is missing from destination query: {missing[0]}")
+            destination_by_key.setdefault(
+                _stable_json([row[column] for column in key_columns]), []
+            ).append(row)
+        keys = sorted(set(source_by_key) | set(destination_by_key))
+        for key in keys:
+            source_values = sorted(_stable_json(row) for row in source_by_key.get(key, []))
+            destination_values = sorted(_stable_json(row) for row in destination_by_key.get(key, []))
+            if source_values != destination_values:
+                differences.append(
+                    {
+                        "key_fingerprint": _fingerprint_value(key),
+                        "source_rows": len(source_values),
+                        "destination_rows": len(destination_values),
+                    }
+                )
+                if len(differences) >= RECONCILIATION_MAX_DIFFERENCES:
+                    break
+    else:
+        source_counts: dict[str, int] = {}
+        destination_counts: dict[str, int] = {}
+        for row in source_rows:
+            fingerprint = _fingerprint_value(row)
+            source_counts[fingerprint] = source_counts.get(fingerprint, 0) + 1
+        for row in destination_rows:
+            fingerprint = _fingerprint_value(row)
+            destination_counts[fingerprint] = destination_counts.get(fingerprint, 0) + 1
+        for fingerprint in sorted(set(source_counts) | set(destination_counts)):
+            source_count = source_counts.get(fingerprint, 0)
+            destination_count = destination_counts.get(fingerprint, 0)
+            if source_count != destination_count:
+                differences.append(
+                    {
+                        "row_fingerprint": fingerprint,
+                        "source_rows": source_count,
+                        "destination_rows": destination_count,
+                    }
+                )
+                if len(differences) >= RECONCILIATION_MAX_DIFFERENCES:
+                    break
+    return not differences, differences
+
+
+def _reconcile(ctx: NodeContext, node: Node) -> NodeResult:
+    cfg = node.config
+    phase = "source"
+    try:
+        source = _query(
+            ctx.database_connection(cfg["source_connection_id"]),
+            cfg["source_sql"],
+            read_only=True,
+            timeout_seconds=cfg["timeout_seconds"],
+            max_rows=cfg["max_rows"],
+        )
+        phase = "destination"
+        destination = _query(
+            ctx.database_connection(cfg["destination_connection_id"]),
+            cfg["destination_sql"],
+            read_only=True,
+            timeout_seconds=cfg["timeout_seconds"],
+            max_rows=cfg["max_rows"],
+        )
+        matched, differences = _compare_reconciliation(
+            source,
+            destination,
+            mode=cfg["comparison_mode"],
+            key_columns=cfg["key_columns"],
+        )
+        output = {
+            "source_row_count": source.row_count,
+            "destination_row_count": destination.row_count,
+            "source_truncated": source.truncated,
+            "destination_truncated": destination.truncated,
+            "comparison_mode": cfg["comparison_mode"],
+            "matched": matched,
+            "difference_count": len(differences),
+            "differences": differences,
+        }
+        ctx.record_result(node.id, output)
+        return NodeResult(
+            "matched" if matched else "mismatched",
+            output,
+            "Database results match" if matched else f"Database results differ ({len(differences)} difference(s))",
+        )
+    except (ActionFailed, NodeError, ValueError) as exc:
+        message = f"{phase.capitalize()} reconciliation query failed"
+        output = {"matched": False, "phase": phase, "error": scrub(str(exc))[:500]}
+        ctx.set_context("last_error", message)
+        ctx.record_result(node.id, output)
+        return NodeResult("failed", output, message)
+
+
 def _query(
     conn: DatabaseConnection, sql: str, *, read_only: bool, timeout_seconds: int, max_rows: int
 ) -> db_connector.SqlResult:
@@ -1981,6 +2134,7 @@ EXECUTORS: dict[str, Callable[[NodeContext, Node], NodeResult]] = {
     "pipeline.wait_for_dag": _wait_for_dag,
     "database.run_sql": _run_sql,
     "database.check": _check_data,
+    "database.reconcile": _reconcile,
     "condition.filter": _filter,
     "analyze.task_logs": _analyze_task_logs,
     "diagnose.classify_log": _classify,

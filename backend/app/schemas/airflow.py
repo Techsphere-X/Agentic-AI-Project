@@ -137,5 +137,5 @@ class DagMonitorUpdate(BaseModel):
     """Partial update; `sla_minutes: null` removes the SLA."""
 
     is_monitored: bool | None = None
-    sla_minutes: int | None = Field(default=None, ge=5, le=10080)
+    sla_minutes: int | None = Field(default=None, ge=1, le=10080)
     detect_failures: bool | None = None
