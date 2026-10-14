@@ -10,6 +10,7 @@ export const NODE_LABELS = {
   'pipeline.wait_for_dag': 'Wait for a DAG',
   'database.run_sql': 'Run SQL',
   'database.check': 'Check data',
+  'database.reconcile': 'Reconcile databases',
   'flow.wait': 'Wait',
   'condition.filter': 'Only if…',
   'analyze.task_logs': 'Analyze logs',
@@ -139,6 +140,10 @@ export function describeConfig(type, config = {}) {
     case 'database.check':
       parts.push(`${shortSql(config.sql) || 'enter SQL'} ${config.operator ?? '>'} ${config.expected ?? '0'}`)
       if (config.keep_checking_minutes) parts.push(`keep checking ${config.keep_checking_minutes} min`)
+      break
+    case 'database.reconcile':
+      parts.push(config.comparison_mode === 'rows' ? 'compare rows' : 'compare row counts')
+      if (config.key_columns?.length) parts.push(`by ${config.key_columns.join(', ')}`)
       break
     case 'flow.wait':
       parts.push(`${config.minutes} min`)
