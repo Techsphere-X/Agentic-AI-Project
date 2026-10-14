@@ -12,6 +12,7 @@ Works on Airflow 2.10 and 3.x. All DAGs are manual-only (schedule=None).
 import os
 import time
 from datetime import datetime
+from urllib.parse import urlparse
 
 try:  # Airflow 3
     from airflow.sdk import dag, task
@@ -86,3 +87,96 @@ def agentic_sla_test():
 
 
 agentic_sla_test()
+
+
+RECONCILIATION_DATABASE = "agentic_reconciliation_test"
+SOURCE_TABLE = "agentic_reconciliation_source"
+DESTINATION_TABLE = "agentic_reconciliation_destination"
+
+
+def _reconciliation_config() -> tuple[str, str]:
+    enabled = os.getenv("AGENTIC_RECONCILIATION_TEST_DATA_ENABLED", "false").lower()
+    if enabled != "true":
+        raise RuntimeError(
+            "Set AGENTIC_RECONCILIATION_TEST_DATA_ENABLED=true to enable isolated test writes"
+        )
+    database_url = os.getenv("AGENTIC_RECONCILIATION_TEST_DATABASE_URL", "")
+    parsed = urlparse(database_url)
+    if not database_url or parsed.path.removeprefix("/") != RECONCILIATION_DATABASE:
+        raise RuntimeError(
+            f"AGENTIC_RECONCILIATION_TEST_DATABASE_URL must target {RECONCILIATION_DATABASE}"
+        )
+    scenario = os.getenv("AGENTIC_RECONCILIATION_SCENARIO", "match").lower()
+    if scenario not in {"match", "mismatch"}:
+        raise RuntimeError("AGENTIC_RECONCILIATION_SCENARIO must be match or mismatch")
+    return database_url, scenario
+
+
+@dag(
+    dag_id="agentic_reconciliation_pipeline",
+    schedule=None,
+    start_date=datetime(2024, 1, 1),
+    catchup=False,
+    default_args=DEFAULTS,
+    tags=["agentic-test", "reconciliation-test"],
+    description="Manual-only isolated fixture loader for database reconciliation workflow tests.",
+)
+def agentic_reconciliation_pipeline():
+    @task
+    def validate_test_configuration():
+        _, scenario = _reconciliation_config()
+        return {"scenario": scenario, "database": RECONCILIATION_DATABASE}
+
+    @task
+    def prepare_test_data(config):
+        database_url, scenario = _reconciliation_config()
+        try:
+            import psycopg2
+        except ImportError as exc:
+            raise RuntimeError("The Airflow image must provide psycopg2 for this test DAG") from exc
+
+        source_rows = [(1, "alpha", 10), (2, "beta", 20)]
+        destination_rows = source_rows if scenario == "match" else [(1, "alpha", 10), (2, "beta", 99)]
+        with psycopg2.connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"CREATE TABLE IF NOT EXISTS {SOURCE_TABLE} "
+                    "(id INTEGER PRIMARY KEY, product TEXT NOT NULL, quantity INTEGER NOT NULL)"
+                )
+                cursor.execute(
+                    f"CREATE TABLE IF NOT EXISTS {DESTINATION_TABLE} "
+                    "(id INTEGER PRIMARY KEY, product TEXT NOT NULL, quantity INTEGER NOT NULL)"
+                )
+                cursor.execute(f"DELETE FROM {SOURCE_TABLE}")
+                cursor.execute(f"DELETE FROM {DESTINATION_TABLE}")
+                cursor.executemany(
+                    f"INSERT INTO {SOURCE_TABLE} (id, product, quantity) VALUES (%s, %s, %s)",
+                    source_rows,
+                )
+                cursor.executemany(
+                    f"INSERT INTO {DESTINATION_TABLE} (id, product, quantity) VALUES (%s, %s, %s)",
+                    destination_rows,
+                )
+        return config
+
+    @task
+    def validate_fixture(config):
+        database_url, scenario = _reconciliation_config()
+        import psycopg2
+
+        with psycopg2.connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(f"SELECT COUNT(*) FROM {SOURCE_TABLE}")
+                source_count = cursor.fetchone()[0]
+                cursor.execute(f"SELECT COUNT(*) FROM {DESTINATION_TABLE}")
+                destination_count = cursor.fetchone()[0]
+        if source_count != destination_count:
+            raise RuntimeError("Reconciliation fixture counts were not prepared")
+        if scenario == "mismatch" and source_count < 2:
+            raise RuntimeError("Mismatch fixture is incomplete")
+        return {"scenario": config["scenario"], "source_count": source_count}
+
+    validate_fixture(prepare_test_data(validate_test_configuration()))
+
+
+agentic_reconciliation_pipeline()

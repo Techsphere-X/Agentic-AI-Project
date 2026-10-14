@@ -175,6 +175,30 @@ def test_validate_every_run_template_builds() -> None:
     assert graph.trigger.config == {"states": ["success"], "dag_ids": ["orders"]}
 
 
+def test_reconcile_airflow_template_builds_success_only_graph() -> None:
+    template = TEMPLATES_BY_KEY["reconcile-airflow-dag"]
+    graph = validate_graph(
+        template.build(
+            {
+                "source_connection_id": "source-db",
+                "source_sql": "SELECT id, product, quantity FROM agentic_reconciliation_source",
+                "destination_connection_id": "destination-db",
+                "destination_sql": "SELECT id, product, quantity FROM agentic_reconciliation_destination",
+                "comparison_mode": "rows",
+                "key_columns": ["id"],
+            }
+        )
+    )
+    assert graph.trigger.type == "trigger.dag_run"
+    assert graph.trigger.config == {
+        "states": ["success"],
+        "dag_ids": ["agentic_reconciliation_pipeline"],
+    }
+    assert graph.next_nodes("reconcile", "matched") == ["matched"]
+    assert graph.next_nodes("reconcile", "mismatched") == ["mismatched"]
+    assert graph.next_nodes("reconcile", "failed") == ["failed"]
+
+
 # ---------------------------------------------------------------------- enqueue
 
 
@@ -205,6 +229,60 @@ def test_each_finished_run_starts_the_workflow_once(db: Session, fake: FakeAirfl
         ("r2", "failed"),
         ("r3", "success"),
     ]
+
+
+def test_reconciliation_workflow_filters_successful_target_dag(
+    db: Session, fake: FakeAirflow
+) -> None:
+    conn = _conn(db)
+    _dag(db, conn, "agentic_reconciliation_pipeline")
+    _dag(db, conn, "unrelated_pipeline")
+    workflow = _workflow(
+        db,
+        TEMPLATES_BY_KEY["reconcile-airflow-dag"].build(
+            {
+                "source_connection_id": "source-db",
+                "source_sql": "SELECT 1",
+                "destination_connection_id": "destination-db",
+                "destination_sql": "SELECT 1",
+            }
+        ),
+        name="Airflow reconciliation",
+    )
+
+    fake.add_run(
+        "agentic_reconciliation_pipeline",
+        "match-run",
+        "success",
+        iso(at(10)),
+        iso(at(10, 5)),
+    )
+    summary = detection_service.run_cycle(db, now=T0)
+    assert summary.automation_queued == 1
+    [check] = _checks(db)
+    run = db.get(WorkflowRun, check.workflow_run_id)
+    assert run.workflow_id == workflow.id
+    assert run.context["dag_run"] == {
+        "connection_id": str(conn.id),
+        "monitored_dag_id": str(check.monitored_dag_id),
+        "dag_id": "agentic_reconciliation_pipeline",
+        "run_id": "match-run",
+        "state": "success",
+        "environment": "DEV",
+    }
+
+    fake.add_run("unrelated_pipeline", "other-run", "success", iso(at(11)), iso(at(11, 5)))
+    assert detection_service.run_cycle(db, now=at(11, 10)).automation_queued == 0
+
+    fake.add_run(
+        "agentic_reconciliation_pipeline",
+        "failed-run",
+        "failed",
+        iso(at(12)),
+        failed_task="load",
+        log="test failure",
+    )
+    assert detection_service.run_cycle(db, now=at(12, 10)).automation_queued == 0
 
 
 def test_trigger_filters_by_state_and_dag(db: Session, fake: FakeAirflow) -> None:
