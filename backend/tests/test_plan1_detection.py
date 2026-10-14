@@ -280,9 +280,23 @@ def test_sla_miss_opens_once_and_resolves_after_success(db: Session, fake: FakeA
 
 def test_sla_not_breached_within_window(db: Session, fake: FakeAirflow) -> None:
     conn = _conn(db)
-    _dag(db, conn, sla_minutes=60)
-    fake.add_run("etl", "r1", "success", iso(at(11, 20)), iso(at(11, 25)))
-    assert detection_service.run_cycle(db, now=T0).opened == 0
+    _dag(db, conn, sla_minutes=1)
+    fake.add_run("etl", "r1", "success", iso(at(11, 24)), iso(at(11, 25)))
+    now = T0.replace(hour=11, minute=25, second=59)
+    assert detection_service.run_cycle(db, now=now).opened == 0
+
+
+def test_one_minute_sla_breach_opens_incident(db: Session, fake: FakeAirflow) -> None:
+    conn = _conn(db)
+    _dag(db, conn, sla_minutes=1)
+    fake.add_run("etl", "r1", "success", iso(at(11, 23)), iso(at(11, 24)))
+
+    summary = detection_service.run_cycle(db, now=T0.replace(hour=11, minute=25, second=1))
+
+    assert summary.opened == 1
+    [incident] = incidents(db)
+    assert incident.type == IncidentType.SLA_MISSED
+    assert "SLA is 1 min" in incident.summary
 
 
 def test_unreachable_connection_does_not_break_others(db: Session, fake: FakeAirflow) -> None:

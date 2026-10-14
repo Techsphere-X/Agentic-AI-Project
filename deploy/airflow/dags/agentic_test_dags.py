@@ -3,10 +3,14 @@
 - agentic_flaky_once: the first attempt of every run fails with a transient network error;
   clearing the task (a retry) succeeds. The `retry-transient` workflow should fix it.
 - agentic_bad_data: always fails with a unique-constraint violation. Automation must NOT retry it.
+- agentic_sla_test: manual-only run that sleeps for a configurable duration to exercise freshness
+    SLA monitoring without touching production data.
 
-Works on Airflow 2.10 and 3.x. Both DAGs are manual-only (schedule=None).
+Works on Airflow 2.10 and 3.x. All DAGs are manual-only (schedule=None).
 """
 
+import os
+import time
 from datetime import datetime
 
 try:  # Airflow 3
@@ -20,7 +24,7 @@ DEFAULTS = {"retries": 0, "owner": "agentic-tests"}
 @dag(
     dag_id="agentic_flaky_once",
     schedule=None,
-    start_date=datetime(2024, 1, 1),
+    start_date=datetime(2026, 10, 13),
     catchup=False,
     default_args=DEFAULTS,
     tags=["agentic-test"],
@@ -61,3 +65,24 @@ def agentic_bad_data():
 
 agentic_flaky_once()
 agentic_bad_data()
+
+
+@dag(
+    dag_id="agentic_sla_test",
+    schedule=None,
+    start_date=datetime(2026, 10, 13),
+    catchup=False,
+    default_args=DEFAULTS,
+    tags=["agentic-test", "sla-test"],
+    description="Manual-only approximately two-minute run for Agentic SLA monitoring tests.",
+)
+def agentic_sla_test():
+    @task
+    def hold_for_test_duration():
+        duration_seconds = int(os.getenv("AGENTIC_SLA_TEST_DURATION_SECONDS", "360"))
+        time.sleep(max(1, duration_seconds))
+
+    hold_for_test_duration()
+
+
+agentic_sla_test()

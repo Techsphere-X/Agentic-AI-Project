@@ -464,6 +464,49 @@ class CheckDataConfig(_DatabaseTarget):
     )
 
 
+class ReconcileConfig(_Config):
+    source_connection_id: str = Field(
+        default="", json_schema_extra=_ui("Source database", "database_connection")
+    )
+    source_sql: str = Field(
+        default="", max_length=20000, json_schema_extra=_ui("Source SQL", "sql")
+    )
+    destination_connection_id: str = Field(
+        default="", json_schema_extra=_ui("Destination database", "database_connection")
+    )
+    destination_sql: str = Field(
+        default="", max_length=20000, json_schema_extra=_ui("Destination SQL", "sql")
+    )
+    comparison_mode: Literal["row_count", "rows"] = Field(
+        default="row_count", json_schema_extra=_ui("Compare", "select")
+    )
+    key_columns: list[str] = Field(
+        default_factory=list,
+        json_schema_extra=_ui(
+            "Key columns (optional)", hint="Comma-separated column names used to match rows"
+        ),
+    )
+    timeout_seconds: int = Field(
+        default=60, ge=1, le=3600, json_schema_extra=_ui("Timeout (seconds)")
+    )
+    max_rows: int = Field(
+        default=1000,
+        ge=1,
+        le=10000,
+        json_schema_extra=_ui("Maximum rows to compare"),
+    )
+
+    @model_validator(mode="after")
+    def _chosen(self) -> "ReconcileConfig":
+        if not self.source_connection_id or not self.destination_connection_id:
+            raise ValueError("Choose both source and destination database connections")
+        if not self.source_sql.strip() or not self.destination_sql.strip():
+            raise ValueError("Enter both source and destination SQL queries")
+        if self.comparison_mode == "row_count" and self.key_columns:
+            raise ValueError("Key columns are only used when comparing rows")
+        return self
+
+
 class WaitConfig(_Config):
     minutes: int = Field(default=5, ge=1, le=1440, json_schema_extra=_ui("Minutes"))
 
@@ -634,6 +677,19 @@ NODE_TYPES: dict[str, NodeType] = {
             ("pass", "fail"),
             CheckDataConfig,
             {"pass": "passes", "fail": "fails"},
+        ),
+        NodeType(
+            "database.reconcile",
+            "Reconcile databases",
+            "database",
+            "Runs read-only queries against two databases and compares their row counts or rows.",
+            ("matched", "mismatched", "failed"),
+            ReconcileConfig,
+            {
+                "matched": "results match",
+                "mismatched": "results differ",
+                "failed": "query failed",
+            },
         ),
         # ------------------------------------------------------------ incident handling
         NodeType(

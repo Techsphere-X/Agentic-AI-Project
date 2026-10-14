@@ -22,6 +22,7 @@ import {
 } from './graph'
 import { layeredLayout } from './layout'
 import { connectionState } from '../../connectionState'
+import { NODE_LABELS, describeConfig } from '../../pages/automation/automationText'
 
 const retryGraph = {
   nodes: [
@@ -101,6 +102,38 @@ test('ids and defaults', () => {
   assert.equal(nextNodeId('action.clear_failed_tasks', [{ id: 'clear_failed_tasks_1' }]), 'clear_failed_tasks_2')
   const schema = { properties: { a: { default: [1] }, b: { type: 'string' }, c: { default: null } } }
   assert.deepEqual(defaultConfig(schema), { a: [1], c: null })
+})
+
+test('database reconciliation block exposes its result branches', () => {
+  assert.equal(NODE_LABELS['database.reconcile'], 'Reconcile databases')
+  assert.equal(
+    describeConfig('database.reconcile', { comparison_mode: 'rows', key_columns: ['id'] }),
+    'compare rows · by id',
+  )
+  const graph = {
+    nodes: [
+      { id: 'trigger', type: 'trigger.manual', config: {} },
+      { id: 'reconcile', type: 'database.reconcile', config: {} },
+      { id: 'matched', type: 'notify', config: {} },
+      { id: 'mismatched', type: 'notify', config: {} },
+      { id: 'failed', type: 'notify', config: {} },
+    ],
+    edges: [
+      { from: 'trigger', port: 'next', to: 'reconcile' },
+      { from: 'reconcile', port: 'matched', to: 'matched' },
+      { from: 'reconcile', port: 'mismatched', to: 'mismatched' },
+      { from: 'reconcile', port: 'failed', to: 'failed' },
+    ],
+  }
+  const flow = toFlow(graph)
+  assert.deepEqual(
+    fromFlow(flow.nodes, flow.edges).edges.filter((edge) => edge.from === 'reconcile'),
+    [
+      { from: 'reconcile', port: 'matched', to: 'matched' },
+      { from: 'reconcile', port: 'mismatched', to: 'mismatched' },
+      { from: 'reconcile', port: 'failed', to: 'failed' },
+    ],
+  )
 })
 
 test('layout handles joins and stray nodes', () => {
