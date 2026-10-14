@@ -4,9 +4,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, Request
 
+from app.automation import assistant
 from app.automation.graph import catalog
 from app.automation.templates import ALL_TEMPLATES
 from app.automation.types import ApprovalStatus, DagRunCheckStatus, RunStatus
+from app.connectors.assistant_llm import AssistantUnavailable, get_assistant_llm, model_name
 from app.core.config import get_settings
 from app.core.dependencies import (
     AdminUser,
@@ -16,9 +18,14 @@ from app.core.dependencies import (
     PageParams,
     ViewerUser,
 )
+from app.core.exceptions import AppError, BadRequestError
 from app.models.automation import Workflow
 from app.schemas.automation import (
     ApprovalRead,
+    AssistantProposal,
+    AssistantReply,
+    AssistantRequest,
+    AssistantStatus,
     AutomationStatus,
     AutomationSummary,
     DagRunCheckRead,
@@ -84,9 +91,7 @@ def templates(_: ViewerUser) -> list[TemplateRead]:
 
 
 @router.post("/templates/{template_key}/preview", response_model=GraphCheckResult)
-def preview_template(
-    template_key: str, body: TemplatePreview, _: ViewerUser
-) -> GraphCheckResult:
+def preview_template(template_key: str, body: TemplatePreview, _: ViewerUser) -> GraphCheckResult:
     _, graph, _ = automation_service.build_template(template_key, body.template_parameters)
     return GraphCheckResult(valid=True, problems=[], graph=graph)
 
@@ -120,6 +125,54 @@ def create_workflow(
 def validate_workflow_graph(body: GraphCheck, _: ViewerUser) -> GraphCheckResult:
     graph, problems = automation_service.check_graph(body.graph)
     return GraphCheckResult(valid=not problems, problems=problems, graph=graph)
+
+
+# -------------------------------------------------------------------- assistant
+
+ASSISTANT_HISTORY = 12  # latest chat messages sent to the model
+
+
+@router.get("/assistant/status", response_model=AssistantStatus)
+def assistant_status(_: ViewerUser) -> AssistantStatus:
+    settings = get_settings()
+    return AssistantStatus(
+        enabled=settings.ASSISTANT_ENABLED,
+        provider=settings.ASSISTANT_PROVIDER,
+        model=model_name(settings),
+    )
+
+
+@router.post("/assistant", response_model=AssistantReply)
+def ask_assistant(body: AssistantRequest, _: ViewerUser) -> AssistantReply:
+    """Propose a graph from a chat. Nothing is saved: the editor applies it, the user saves."""
+    settings = get_settings()
+    if not settings.ASSISTANT_ENABLED:
+        raise AppError(
+            "The workflow assistant is turned off (ASSISTANT_ENABLED)",
+            code="assistant_unavailable",
+            status_code=503,
+        )
+    try:
+        result = assistant.propose(
+            get_assistant_llm(),
+            mode=body.mode,
+            messages=[m.model_dump() for m in body.messages[-ASSISTANT_HISTORY:]],
+            current_graph=body.graph,
+            problems=body.problems,
+            max_repairs=settings.ASSISTANT_MAX_REPAIRS,
+        )
+    except AssistantUnavailable as exc:
+        raise AppError(str(exc), code="assistant_unavailable", status_code=503) from exc
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+    return AssistantReply(
+        reply=result.reply,
+        proposal=AssistantProposal(graph=result.proposal.graph, changes=result.proposal.changes)
+        if result.proposal
+        else None,
+        valid=result.valid,
+        problems=result.problems,
+    )
 
 
 @router.delete("/workflows/{workflow_id}", status_code=204)

@@ -60,8 +60,8 @@
     "semantic_hash": "db37650c515286fcfa0fe7d1b5b4d228"
   },
   "backend/app/api/v1/automation.py": {
-    "mtime": 1791483496.5816307,
-    "ast_hash": "c3b1e6f5d899d8e6cc82dbd92a86caf7",
+    "mtime": 1791959017.5068095,
+    "ast_hash": "41099c58701c9a2d8cbf1d400b323ecd",
     "semantic_hash": ""
   },
   "backend/app/api/v1/channels.py": {
@@ -150,8 +150,8 @@
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "backend/app/core/config.py": {
-    "mtime": 1791304278.4992814,
-    "ast_hash": "28bf33dd058fa01261f327ef7f780c64",
+    "mtime": 1791988336.0536158,
+    "ast_hash": "66ca6b11aa56eb53df35f342109e5ee0",
     "semantic_hash": ""
   },
   "backend/app/core/crypto.py": {
@@ -325,8 +325,8 @@
     "semantic_hash": "6ce5a96e3a0ef31191c720875408cd16"
   },
   "backend/app/schemas/automation.py": {
-    "mtime": 1791483472.8679929,
-    "ast_hash": "c93d3c3ab32f7a4a689a85777abd7c9c",
+    "mtime": 1791959017.5340533,
+    "ast_hash": "ede8c24283782292490dbd4c6b11217c",
     "semantic_hash": ""
   },
   "backend/app/schemas/channel.py": {
@@ -555,8 +555,8 @@
     "semantic_hash": "5e6e3cea3e89137071c142dd7835b0ef"
   },
   "frontend/e2e/canvas.spec.js": {
-    "mtime": 1791342176.8517895,
-    "ast_hash": "f104eb9971a3becb5cdf79ac9a3ecfc6",
+    "mtime": 1791959499.6828527,
+    "ast_hash": "33350eeaa2cf394e97b3d4a075ba9112",
     "semantic_hash": ""
   },
   "frontend/package.json": {
@@ -680,8 +680,8 @@
     "semantic_hash": ""
   },
   "frontend/src/pages/automation/WorkflowEditor.jsx": {
-    "mtime": 1791636212.4313264,
-    "ast_hash": "70f1171f1fa657cd5e306bce9b82efc7",
+    "mtime": 1791959017.538411,
+    "ast_hash": "d8a11ba233d79127536b051334fd3431",
     "semantic_hash": ""
   },
   "frontend/src/pages/automation/Workflows.jsx": {
@@ -780,8 +780,8 @@
     "semantic_hash": ""
   },
   "frontend/src/services/endpoints.js": {
-    "mtime": 1791483472.9236825,
-    "ast_hash": "6b6a9b6405673b5417136f636936a9ff",
+    "mtime": 1791959017.5448227,
+    "ast_hash": "52f860428e68fa668c8fc3baf5f1260c",
     "semantic_hash": ""
   },
   "frontend/src/types/index.js": {
@@ -805,9 +805,9 @@
     "semantic_hash": "7db3a64a332753ef20aebadce475d3e6"
   },
   "backend/requirements.txt": {
-    "mtime": 1790445132.35079,
-    "ast_hash": "4552e0a4cf1c6abdb39a0e17a0d169a0",
-    "semantic_hash": "4552e0a4cf1c6abdb39a0e17a0d169a0"
+    "mtime": 1791959017.5350711,
+    "ast_hash": "0cea8f187f0e1d981ca552dd5b5547d7",
+    "semantic_hash": ""
   },
   "docker-compose.yml": {
     "mtime": 1790834014.0542302,
@@ -1157,6 +1157,26 @@
   "backend/tests/test_sla_block.py": {
     "mtime": 1791812310.8814926,
     "ast_hash": "0e2d8e8e3f2174c190c6db40c60fc504",
+    "semantic_hash": ""
+  },
+  "backend/app/automation/assistant.py": {
+    "mtime": 1791959180.6315007,
+    "ast_hash": "f3f70a7732e618a074afb550dc31e3cd",
+    "semantic_hash": ""
+  },
+  "backend/app/connectors/assistant_llm.py": {
+    "mtime": 1791959180.638345,
+    "ast_hash": "127e1d449c6e96aa63b88283c2664afa",
+    "semantic_hash": ""
+  },
+  "backend/tests/test_workflow_assistant.py": {
+    "mtime": 1791959017.7732253,
+    "ast_hash": "568717fd67927d34a3443d0ec1bc7fd4",
+    "semantic_hash": ""
+  },
+  "frontend/src/pages/automation/AssistantPanel.jsx": {
+    "mtime": 1791959017.7732253,
+    "ast_hash": "4e7cd368c408de1a2ad4f4cb7a43cdd7",
     "semantic_hash": ""
   }
 }

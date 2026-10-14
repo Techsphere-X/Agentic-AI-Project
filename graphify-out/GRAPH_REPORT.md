@@ -1,16 +1,16 @@
-# Graph Report - agenticAi  (2026-10-12)
+# Graph Report - agenticAi  (2026-10-14)
 
 ## Corpus Check
-- 225 files · ~347,857 words
+- 229 files · ~353,015 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2563 nodes · 7079 edges · 182 communities (129 shown, 53 thin omitted)
-- Extraction: 82% EXTRACTED · 18% INFERRED · 0% AMBIGUOUS · INFERRED: 1258 edges (avg confidence: 0.63)
+- 2652 nodes · 7332 edges · 176 communities (124 shown, 52 thin omitted)
+- Extraction: 82% EXTRACTED · 18% INFERRED · 0% AMBIGUOUS · INFERRED: 1325 edges (avg confidence: 0.63)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `f590c9fc`
+- Built from commit: `68b39891`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -86,20 +86,16 @@
 - [[_COMMUNITY_get_current_user|get_current_user]]
 - [[_COMMUNITY_set_override|set_override]]
 - [[_COMMUNITY_Failure Diagnosis Module (Hybrid Regex + ML)|Failure Diagnosis Module (Hybrid Regex + ML)]]
-- [[_COMMUNITY_Http|Http]]
 - [[_COMMUNITY_login|login]]
 - [[_COMMUNITY_ChannelRead|ChannelRead]]
 - [[_COMMUNITY__issue_tokens|_issue_tokens]]
-- [[_COMMUNITY_client.py|client.py]]
 - [[_COMMUNITY_test_api.py|test_api.py]]
 - [[_COMMUNITY_generate_synthetic.py|generate_synthetic.py]]
 - [[_COMMUNITY_security.py|security.py]]
 - [[_COMMUNITY_AI Plan 1 Transformer Log Classifier, GPU ML Service & Hybrid Diagnosis|AI Plan 1: Transformer Log Classifier, GPU ML Service & Hybrid Diagnosis]]
 - [[_COMMUNITY_schemas.py|schemas.py]]
-- [[_COMMUNITY_detection_status|detection_status]]
 - [[_COMMUNITY_build_prompt|build_prompt]]
 - [[_COMMUNITY_update_user|update_user]]
-- [[_COMMUNITY_LoginRateLimiter|LoginRateLimiter]]
 - [[_COMMUNITY_Backend|Backend]]
 - [[_COMMUNITY_record|record]]
 - [[_COMMUNITY_evaluate.py|evaluate.py]]
@@ -160,22 +156,20 @@
 - [[_COMMUNITY_PostgreSQL Test Suite (TEST_DATABASE_URL)|PostgreSQL Test Suite (TEST_DATABASE_URL)]]
 - [[_COMMUNITY_Test DAGs (agentic_flaky_once, agentic_bad_data)|Test DAGs (agentic_flaky_once, agentic_bad_data)]]
 - [[_COMMUNITY_fake|fake]]
-- [[_COMMUNITY_.__init__|.__init__]]
 - [[_COMMUNITY_health|health]]
 - [[_COMMUNITY_update_user|update_user]]
-- [[_COMMUNITY_Delivery|Delivery]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `User` - 156 edges
 2. `NodeContext` - 78 edges
-3. `get_settings()` - 58 edges
+3. `get_settings()` - 65 edges
 4. `AirflowConnection` - 58 edges
 5. `Incident` - 55 edges
 6. `FailureCategory` - 52 edges
 7. `FakeAirflow` - 50 edges
 8. `Clock` - 50 edges
-9. `NodeResult` - 49 edges
-10. `validate_graph()` - 47 edges
+9. `validate_graph()` - 49 edges
+10. `NodeResult` - 49 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `PyMySQL` --conceptually_related_to--> `Data-Quality Monitoring`  [AMBIGUOUS]
@@ -197,19 +191,19 @@
 - **Automation Safety Controls** — plan2_policy_layer, plan2_approvals, plan2_dry_run, plan2_rate_limit, plan0_audit_log [EXTRACTED 1.00]
 - **Lease-guarded Background Loops** — plan1_detection_lease, plan4_automation_loop, backend_readme_connection_monitor [INFERRED 0.85]
 
-## Communities (182 total, 53 thin omitted)
+## Communities (176 total, 52 thin omitted)
 
 ### Community 0 - "Workflow Graph Validation"
-Cohesion: 0.10
-Nodes (47): approve(), cancel_run(), create_workflow(), _decide(), delete_workflow(), get_run(), get_workflow(), latest_run_checks() (+39 more)
+Cohesion: 0.14
+Nodes (38): approve(), cancel_run(), create_workflow(), _decide(), delete_workflow(), get_run(), get_workflow(), latest_run_checks() (+30 more)
 
 ### Community 1 - "Fake Airflow Test Server"
 Cohesion: 0.13
 Nodes (28): FakeAirflow, Exception, MockTransport, Request, Response, raising(), Scriptable fake Airflow REST API for httpx.MockTransport., static() (+20 more)
 
 ### Community 2 - "Errors & Airflow Service"
-Cohesion: 0.10
-Nodes (58): TriggerEvent, An automation: a graph of typed nodes ({nodes, edges}) started by a trigger node, Workflow, WorkflowRun, _add_run(), advance(), build_template(), cancel_run() (+50 more)
+Cohesion: 0.12
+Nodes (45): WorkflowRun, _add_run(), advance(), cancel_run(), _candidates(), _claim(), decide(), delete_workflow() (+37 more)
 
 ### Community 3 - "Automation API Routes"
 Cohesion: 0.17
@@ -220,8 +214,8 @@ Cohesion: 0.07
 Nodes (69): create_connection(), delete_connection(), get_connection(), list_connections(), AdminUser, ClientIp, DbSession, OperatorUser (+61 more)
 
 ### Community 5 - "Notification Channels API"
-Cohesion: 0.16
-Nodes (23): _channel(), create(), FakeSMTP, MonkeyPatch, Session, TestClient, Notification channels: catalog CRUD, test messages, and delivery from workflow b, _run() (+15 more)
+Cohesion: 0.09
+Nodes (35): AuditLog, Append-only audit trail. Rows are never updated or deleted by the application., Any, Session, Recursively mask values under sensitive-looking keys (flags like booleans are ke, Add an audit entry to the session. The caller's commit persists it with the chan, record(), redact() (+27 more)
 
 ### Community 6 - "Automation Nodes & Templating"
 Cohesion: 0.28
@@ -232,68 +226,68 @@ Cohesion: 0.09
 Nodes (22): Backend Runtime Requirements, Alembic, cryptography, Backend Dev Requirements (pytest, ruff), FastAPI, httpx, pwdlib[argon2], PyJWT (+14 more)
 
 ### Community 8 - "Engine & Loop Tests"
-Cohesion: 0.07
-Nodes (106): advice(), decision_graph(), FakeAdvisor, install(), llm(), ollama_reply(), orders_clock(), partner_clock() (+98 more)
+Cohesion: 0.06
+Nodes (119): advice(), decision_graph(), FakeAdvisor, install(), llm(), ollama_reply(), orders_clock(), partner_clock() (+111 more)
 
 ### Community 9 - "Detection & Incidents"
 Cohesion: 0.06
 Nodes (55): detection_status(), CycleSummary, DbSession, OperatorUser, Request, ViewerUser, run_detection(), _scheduler() (+47 more)
 
 ### Community 10 - "Auth & Rate Limiting"
-Cohesion: 0.18
-Nodes (15): _elapsed_ms(), _flatten_log(), _format_date(), _is_tls_error(), _parse_dag(), _parse_date(), _parse_run(), _parse_task_instance() (+7 more)
+Cohesion: 0.11
+Nodes (16): RunTable(), AutomationCard(), EVENT_LABELS, LogViewer(), RunDetails(), TABS, Timeline(), STATUS_FILTERS (+8 more)
 
 ### Community 11 - "Log Classifier Diagnosis"
-Cohesion: 0.27
-Nodes (15): frozen_clock(), live(), datetime, MonkeyPatch, Plan 1 / Phase 1: adapter read path (runs, task instances, logs) for Airflow 2 a, Airflow 2.10 returns JSON `content` as a repr string of (host, text) tuples., seeded(), test_airflow2_repr_log_format_is_decoded() (+7 more)
+Cohesion: 0.17
+Nodes (19): AdapterConfig, _parse_simulated_status(), test_mock_adapter_healthy(), test_mock_adapter_simulates_failures(), frozen_clock(), live(), datetime, MonkeyPatch (+11 more)
 
 ### Community 12 - "Workflow Graph Catalog"
-Cohesion: 0.17
-Nodes (29): AiGenerateFixConfig, _AirflowTarget, AnalyzeLogsConfig, ApprovalConfig, CheckDataConfig, ChooseFixConfig, ClearTasksConfig, _Config (+21 more)
+Cohesion: 0.19
+Nodes (26): AiGenerateFixConfig, AnalyzeLogsConfig, ApprovalConfig, CheckDataConfig, ChooseFixConfig, ClearTasksConfig, _Config, DagRunTriggerConfig (+18 more)
 
 ### Community 13 - "Airflow HTTP Client"
-Cohesion: 0.29
-Nodes (9): AsyncClient, ApiVersion, _json_or_none(), LiveAirflowAdapter, Response, _q(), Map a non-success or non-JSON response to a failure; return the JSON body., Like _check, but surfaces Airflow's own message for 400/409 on write calls. (+1 more)
+Cohesion: 0.14
+Nodes (25): AsyncClient, ApiVersion, _elapsed_ms(), _flatten_log(), _format_date(), _is_tls_error(), _json_or_none(), LiveAirflowAdapter (+17 more)
 
 ### Community 14 - "Frontend Canvas Graph Logic"
-Cohesion: 0.09
-Nodes (32): retryGraph, connect(), connectionProblem(), defaultConfig(), edgeId(), fromFlow(), isTrigger(), linkOrder() (+24 more)
+Cohesion: 0.07
+Nodes (41): retryGraph, connect(), connectionProblem(), defaultConfig(), edgeId(), fromFlow(), isTrigger(), linkOrder() (+33 more)
 
 ### Community 15 - "Airflow Connections API"
-Cohesion: 0.13
-Nodes (37): create_connection(), delete_connection(), get_connection(), list_connections(), list_dags(), AdminUser, ClientIp, DbSession (+29 more)
+Cohesion: 0.14
+Nodes (36): create_connection(), delete_connection(), get_connection(), list_connections(), list_dags(), AdminUser, ClientIp, DbSession (+28 more)
 
 ### Community 16 - "Orchestration Tests"
 Cohesion: 0.20
 Nodes (26): test_finished_runs_after_watermark(), at(), _conn(), _dag(), fake(), _incident(), incidents(), datetime (+18 more)
 
 ### Community 17 - "Frontend App Routing"
-Cohesion: 0.13
-Nodes (20): WorkflowEditor, RedirectIfAuthenticated(), RequireAuth(), RequireRole(), useAuth(), useToast(), AuthLayout(), Login() (+12 more)
+Cohesion: 0.16
+Nodes (19): WorkflowEditor, RedirectIfAuthenticated(), RequireAuth(), RequireRole(), useAuth(), useToast(), AuthLayout(), Login() (+11 more)
 
 ### Community 18 - "Notification Channel Tests"
-Cohesion: 0.12
-Nodes (17): _check_acyclic_and_reachable(), Graph, GraphError, _position(), _problem(), Any, Blocks linked from an output, in run order: top to bottom (then left to right) o, Validate a raw graph and return it with defaults applied. Raises GraphError. (+9 more)
+Cohesion: 0.25
+Nodes (5): _check_acyclic_and_reachable(), Graph, GraphError, _problem(), Blocks linked from an output, in run order: top to bottom (then left to right) o
 
 ### Community 19 - "Frontend UI Kit"
 Cohesion: 0.17
-Nodes (12): CATEGORIES, DiagnosisCard(), DiagnosisSummary(), LABELS, ML_STATUS_TEXT, pct(), ScoreBars(), Alert() (+4 more)
+Nodes (12): CATEGORIES, DiagnosisCard(), DiagnosisSummary(), LABELS, ML_STATUS_TEXT, pct(), ScoreBars(), Field() (+4 more)
 
 ### Community 20 - "App Layout & Auth Context"
-Cohesion: 0.10
-Nodes (24): NavIcon(), PATHS, connectionState(), AuthContext, AppLayout(), NAV, readCollapsed(), DagPanel() (+16 more)
+Cohesion: 0.11
+Nodes (21): NavIcon(), PATHS, AuthContext, AppLayout(), NAV, readCollapsed(), SEVERITIES, SEVERITY_PILL (+13 more)
 
 ### Community 21 - "Auth Tests & Users"
 Cohesion: 0.06
-Nodes (101): hash_password(), bootstrap_admin(), Session, sessionmaker, First-run bootstrap: create the initial admin when the users table is empty, and, run_bootstrap(), User, create_user() (+93 more)
+Nodes (110): hash_password(), bootstrap_admin(), Session, sessionmaker, First-run bootstrap: create the initial admin when the users table is empty, and, run_bootstrap(), create_app(), CycleSummary (+102 more)
 
 ### Community 22 - "Settings & Config"
 Cohesion: 0.17
 Nodes (16): _alembic_config(), _conn(), Path, Session, Phase 1: configuration safety, migrations and database constraints., _round_trip(), test_audit_details_redact_secrets(), test_audit_log_is_append_only() (+8 more)
 
 ### Community 23 - "Forms & Login UI"
-Cohesion: 0.11
-Nodes (20): App(), Field(), Modal(), AuthProvider(), ToastContext, ToastProvider(), ConnectionForm(), EMPTY (+12 more)
+Cohesion: 0.10
+Nodes (22): App(), Alert(), Modal(), AuthProvider(), ToastContext, ToastProvider(), ConnectionForm(), EMPTY (+14 more)
 
 ### Community 24 - "Database Connection Tests"
 Cohesion: 0.20
@@ -304,52 +298,52 @@ Cohesion: 0.08
 Nodes (23): dependencies, react, react-dom, react-router, @xyflow/react, devDependencies, oxlint, @playwright/test (+15 more)
 
 ### Community 26 - "Pipeline Canvas UI"
-Cohesion: 0.12
-Nodes (19): StatusPill(), checkStatus(), Canvas(), EDGE_OPTIONS, MONITORS, NODE_TYPES, Panel(), attachBody() (+11 more)
+Cohesion: 0.24
+Nodes (13): create_user(), list_users(), AdminUser, ClientIp, DbSession, PageParams, UUID, update_user() (+5 more)
 
 ### Community 27 - "Incident UI"
-Cohesion: 0.09
-Nodes (42): Badge(), Button(), Card(), EmptyState(), STATUS_LABELS, STATUS_TONES, formatDateTime(), formatRelative() (+34 more)
+Cohesion: 0.12
+Nodes (31): Badge(), Button(), Card(), EmptyState(), STATUS_LABELS, STATUS_TONES, Toggle(), formatDateTime() (+23 more)
 
 ### Community 28 - "Plan 1 API Tests"
-Cohesion: 0.11
-Nodes (27): AuditLog, Append-only audit trail. Rows are never updated or deleted by the application., Any, Session, Recursively mask values under sensitive-looking keys (flags like booleans are ke, Add an audit entry to the session. The caller's commit persists it with the chan, record(), redact() (+19 more)
+Cohesion: 0.18
+Nodes (19): by_dag(), clock(), MockClock, datetime, MonkeyPatch, Session, TestClient, Plan 1 / Phase 4: incident + detection API, state machine, RBAC, and the E2E moc (+11 more)
 
 ### Community 29 - "Run Canvas & Block UI"
-Cohesion: 0.12
-Nodes (24): BAD_PORTS, BY_HAND_TRIGGERS, CATEGORY_LABELS, CHECK_STATUS, describeConfig(), NODE_ICONS, NODE_LABELS, nodeIcon() (+16 more)
+Cohesion: 0.07
+Nodes (34): BAD_PORTS, StatusPill(), BY_HAND_TRIGGERS, CATEGORY_LABELS, CHECK_STATUS, checkStatus(), describeConfig(), NODE_ICONS (+26 more)
 
 ### Community 30 - "Detection Rules"
-Cohesion: 0.18
-Nodes (22): count_recent_failures(), detect_failed_runs(), detect_sla_miss(), find_recoveries(), Finding, finished_runs(), is_sla_breached(), latest_success() (+14 more)
+Cohesion: 0.20
+Nodes (21): count_recent_failures(), detect_failed_runs(), detect_sla_miss(), find_recoveries(), Finding, finished_runs(), is_sla_breached(), latest_success() (+13 more)
 
 ### Community 31 - "Connection Monitor Tests"
-Cohesion: 0.15
-Nodes (17): AirflowAdapter, None if the run does not exist., Clear (retry) task instances of one run. Returns the cleared task ids., build_adapter(), _adapters(), CycleSummary, _Fetch, _fetch_all() (+9 more)
+Cohesion: 0.14
+Nodes (18): AirflowAdapter, Any, None if the DAG does not exist., None if the run does not exist., Clear (retry) task instances of one run. Returns the cleared task ids., _adapters(), CycleSummary, _Fetch (+10 more)
 
 ### Community 32 - "Airflow Adapter Base"
-Cohesion: 0.09
-Nodes (72): Node, Run an adapter coroutine from sync code.      Inside a FastAPI sync endpoint (, run_async(), _action_environment(), _actions_last_24h(), _ai_generate_fix(), _analyze_task_logs(), _approval() (+64 more)
+Cohesion: 0.10
+Nodes (65): Node, Run an adapter coroutine from sync code.      Inside a FastAPI sync endpoint (, run_async(), _action_environment(), _actions_last_24h(), _ai_generate_fix(), _analyze_task_logs(), _approval() (+57 more)
 
 ### Community 33 - "Automation Safety Policy"
-Cohesion: 0.18
-Nodes (16): check(), mutate(), _problems(), Any, Session, Plan 2 / Phase 2: graph validation, templates, policy, rendering, migrations., simple(), test_defaults_are_applied() (+8 more)
+Cohesion: 0.16
+Nodes (17): check(), mutate(), _problems(), Any, Session, Plan 2 / Phase 2: graph validation, templates, policy, rendering, migrations., simple(), test_defaults_are_applied() (+9 more)
 
 ### Community 34 - "Mock Airflow Adapter"
-Cohesion: 0.13
-Nodes (10): AirflowAdapterError, AirflowDagSummary, AirflowTaskInstance, ConnectionTestResult, Raised by adapter operations (other than probe) when Airflow cannot be used., None if the DAG does not exist., MockAirflowAdapter, Any (+2 more)
+Cohesion: 0.14
+Nodes (10): AirflowAdapterError, AirflowDagSummary, ConnectionTestResult, describe_status(), Raised by adapter operations (other than probe) when Airflow cannot be used., User-facing, actionable message for each status (see plan0.md §3.3)., MockAirflowAdapter, Any (+2 more)
 
 ### Community 35 - "Test Fixtures"
-Cohesion: 0.22
-Nodes (19): MonitoredDag, _attach(), _collect_failure_evidence(), CycleSummary, _enqueue(), _fingerprint(), get_lease(), _handle_finding() (+11 more)
+Cohesion: 0.08
+Nodes (53): EvidenceRecord, Any, Evidence records built from Airflow DTOs, with secret scrubbing for log text., run_metadata(), run_source(), scrub(), task_instances(), task_log() (+45 more)
 
 ### Community 36 - "Detection Scheduler Lease"
-Cohesion: 0.27
-Nodes (18): airflow(), _conn(), conn_id(), MonkeyPatch, Session, TestClient, UUID, Connection monitor: live DAG refresh, health transitions, liveness and the refre (+10 more)
+Cohesion: 0.22
+Nodes (20): airflow(), _conn(), conn_id(), MonkeyPatch, Request, Response, Session, TestClient (+12 more)
 
 ### Community 37 - "Mock Write Simulation"
-Cohesion: 0.26
-Nodes (10): AppError, _error_body(), NotFoundError, PermissionDeniedError, Any, FastAPI, RateLimitedError, An external system (e.g. Airflow) failed. (+2 more)
+Cohesion: 0.19
+Nodes (18): AppError, BadRequestError, ConflictError, _error_body(), NotFoundError, PermissionDeniedError, Any, FastAPI (+10 more)
 
 ### Community 38 - "Plan 2 API Tests"
 Cohesion: 0.22
@@ -360,36 +354,36 @@ Cohesion: 0.19
 Nodes (13): ChannelSelect(), ConnectionSelect(), DagInput(), FieldControl(), humanize(), LONG_TEXT, normalize(), resolve() (+5 more)
 
 ### Community 40 - "Evidence & Secret Scrubbing"
-Cohesion: 0.10
-Nodes (15): AdapterConfig, ConnectionStatus, describe_status(), _iso(), datetime, Airflow adapter contract: enums, DTOs and the protocol every adapter implements., Keep the last max_bytes bytes of text; returns (text, truncated)., User-facing, actionable message for each status (see plan0.md §3.3). (+7 more)
+Cohesion: 0.12
+Nodes (11): failure_summary(), AirflowTaskInstance, _iso(), datetime, Airflow adapter contract: enums, DTOs and the protocol every adapter implements., Tail of the task log, at most max_bytes., Keep the last max_bytes bytes of text; returns (text, truncated)., Date used to order runs (Airflow 3 manual runs may have no logical_date). (+3 more)
 
 ### Community 41 - "Connection Monitor Service"
-Cohesion: 0.07
-Nodes (41): Base, datetime, Timezone-aware UTC datetimes on every backend (SQLite drops tzinfo otherwise)., TimestampMixin, UTCDateTime, AirflowTriggerReservation, Database guard for a DAG trigger that may still be active in Airflow., ActorType (+33 more)
+Cohesion: 0.09
+Nodes (36): TriggerEvent, Base, datetime, Timezone-aware UTC datetimes on every backend (SQLite drops tzinfo otherwise)., TimestampMixin, UTCDateTime, AirflowTriggerReservation, _enum() (+28 more)
 
 ### Community 42 - "Airflow Adapter Interface"
-Cohesion: 0.23
-Nodes (39): ApprovalStatus, DagRunCheckStatus, NotificationLevel, Automation vocabulary shared by the graph, engine, models and API (no framework, Validation status of one finished DAG run, kept by the workflow it started., RunStatus, StepStatus, WorkflowMode (+31 more)
+Cohesion: 0.26
+Nodes (39): ask_assistant(), Propose a graph from a chat. Nothing is saved: the editor applies it, the user s, ApprovalStatus, DagRunCheckStatus, NotificationLevel, Automation vocabulary shared by the graph, engine, models and API (no framework, Validation status of one finished DAG run, kept by the workflow it started., RunStatus (+31 more)
 
 ### Community 43 - "DB Session & Migrations Env"
-Cohesion: 0.05
-Nodes (64): BaseTransport, Settings, CircuitBreaker, _fit(), get_ml_client(), MLClient, ModelResult, BaseTransport (+56 more)
+Cohesion: 0.06
+Nodes (62): BaseTransport, Settings, CircuitBreaker, _fit(), MLClient, ModelResult, BaseTransport, Settings (+54 more)
 
 ### Community 44 - "App Factory"
-Cohesion: 0.31
-Nodes (9): create_app(), CycleSummary, FastAPI, Session, sessionmaker, One detection cycle. A manual run ("Run detection now") also advances automation, `detection=None` follows DETECTION_ENABLED (and AUTOMATION_ENABLED for the autom, run_automation_tick() (+1 more)
+Cohesion: 0.20
+Nodes (12): AdvisorUnavailable, The model could not be asked or gave no usable answer (down, slow, bad JSON, bre, answer_schema(), build_prompt(), log_tail(), Any, Client for the local LLM (Ollama) that may pick the fix in a "Choose the fix" bl, The redacted end of the newest log, where the error usually is. (+4 more)
 
 ### Community 45 - "Built-in Workflow Recipes"
 Cohesion: 0.23
 Nodes (15): _choose_fix_graph(), _e(), EmptyParameters, _n(), Any, BaseModel, Built-in workflows and parameterized workflow templates., failed run -> classify -> filter -> approval -> clear -> verify -> resolve / esc (+7 more)
 
 ### Community 46 - "Airflow DTOs"
-Cohesion: 0.29
-Nodes (3): get_settings(), Settings, BaseSettings
+Cohesion: 0.05
+Nodes (65): assistant_status(), answer_schema(), AssistantLLM, AssistantResult, catalog_prompt(), _check(), _context_message(), _decode() (+57 more)
 
 ### Community 47 - "Audit Service"
-Cohesion: 0.10
-Nodes (32): AIMode, Advice, advise(), Advised, AdvisorUnavailable, _category(), Choice, _choose() (+24 more)
+Cohesion: 0.17
+Nodes (20): AIMode, Advice, advise(), Advised, _category(), Choice, _choose(), choose_fix() (+12 more)
 
 ### Community 48 - "Admin Bootstrap"
 Cohesion: 0.08
@@ -398,6 +392,10 @@ Nodes (25): 1. Overview & Objective, 2. Architecture & Directory Layout, 3.1. Da
 ### Community 49 - "Lint Config"
 Cohesion: 0.33
 Nodes (5): plugins, rules, react/only-export-components, react/rules-of-hooks, $schema
+
+### Community 79 - "validate_graph"
+Cohesion: 0.18
+Nodes (5): _AirflowTarget, _recipients(), RunDagConfig, WaitForDagConfig, ValueError
 
 ### Community 80 - "dataset.py"
 Cohesion: 0.12
@@ -408,20 +406,16 @@ Cohesion: 0.08
 Nodes (24): 1. Overview & Objective, 2. Architecture & Directory Layout (new/changed only), 3.10. Frontend, 3.1. Diagnosis: Log Classifier (`app/diagnosis/log_classifier.py`), 3.2. Airflow Adapter: Write Path, 3.3. Database Schema, 3.4. Node Catalog (`app/automation/graph.py`), 3.5. Policy (`app/automation/policy.py`, pure) (+16 more)
 
 ### Community 82 - "airflow_service.py"
-Cohesion: 0.16
-Nodes (33): BadRequestError, AirflowConnection, Airflow answered recently enough that its DAG list can be shown as current., AuthType, _adapter_config(), adapter_for(), apply_remote_dags(), check_saved_connection() (+25 more)
+Cohesion: 0.15
+Nodes (31): AirflowConnection, Airflow answered recently enough that its DAG list can be shown as current., AuthType, build_adapter(), _adapter_config(), adapter_for(), apply_remote_dags(), check_saved_connection() (+23 more)
 
 ### Community 83 - "test_plan2_diagnosis_adapter.py"
-Cohesion: 0.34
-Nodes (11): Serialize a validated graph (defaults applied) back to JSON form., to_raw(), CustomMockAdapter, datetime, MonkeyPatch, Session, Tests for the Adaptive SLA block (check.sla): historical baseline estimation, bu, test_in_flight_sla_detection_exceeded() (+3 more)
+Cohesion: 0.18
+Nodes (21): Validate a raw graph and return it with defaults applied. Raises GraphError., Serialize a validated graph (defaults applied) back to JSON form., to_raw(), validate_graph(), check_graph(), Validate without saving: (normalized graph, []) or (None, problems)., test_choose_fix_template_validates(), test_validate_every_run_template_builds() (+13 more)
 
 ### Community 84 - "Window"
 Cohesion: 0.17
 Nodes (21): approx_tokens(), _is_exception(), _last_traceback_block(), Line, mask(), Log preprocessing shared by training and inference.  Pure (standard library on, Indices of the last (possibly chained) traceback, through its final exception li, Select the most informative lines of `log` that fit in `max_tokens`. (+13 more)
-
-### Community 85 - "MLUnavailable"
-Cohesion: 0.24
-Nodes (12): EvidenceRecord, failure_summary(), Any, Evidence records built from Airflow DTOs, with secret scrubbing for log text., run_metadata(), run_source(), scrub(), task_instances() (+4 more)
 
 ### Community 86 - "3. Core Components Breakdown"
 Cohesion: 0.09
@@ -436,36 +430,32 @@ Cohesion: 0.10
 Nodes (20): 1. Overview & Objective, 2. Architecture & Directory Layout (new/changed only), 3.1. Workflow Graph Additions, 3.2. Workflow Editor (`/automation/workflows/:id` and `/automation/workflows/new`), 3.3. Settings Form from JSON Schema (`SchemaForm.jsx`), 3.4. Pipeline Canvas (`/pipelines`), 3.5. Run Replay (Run detail → "Canvas" tab), 3.6. Backend Additions (+12 more)
 
 ### Community 89 - "Incident"
-Cohesion: 0.06
-Nodes (68): max_severity(), Deterministic, explainable severity scoring., score(), SeverityScore, EvidenceKind, IncidentResolution, IncidentSeverity, IncidentStatus (+60 more)
+Cohesion: 0.08
+Nodes (44): get_ml_client(), Process-wide client so the breaker state is shared by routes and the detection l, _category(), decide(), ModelClassifier, ModelPrediction, _payload(), Any (+36 more)
 
 ### Community 90 - "choose_fix"
 Cohesion: 0.23
 Nodes (10): health(), live(), DbSession, ViewerUser, AirflowConnectionHealth, DatabaseConnectionHealth, DatabaseHealth, HealthStatusResponse (+2 more)
 
 ### Community 91 - "BadRequestError"
-Cohesion: 0.17
-Nodes (15): decrypt_secret(), encrypt_secret(), _fernet(), Re-encrypt with the primary (first) key., Stored secret cannot be decrypted with any configured ENCRYPTION_KEY., rotate_secret(), SecretDecryptionError, conn() (+7 more)
+Cohesion: 0.16
+Nodes (15): get_settings(), utcnow(), True when the connection monitor should have re-checked this connection but has, _dedup_key(), enqueue_for_incident(), _enqueue_stale(), Create PENDING runs for enabled workflows triggered by this incident event., Enqueue stale and scheduled triggers and advance every due run. (+7 more)
 
 ### Community 92 - "2. Components"
 Cohesion: 0.11
 Nodes (18): 1. Overview & Objective, 2.1. Test DAGs (`deploy/airflow/dags/`), 2.2. Live Airflow test (`backend/tests/live/test_live_airflow.py`), 2.3. PostgreSQL suite, 2.4. Automation loop, 2.5. Browser smoke tests (`frontend/e2e/`), 2.6. CI (`.github/workflows/ci.yml`), 2. Components (+10 more)
 
 ### Community 93 - "get_current_user"
-Cohesion: 0.09
-Nodes (18): get_client_ip(), get_current_user(), get_db(), get_login_limiter(), Pagination, DbSession, Depends, Query (+10 more)
+Cohesion: 0.05
+Nodes (58): _cookie_path(), login(), logout(), me(), ClientIp, DbSession, Depends, Response (+50 more)
 
 ### Community 94 - "set_override"
-Cohesion: 0.13
-Nodes (34): check_webhook_url(), masked_url(), Message, NotifyError, _post(), Any, Deliver messages to people: email (SMTP), Slack, Microsoft Teams and generic web, An Adaptive Card, the format Teams "Workflows" webhooks accept. (+26 more)
+Cohesion: 0.07
+Nodes (67): create_channel(), delete_channel(), get_channel(), list_channels(), AdminUser, ClientIp, DbSession, OperatorUser (+59 more)
 
 ### Community 95 - "Failure Diagnosis Module (Hybrid Regex + ML)"
 Cohesion: 0.12
 Nodes (16): 11. Backend API, 12. Frontend, 13. Operations runbook, 14. Testing, 15. Known limitations and next steps, 16. File map, 17. Glossary, 1. Summary (+8 more)
-
-### Community 96 - "Http"
-Cohesion: 0.26
-Nodes (15): _cookie_path(), login(), logout(), me(), ClientIp, DbSession, Depends, Response (+7 more)
 
 ### Community 97 - "login"
 Cohesion: 0.27
@@ -478,10 +468,6 @@ Nodes (3): downgrade(), _incident_types(), upgrade()
 ### Community 99 - "_issue_tokens"
 Cohesion: 0.24
 Nodes (12): _extract_log_error(), Extract (headline, stack_trace, snippet, task_id) from raw log text., _incident(), MonkeyPatch, Session, Tests for the decoupled Log Analysis (analyze.task_logs) and AI Solution (ai.gen, test_ai_generate_fix_executor(), test_analyze_task_logs_executor_no_logs() (+4 more)
-
-### Community 100 - "client.py"
-Cohesion: 0.36
-Nodes (14): create_channel(), delete_channel(), get_channel(), list_channels(), AdminUser, ClientIp, DbSession, OperatorUser (+6 more)
 
 ### Community 101 - "test_api.py"
 Cohesion: 0.26
@@ -503,21 +489,13 @@ Nodes (10): 1. Overview, 2. Categories, 3. Architecture, 4. Directory layout (ne
 Cohesion: 0.36
 Nodes (8): accuracy(), evaluate(), hybrid(), load_regex_classifier(), main(), Evaluate regex alone, model alone and the hybrid rule on the real eval set; appl, The backend's pure regex classifier, loaded by path (both packages are named `ap, Same rule as backend/app/diagnosis/hybrid.py. Returns (category, decided_by_mode
 
-### Community 106 - "detection_status"
-Cohesion: 0.26
-Nodes (15): AuthenticationError, utcnow(), True when the connection monitor should have re-checked this connection but has, One row per issued refresh token; `id` is the JWT `jti`., RefreshToken, _issue_tokens(), IssuedTokens, _load_refresh_record() (+7 more)
-
 ### Community 107 - "build_prompt"
 Cohesion: 0.40
 Nodes (5): _lookup(), Any, Tiny, safe `{{dotted.key}}` templating for notification titles and messages.  On, Replace `{{a.b}}` with values["a"]["b"]; unknown keys render as an empty string., render()
 
 ### Community 108 - "update_user"
-Cohesion: 0.25
-Nodes (7): catalog(), NodeType, test_catalog_entry(), test_catalog_entry_has_outcome_outputs_and_settings(), test_catalog_entries(), test_catalog_lists_ports_and_schemas(), test_catalog_includes_sla_block()
-
-### Community 109 - "LoginRateLimiter"
-Cohesion: 0.31
-Nodes (13): graph(), MonkeyPatch, Session, TestClient, Plan 3 / Phase 1: canvas support in the backend (positions, validate, delete, mo, test_bad_positions_are_rejected(), test_dag_patch_and_open_counts(), test_delete_workflow() (+5 more)
+Cohesion: 0.18
+Nodes (11): node_types(), catalog(), NodeType, _position(), Any, _ui(), test_catalog_entry(), test_catalog_entry_has_outcome_outputs_and_settings() (+3 more)
 
 ### Community 110 - "Backend"
 Cohesion: 0.20
@@ -571,41 +549,37 @@ Nodes (3): 5. How a diagnosis is made (step by step), Operator correction, Readi
 Cohesion: 0.50
 Nodes (4): fake(), MonkeyPatch, Path, warehouse()
 
-### Community 178 - ".__init__"
-Cohesion: 0.24
-Nodes (12): create_access_token(), create_refresh_token(), decode_token(), _encode(), Any, datetime, UUID, Return (token, expires_in_seconds). (+4 more)
-
 ### Community 179 - "health"
 Cohesion: 0.21
 Nodes (9): get_settings(), Settings, create_app(), FastAPI, ML classification service.      uvicorn app.main:app --host 127.0.0.1 --port 800, ClassifyRequest, ClassifyResponse, HealthResponse (+1 more)
 
 ### Community 180 - "update_user"
-Cohesion: 0.50
-Nodes (3): DecisionLLM, get_decision_llm(), Process-wide client so the breaker state is shared by every workflow run.
+Cohesion: 0.33
+Nodes (6): DecisionLLM, get_decision_llm(), Process-wide client so the breaker state is shared by every workflow run., decision_advisor(), Settings, The local LLM for "Choose the fix" blocks, or None when it is switched off.
 
 ## Ambiguous Edges - Review These
 - `Data-Quality Monitoring` → `PyMySQL`  [AMBIGUOUS]
   backend/requirements.txt · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **287 isolated node(s):** `$schema`, `plugins`, `react/rules-of-hooks`, `react/only-export-components`, `name` (+282 more)
+- **289 isolated node(s):** `$schema`, `plugins`, `react/rules-of-hooks`, `react/only-export-components`, `name` (+284 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **53 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **52 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **What is the exact relationship between `Data-Quality Monitoring` and `PyMySQL`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `User` connect `Auth Tests & Users` to `Errors & Airflow Service`, `Database Connections API`, `Notification Channels API`, `Automation Nodes & Templating`, `Engine & Loop Tests`, `Detection & Incidents`, `Settings & Config`, `Plan 1 API Tests`, `Connection Monitor Tests`, `Test Fixtures`, `Connection Monitor Service`, `Airflow Adapter Interface`, `App Factory`, `.__init__`, `airflow_service.py`, `test_plan2_diagnosis_adapter.py`, `Incident`, `get_current_user`, `set_override`, `detection_status`, `LoginRateLimiter`?**
-  _High betweenness centrality (0.223) - this node is a cross-community bridge._
-- **Why does `get_settings()` connect `Airflow DTOs` to `Workflow Graph Validation`, `Errors & Airflow Service`, `Automation API Routes`, `Database Connections API`, `Engine & Loop Tests`, `Detection & Incidents`, `Auth Tests & Users`, `Database Connection Tests`, `Test Fixtures`, `Detection Scheduler Lease`, `DB Session & Migrations Env`, `App Factory`, `Audit Service`, `.__init__`, `update_user`, `airflow_service.py`, `Incident`, `choose_fix`, `BadRequestError`, `set_override`, `Http`, `login`, `detection_status`?**
-  _High betweenness centrality (0.073) - this node is a cross-community bridge._
-- **Why does `NodeContext` connect `Airflow Adapter Base` to `Errors & Airflow Service`, `Test Fixtures`, `Database Connections API`, `Mock Write Simulation`, `Connection Monitor Service`, `Airflow Adapter Interface`, `Workflow Graph Catalog`, `Airflow DTOs`, `Notification Channel Tests`, `airflow_service.py`, `update_user`, `Incident`, `set_override`?**
-  _High betweenness centrality (0.053) - this node is a cross-community bridge._
+- **Why does `User` connect `Auth Tests & Users` to `Errors & Airflow Service`, `Test Fixtures`, `Database Connections API`, `Mock Write Simulation`, `Notification Channels API`, `Automation Nodes & Templating`, `Engine & Loop Tests`, `Detection & Incidents`, `Connection Monitor Service`, `airflow_service.py`, `test_plan2_diagnosis_adapter.py`, `Settings & Config`, `Incident`, `get_current_user`, `set_override`, `Connection Monitor Tests`?**
+  _High betweenness centrality (0.185) - this node is a cross-community bridge._
+- **Why does `get_settings()` connect `BadRequestError` to `Workflow Graph Validation`, `Errors & Airflow Service`, `Automation API Routes`, `Database Connections API`, `Engine & Loop Tests`, `Detection & Incidents`, `Auth Tests & Users`, `Database Connection Tests`, `Test Fixtures`, `Detection Scheduler Lease`, `Airflow Adapter Interface`, `DB Session & Migrations Env`, `Airflow DTOs`, `Audit Service`, `update_user`, `airflow_service.py`, `Incident`, `choose_fix`, `get_current_user`, `set_override`, `login`?**
+  _High betweenness centrality (0.091) - this node is a cross-community bridge._
+- **Why does `validate_graph()` connect `test_plan2_diagnosis_adapter.py` to `Airflow Adapter Base`, `Automation Safety Policy`, `Errors & Airflow Service`, `_issue_tokens`, `Mock Write Simulation`, `Automation Nodes & Templating`, `Notification Channels API`, `Engine & Loop Tests`, `update_user`, `Workflow Graph Catalog`, `Airflow DTOs`, `Notification Channel Tests`, `Auth Tests & Users`, `BadRequestError`?**
+  _High betweenness centrality (0.051) - this node is a cross-community bridge._
 - **Are the 33 inferred relationships involving `User` (e.g. with `Pagination` and `DetectionBusyError`) actually correct?**
   _`User` has 33 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 26 inferred relationships involving `NodeContext` (e.g. with `automation_nodes.py` and `Graph`) actually correct?**
   _`NodeContext` has 26 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 56 inferred relationships involving `get_settings()` (e.g. with `_database_url()` and `_cookie_path()`) actually correct?**
-  _`get_settings()` has 56 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 63 inferred relationships involving `get_settings()` (e.g. with `_database_url()` and `_cookie_path()`) actually correct?**
+  _`get_settings()` has 63 INFERRED edges - model-reasoned connections that need verification._

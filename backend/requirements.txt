@@ -11,3 +11,4 @@ PyJWT==2.15.0
 cryptography==50.0.1
 httpx==0.28.1
 PyMySQL==1.2.3
+anthropic==1.12.1

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -91,6 +91,36 @@ class GraphCheckResult(BaseModel):
     valid: bool
     problems: list[dict[str, str]]
     graph: dict[str, Any] | None
+
+
+class AssistantMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=4000)
+
+
+class AssistantRequest(BaseModel):
+    mode: Literal["chat", "fix"] = "chat"
+    messages: list[AssistantMessage] = Field(default_factory=list, max_length=40)
+    graph: dict[str, Any] | None = None
+    problems: list[dict[str, str]] = Field(default_factory=list, max_length=100)
+
+
+class AssistantProposal(BaseModel):
+    graph: dict[str, Any]
+    changes: dict[str, Any]
+
+
+class AssistantReply(BaseModel):
+    reply: str
+    proposal: AssistantProposal | None
+    valid: bool
+    problems: list[dict[str, str]]
+
+
+class AssistantStatus(BaseModel):
+    enabled: bool
+    provider: str
+    model: str
 
 
 class RunIncidentRef(BaseModel):

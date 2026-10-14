@@ -38,6 +38,7 @@ import { useToast } from '../../context/ToastContext'
 import { channelState, connectionState, databaseState } from '../../connectionState'
 import { airflowApi, automationApi, channelsApi, databaseApi } from '../../services/endpoints'
 import { CHANNEL_KINDS, ENGINES } from '../connections/engines'
+import AssistantPanel from './AssistantPanel'
 import BlockNode from './BlockNode'
 import { STAGES, nodeIcon, stageOf, startsByHand } from './automationText'
 
@@ -437,13 +438,18 @@ function BlockPopover({ node, onClose, children }) {
   )
 }
 
-function Problems({ problems, onSelect }) {
+function Problems({ problems, onSelect, onAskAssistant }) {
   if (!problems.length) return null
   return (
     <div className="editor-problems">
       <strong className="small">
         {problems.length} problem{problems.length === 1 ? '' : 's'}
       </strong>
+      {onAskAssistant && (
+        <button type="button" className="link-btn small problems-ask" onClick={onAskAssistant}>
+          ✨ Ask AI to fix
+        </button>
+      )}
       <ul>
         {problems.map((p, i) => (
           <li key={i}>
@@ -491,6 +497,11 @@ function Editor() {
   // Block whose settings popover is open: set by clicking a block, not by adding or dragging one.
   const [popover, setPopover] = useState(null)
   const sources = useSources()
+  // Workflow assistant: hidden unless the backend has it turned on (ASSISTANT_ENABLED).
+  const [assistant, setAssistant] = useState(null)
+  const [showAssistant, setShowAssistant] = useState(false)
+  const [fixRequest, setFixRequest] = useState(0)
+  const [beforeApply, setBeforeApply] = useState(null)
 
   const defs = useMemo(() => Object.fromEntries((catalog ?? []).map((d) => [d.type, d])), [catalog])
   const selectedTemplate = templates.find((template) => template.key === templateKey)
@@ -552,6 +563,18 @@ function Editor() {
       cancelled = true
     }
   }, [id, isNew, fromId, setNodes, setEdges, fitView])
+
+  useEffect(() => {
+    if (!canEdit) return undefined
+    let cancelled = false
+    automationApi
+      .assistantStatus()
+      .then((status) => !cancelled && setAssistant(status.enabled ? status : null))
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [canEdit])
 
   useEffect(() => {
     if (!dirty) return undefined
@@ -768,6 +791,39 @@ function Editor() {
     }
   }
 
+  // ------------------------------------------------------------------ assistant
+  function loadGraph(graph) {
+    const flow = toFlow(graph, (n) => ({ def: defs[n.type] }))
+    setNodes(flow.nodes)
+    setEdges(flow.edges)
+    setSelection({ node: null, edge: null })
+    setPopover(null)
+    applyProblems([])
+    setDirty(true)
+    requestAnimationFrame(() => fitView({ ...FIT_VIEW, duration: 300 }))
+  }
+
+  /** Put an assistant proposal on the canvas (unsaved); the previous canvas can be restored. */
+  function applyProposal(graph) {
+    setBeforeApply(fromFlow(nodes, edges))
+    // Kept blocks come back with their position; new ones are laid out around them. When the
+    // canvas held at most the starting trigger, lay the whole proposal out from scratch.
+    const fresh = nodes.length <= 1
+    loadGraph(fresh ? { ...graph, nodes: graph.nodes.map((n) => ({ ...n, position: undefined })) } : graph)
+    toast.success('Applied to the canvas. Review it, then save.')
+  }
+
+  function undoApply() {
+    if (!beforeApply) return
+    loadGraph(beforeApply)
+    setBeforeApply(null)
+  }
+
+  function askAssistantToFix() {
+    setShowAssistant(true)
+    setFixRequest((n) => n + 1)
+  }
+
   async function save() {
     if (!meta.name.trim()) return toast.error('Give the workflow a name')
     setBusy('save')
@@ -853,6 +909,11 @@ function Editor() {
             ▶ Run now
           </Button>
         )}
+        {assistant && (
+          <Button onClick={() => setShowAssistant((v) => !v)} aria-pressed={showAssistant}>
+            ✨ Assistant
+          </Button>
+        )}
         <Button onClick={() => setShowDetails((v) => !v)} aria-pressed={showDetails}>
           Details
         </Button>
@@ -905,7 +966,11 @@ function Editor() {
         </div>
       )}
 
-      <div className={`editor-shell editor-shell-wide ${canEdit ? '' : 'editor-readonly'}`}>
+      <div
+        className={`editor-shell editor-shell-wide ${canEdit ? '' : 'editor-readonly'} ${
+          assistant && showAssistant ? 'editor-shell-assistant' : ''
+        }`}
+      >
         {canEdit && <Palette
             catalog={catalog}
             trigger={triggerNode && defs[triggerNode.data.nodeType]}
@@ -1046,7 +1111,11 @@ function Editor() {
 
             {problems.length > 0 && (
               <Panel position="top-left" className="canvas-card">
-                <Problems problems={problems} onSelect={selectNode} />
+                <Problems
+                  problems={problems}
+                  onSelect={selectNode}
+                  onAskAssistant={assistant ? askAssistantToFix : null}
+                />
               </Panel>
             )}
 
@@ -1080,6 +1149,19 @@ function Editor() {
             )}
           </ReactFlow>
         </div>
+
+        {assistant && showAssistant && (
+          <AssistantPanel
+            status={assistant}
+            getGraph={() => fromFlow(nodes, edges)}
+            problems={problems}
+            fixRequest={fixRequest}
+            onApply={applyProposal}
+            onUndo={undoApply}
+            canUndo={Boolean(beforeApply)}
+            onClose={() => setShowAssistant(false)}
+          />
+        )}
       </div>
     </div>
   )

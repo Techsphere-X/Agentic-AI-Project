@@ -305,3 +305,52 @@ test('notification channel: test message and a workflow that sends through it', 
     stub.close()
   }
 })
+
+test('workflow assistant: propose, apply and undo (model mocked)', async ({ page }) => {
+  // The seeded backend runs without a model; the two assistant endpoints are answered here.
+  await page.route('**/api/v1/automation/assistant/status', (route) =>
+    route.fulfill({ json: { enabled: true, provider: 'ollama', model: 'qwen3:4b' } }),
+  )
+  const asked = []
+  await page.route('**/api/v1/automation/assistant', (route) => {
+    asked.push(route.request().postDataJSON())
+    route.fulfill({
+      json: {
+        reply: 'Added a notification after the trigger.',
+        valid: true,
+        problems: [],
+        proposal: {
+          graph: {
+            nodes: [
+              { id: 'trigger', type: 'trigger.incident', config: { events: ['opened'], incident_types: [] } },
+              { id: 'tell', type: 'notify', name: 'Tell the team', config: { level: 'WARNING' } },
+            ],
+            edges: [{ from: 'trigger', port: 'next', to: 'tell' }],
+          },
+          changes: { nodes: [{ kind: 'added', node: 'tell', label: 'Tell the team' }], edges_added: 1, edges_removed: 0 },
+        },
+      },
+    })
+  })
+
+  await page.goto('/automation/workflows/new')
+  await expect(node(page, 'trigger')).toBeVisible()
+  await page.getByRole('button', { name: '✨ Assistant' }).click()
+  const panel = page.getByRole('complementary', { name: 'Workflow assistant' })
+  await panel.getByLabel('Message the assistant').fill('Notify the team when an incident opens')
+  await panel.getByLabel('Message the assistant').press('Enter')
+
+  await expect(panel).toContainText('Added a notification after the trigger.')
+  await expect(panel).toContainText('Added “Tell the team”')
+  expect(asked[0].mode).toBe('chat')
+  expect(asked[0].graph.nodes.map((n) => n.id)).toEqual(['trigger'])
+
+  await panel.getByRole('button', { name: 'Apply' }).click()
+  await expect(node(page, 'tell')).toContainText('Tell the team')
+  await expect(page.getByText('unsaved changes')).toBeVisible()
+  await page.screenshot({ path: `${SHOTS}/assistant-applied.png` })
+
+  await panel.getByRole('button', { name: 'Undo apply' }).click()
+  await expect(node(page, 'tell')).toHaveCount(0)
+  await expect(node(page, 'trigger')).toBeVisible()
+})

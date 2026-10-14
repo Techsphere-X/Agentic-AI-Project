@@ -981,3 +981,167 @@
 .palette-sub .palette-item {
   width: 100%;
 }
+
+/* ------------------------------------------------------------------ workflow assistant */
+.editor-shell.editor-shell-wide.editor-shell-assistant {
+  grid-template-columns: 220px minmax(0, 1fr) 340px;
+}
+
+.editor-shell.editor-shell-wide.editor-readonly.editor-shell-assistant {
+  grid-template-columns: minmax(0, 1fr) 340px;
+}
+
+@media (max-width: 1100px) {
+  .editor-shell.editor-shell-wide.editor-shell-assistant,
+  .editor-shell.editor-shell-wide.editor-readonly.editor-shell-assistant {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.assistant-panel {
+  min-height: 0;
+  padding: 0;
+  gap: 0;
+}
+
+.assistant-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.assistant-close {
+  padding: 0 0.25rem;
+  font-size: 1.2rem;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.assistant-close:hover {
+  color: var(--text);
+}
+
+.assistant-messages {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 0;
+  padding: 0.75rem;
+  overflow-y: auto;
+}
+
+.assistant-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.assistant-starter {
+  padding: 0.45rem 0.55rem;
+  font-size: 0.82rem;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.assistant-starter:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.assistant-msg {
+  max-width: 100%;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  border-radius: 8px;
+}
+
+.assistant-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.assistant-user {
+  align-self: flex-end;
+  max-width: 90%;
+  background: var(--accent-soft);
+}
+
+.assistant-assistant {
+  align-self: stretch;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.assistant-error {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: transparent;
+}
+
+.assistant-proposal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+}
+
+.assistant-proposal-head,
+.assistant-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.assistant-changes,
+.assistant-problems {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  font-size: 0.8rem;
+}
+
+.assistant-changes .change-added {
+  color: var(--success);
+}
+
+.assistant-changes .change-changed {
+  color: var(--warning);
+}
+
+.assistant-changes .change-removed {
+  color: var(--danger);
+}
+
+.assistant-problems {
+  color: var(--danger);
+}
+
+.assistant-input {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.4rem;
+  padding: 0.6rem 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.assistant-input textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.problems-ask {
+  margin-left: 0.5rem;
+}
