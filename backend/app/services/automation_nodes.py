@@ -62,6 +62,7 @@ from app.orchestration.airflow.base import (
     AirflowAdapterError,
     ConnectionStatus,
     ConnectionTestResult,
+    normalize_run_state,
 )
 from app.orchestration.airflow.factory import run_async
 from app.services import (
@@ -78,7 +79,9 @@ logger = logging.getLogger(__name__)
 # Test hook: inject an httpx transport for webhook delivery.
 webhook_transport: httpx.BaseTransport | None = None
 
-ACTIVE_RUN_STATES = frozenset({"queued", "running", "restarting", "up_for_retry", "scheduled"})
+ACTIVE_RUN_STATES = frozenset(
+    {"queued", "scheduled", "running", "restarting", "deferred", "up_for_retry"}
+)
 
 
 @dataclass
@@ -263,10 +266,19 @@ def _trigger(ctx: NodeContext, node: Node) -> NodeResult:
     event = ctx.run.trigger_event
     if event == TriggerEvent.DAG_RUN:
         dag_run = ctx.get_context("dag_run", {})
+        state = dag_run.get("normalized_state", dag_run.get("state"))
+        port = state if state in {"success", "in_progress", "failed"} else "next"
+        if not ctx.graph.next_nodes(node.id, port):
+            port = "next"
         return NodeResult(
-            "next",
-            {"dag_id": dag_run.get("dag_id"), "run_id": dag_run.get("run_id")},
-            f"Run {dag_run.get('run_id')} of {dag_run.get('dag_id')} {dag_run.get('state')}",
+            port,
+            {
+                "dag_id": dag_run.get("dag_id"),
+                "run_id": dag_run.get("run_id"),
+                "state": state,
+                "airflow_state": dag_run.get("airflow_state", dag_run.get("state")),
+            },
+            f"Run {dag_run.get('run_id')} of {dag_run.get('dag_id')} {state}",
         )
     return NodeResult("next", message=_TRIGGER_TEXT.get(event, f"Triggered by incident {event}"))
 
@@ -1430,7 +1442,7 @@ def _poll_dag_run(
     *,
     after: str,
 ) -> NodeResult:
-    """Wait for a DAG run to finish: 'success', 'failed' (incl. timeout), or wait again."""
+    """Poll a DAG run and report terminal or in-progress state."""
     try:
         run = run_async(lambda: adapter.get_dag_run(dag_id, run_id))
     except AirflowAdapterError as exc:
@@ -1444,18 +1456,41 @@ def _poll_dag_run(
         ctx.set_context("last_error", f"Run {run_id} no longer exists.")
         ctx.event("verification_failed", run=run_id, reason="run not found")
         return NodeResult("failed", message=f"Run {run_id} not found")
-    if run.state == "success":
+    normalized_state = normalize_run_state(run.state)
+    state_output = {
+        "run_id": run_id,
+        "state": normalized_state,
+        "normalized_state": normalized_state,
+        "airflow_state": run.state,
+    }
+    ctx.set_context(
+        "action_target",
+        {
+            **(ctx.get_context("action_target") or {}),
+            "run_id": run_id,
+            "dag_id": dag_id,
+            "state": normalized_state,
+            "normalized_state": normalized_state,
+            "airflow_state": run.state,
+        },
+    )
+    if normalized_state == "success":
         ctx.event("verified", run=run_id, state=run.state)
-        return NodeResult("success", {"run_id": run_id, "state": run.state}, "Run succeeded")
-    if run.state == "failed":
+        return NodeResult("success", state_output, "Run succeeded")
+    if normalized_state == "failed":
         ctx.set_context("last_error", f"Run {run_id} of {dag_id} failed after {after}.")
         ctx.event("verification_failed", run=run_id, state=run.state)
-        return NodeResult("failed", {"run_id": run_id, "state": run.state}, "Run failed again")
+        return NodeResult("failed", state_output, "Run failed again")
     if ctx.now >= deadline:
         ctx.set_context("last_error", f"Run {run_id} did not finish in time (state {run.state}).")
         ctx.event("verification_failed", run=run_id, state=run.state, reason="timeout")
-        return NodeResult("failed", {"run_id": run_id, "state": run.state}, "Timed out")
-    return _verify_wait(ctx, deadline, f"Run {run_id} is {run.state}; checking again")
+        return NodeResult("failed", state_output, "Timed out")
+    return NodeResult(
+        "in_progress",
+        state_output,
+        f"Run {run_id} is {run.state}; checking again",
+        wait_until=min(ctx.now + timedelta(seconds=ctx.settings.AUTOMATION_VERIFY_POLL_SECONDS), deadline),
+    )
 
 
 def _verify_wait(ctx: NodeContext, deadline: datetime, message: str) -> NodeResult:
@@ -1633,6 +1668,14 @@ def _run_dag(ctx: NodeContext, node: Node) -> NodeResult:
             ctx, ctx.airflow_adapter(conn), dag_id, run_id, deadline, after="it started"
         )
         if result.port:
+            ctx.set_node_state(
+                node.id,
+                {
+                    **state,
+                    "airflow_state": result.output.get("airflow_state", ""),
+                    "normalized_state": result.output.get("normalized_state", ""),
+                },
+            )
             ctx.record_result(
                 node.id,
                 {"dag_id": dag_id, "run_id": run_id, "state": result.output.get("state", "")},
@@ -1673,13 +1716,32 @@ def _run_dag(ctx: NodeContext, node: Node) -> NodeResult:
         return result
 
     deadline = ctx.now + timedelta(minutes=cfg["timeout_minutes"])
-    ctx.set_node_state(node.id, {"run_id": run_id, "deadline": deadline.isoformat()})
-    poll = timedelta(seconds=ctx.settings.AUTOMATION_VERIFY_POLL_SECONDS)
-    return NodeResult(
-        output=result.output,
-        message=f"Started {run_id}; waiting for it to finish",
-        wait_until=min(ctx.now + poll, deadline),
+    ctx.set_node_state(
+        node.id,
+        {
+            "run_id": run_id,
+            "deadline": deadline.isoformat(),
+            "connection_id": str(conn.id),
+            "dag_id": dag_id,
+        },
     )
+    result = _poll_dag_run(
+        ctx, ctx.airflow_adapter(conn), dag_id, run_id, deadline, after="it started"
+    )
+    ctx.set_node_state(
+        node.id,
+        {
+            "run_id": run_id,
+            "deadline": deadline.isoformat(),
+            "connection_id": str(conn.id),
+            "dag_id": dag_id,
+            "airflow_state": result.output.get("airflow_state", ""),
+            "normalized_state": result.output.get("normalized_state", ""),
+        },
+    )
+    if result.port == "in_progress":
+        result.message = f"Started {run_id}; waiting for it to finish"
+    return result
 
 
 def _wait_for_dag(ctx: NodeContext, node: Node) -> NodeResult:

@@ -66,6 +66,16 @@ class AirflowDagSummary:
 
 
 TERMINAL_RUN_STATES = frozenset({"success", "failed"})
+IN_PROGRESS_RUN_STATES = frozenset(
+    {"queued", "scheduled", "running", "deferred", "up_for_retry", "restarting"}
+)
+
+
+def normalize_run_state(state: str) -> str:
+    """Map Airflow's active states to the workflow-facing in_progress state."""
+    if state in IN_PROGRESS_RUN_STATES:
+        return "in_progress"
+    return state
 
 
 @dataclass(frozen=True)
@@ -80,6 +90,10 @@ class AirflowDagRun:
     @property
     def is_terminal(self) -> bool:
         return self.state in TERMINAL_RUN_STATES
+
+    @property
+    def normalized_state(self) -> str:
+        return normalize_run_state(self.state)
 
     @property
     def sort_date(self) -> datetime | None:

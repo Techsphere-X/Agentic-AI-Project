@@ -41,8 +41,17 @@ class StaleTriggerConfig(_Config):
 
 
 class DagRunTriggerConfig(_Config):
-    states: list[Literal["success", "failed"]] = Field(
-        default=["success", "failed"], min_length=1, json_schema_extra={"x-label": "When the run"}
+    states: list[Literal["success", "in_progress", "failed"]] = Field(
+        default=["success", "failed"],
+        min_length=1,
+        json_schema_extra={
+            "x-label": "When the run",
+            "x-options": {
+                "success": "Succeeded",
+                "in_progress": "In progress",
+                "failed": "Failed",
+            },
+        },
     )
     dag_ids: list[str] = Field(
         default_factory=list,
@@ -577,10 +586,11 @@ NODE_TYPES: dict[str, NodeType] = {
             "trigger.dag_run",
             "When a DAG run finishes",
             "trigger",
-            "Starts for every finished run (succeeded or failed) of the monitored DAGs, so the "
-            "workflow can check it and record its status.",
-            ("next",),
+            "Starts when a monitored DAG run succeeds, fails, or is in progress, so the workflow "
+            "can check or report its state.",
+            ("next", "success", "in_progress", "failed"),
             DagRunTriggerConfig,
+            {"success": "succeeded", "in_progress": "in progress", "failed": "failed"},
             needs_dag_run=True,
         ),
         NodeType(
@@ -641,11 +651,11 @@ NODE_TYPES: dict[str, NodeType] = {
             "pipeline.run_dag",
             "Run a DAG",
             "pipeline",
-            "Starts a run of the chosen DAG, optionally with parameters, and can wait for it "
-            "to finish.",
-            ("success", "failed"),
+            "Starts a run of the chosen DAG, optionally with parameters, and can report when it "
+            "is in progress or has finished.",
+            ("success", "in_progress", "failed"),
             RunDagConfig,
-            {"success": "succeeded", "failed": "failed"},
+            {"success": "succeeded", "in_progress": "in progress", "failed": "failed"},
             is_action=True,
         ),
         NodeType(

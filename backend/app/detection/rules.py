@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from app.detection.types import IncidentType
-from app.orchestration.airflow.base import AirflowDagRun
+from app.orchestration.airflow.base import AirflowDagRun, IN_PROGRESS_RUN_STATES
 
 FAILED = "failed"
 SUCCESS = "success"
@@ -86,6 +86,12 @@ def finished_runs(runs: list[AirflowDagRun], watermark: datetime | None) -> list
     if watermark is None:
         return terminal[-1:]
     return [r for r in terminal if r.sort_date > watermark]  # type: ignore[operator]
+
+
+def in_progress_runs(runs: list[AirflowDagRun]) -> list[AirflowDagRun]:
+    """Active Airflow runs that can feed an in-progress workflow trigger."""
+    active = [r for r in runs if r.state in IN_PROGRESS_RUN_STATES and r.sort_date is not None]
+    return sorted(active, key=lambda r: r.sort_date)  # type: ignore[arg-type,return-value]
 
 
 def _success_time(run: AirflowDagRun) -> datetime:

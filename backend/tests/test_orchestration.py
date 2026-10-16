@@ -266,6 +266,50 @@ def test_run_dag_waits_for_the_run_to_finish(db: Session, admin: User, clock: Cl
     assert run.context["results"]["extract"]["state"] == "success"
 
 
+def test_run_dag_runs_in_progress_branch_before_polling_to_success(
+    db: Session, admin: User, clock: Clock
+) -> None:
+    af = airflow(db)
+    wf = workflow(
+        db,
+        {
+            "nodes": [
+                {"id": "trigger", "type": "trigger.manual", "config": {}},
+                {
+                    "id": "extract",
+                    "type": "pipeline.run_dag",
+                    "config": {"connection_id": af, "dag_id": "partner_api_sync"},
+                },
+                {"id": "progress", "type": "notify", "config": {"message": "started"}},
+                {"id": "success", "type": "notify", "config": {"message": "done"}},
+            ],
+            "edges": [
+                {"from": "trigger", "port": "next", "to": "extract"},
+                {"from": "extract", "port": "in_progress", "to": "progress"},
+                {"from": "extract", "port": "success", "to": "success"},
+            ],
+        },
+    )
+
+    run = run_now(db, wf, admin, clock)
+    assert run.status == RunStatus.WAITING
+    assert steps(run)[:2] == [("trigger", "next"), ("extract", None)]
+    assert run.pending_nodes == ["progress", "extract"]
+    assert len(writes().triggered["partner_api_sync"]) == 1
+
+    clock.advance(seconds=mock_module.RERUN_SECONDS + 1)
+    tick(db, clock)
+    run = db.get(WorkflowRun, run.id)
+    assert run.status == RunStatus.COMPLETED
+    assert {node_id: port for node_id, port in steps(run)} == {
+        "trigger": "next",
+        "extract": "success",
+        "progress": "next",
+        "success": "next",
+    }
+    assert len(writes().triggered["partner_api_sync"]) == 1
+
+
 def test_check_keeps_checking_until_the_data_arrives(
     db: Session, admin: User, clock: Clock, warehouse
 ) -> None:
@@ -518,6 +562,8 @@ def test_orchestration_blocks_are_in_the_catalog(client: TestClient, viewer_head
     props = types["pipeline.run_dag"]["config_schema"]["properties"]
     assert props["connection_id"]["x-widget"] == "airflow_connection"
     assert props["dag_id"]["x-widget"] == "dag"
+    assert types["pipeline.run_dag"]["ports"] == ["success", "in_progress", "failed"]
+    assert types["pipeline.run_dag"]["port_labels"]["in_progress"] == "in progress"
     assert types["action.clear_failed_tasks"]["needs_incident"] is True
     assert types["database.check"]["needs_incident"] is False
 

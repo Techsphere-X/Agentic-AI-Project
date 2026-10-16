@@ -62,6 +62,12 @@ export const NODE_ICONS = {
   flow: '⏱',
 }
 
+const DAG_RUN_STATE_LABELS = {
+  success: 'Succeeded',
+  in_progress: 'In progress',
+  failed: 'Failed',
+}
+
 // Workflows with these triggers are started by people or the clock, not by incidents.
 const BY_HAND_TRIGGERS = new Set(['trigger.manual', 'trigger.schedule'])
 
@@ -107,7 +113,9 @@ export function describeConfig(type, config = {}) {
       parts.push(`open & unacknowledged for ${config.minutes} min`)
       break
     case 'trigger.dag_run':
-      parts.push(`on ${(config.states ?? ['success', 'failed']).join(' / ')}`)
+      parts.push(
+        `on ${(config.states ?? ['success', 'failed']).map((state) => DAG_RUN_STATE_LABELS[state] ?? state).join(' / ')}`,
+      )
       parts.push(config.dag_ids?.length ? config.dag_ids.join(', ') : 'every monitored DAG')
       break
     case 'check.record':

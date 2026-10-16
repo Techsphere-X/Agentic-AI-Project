@@ -382,6 +382,18 @@ def _process_dag(
         )
         summary.auto_resolved += 1
 
+    # Poll active runs so an in-progress workflow is started once and later receives
+    # the terminal state without creating a second workflow run.
+    for run in rules.in_progress_runs(runs):
+        db.flush()
+        summary.automation_queued += len(
+            automation_service.enqueue_for_dag_run(db, conn, dag, run, now=now)
+        )
+
+    for run in runs:
+        if run.is_terminal:
+            automation_service.refresh_dag_run_checks(db, conn, dag, run)
+
     # "When a DAG run finishes" workflows: one run each per finished DAG run.
     for run in rules.finished_runs(runs, dag.detection_watermark):
         db.flush()
