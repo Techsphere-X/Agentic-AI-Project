@@ -73,6 +73,7 @@ export const incidentsApi = {
   list: (query) => api.get('/incidents', query),
   summary: () => api.get('/incidents/summary'),
   get: (id) => api.get(`/incidents/${id}`),
+  occurrences: (id, query) => api.get(`/incidents/${id}/occurrences`, query),
   openCounts: () => api.get('/incidents/open-counts'),
   acknowledge: (id) => api.post(`/incidents/${id}/acknowledge`),
   resolve: (id, note) => api.post(`/incidents/${id}/resolve`, { note }),

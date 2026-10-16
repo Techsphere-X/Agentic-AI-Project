@@ -157,7 +157,7 @@ export default function IncidentList() {
                     <th>Incident</th>
                     <th>Type</th>
                     <th>Status</th>
-                    <th>Seen</th>
+                    <th>Occurrences</th>
                     <th>Last seen</th>
                   </tr>
                 </thead>

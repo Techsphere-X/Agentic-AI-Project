@@ -15,7 +15,7 @@ from app.detection.types import (
     IncidentType,
 )
 from app.diagnosis.log_classifier import Diagnosis, classify_logs
-from app.models.incident import Incident, IncidentEvent
+from app.models.incident import Incident, IncidentEvent, IncidentOccurrence
 from app.models.user import User
 from app.services import audit_service
 
@@ -39,6 +39,33 @@ def add_event(
     )
     db.add(entry)
     return entry
+
+
+def add_occurrence(
+    db: Session,
+    incident: Incident,
+    *,
+    occurred_at,
+    run_id: str | None = None,
+    details: dict[str, Any] | None = None,
+) -> IncidentOccurrence:
+    occurrence = IncidentOccurrence(
+        incident_id=incident.id,
+        connection_id=incident.connection_id,
+        monitored_dag_id=incident.monitored_dag_id,
+        dag_id=incident.dag_id,
+        type=incident.type,
+        title=incident.title,
+        severity=incident.severity,
+        status=incident.status,
+        run_id=run_id,
+        first_seen_at=occurred_at,
+        occurred_at=occurred_at,
+        summary=incident.summary,
+        details=details or {},
+    )
+    db.add(occurrence)
+    return occurrence
 
 
 def list_incidents(
@@ -115,11 +142,25 @@ def get_incident(db: Session, incident_id: uuid.UUID, *, with_details: bool = Fa
         query = query.options(
             selectinload(Incident.evidence),
             selectinload(Incident.events).selectinload(IncidentEvent.actor),
+            selectinload(Incident.occurrences),
         )
     incident = db.scalar(query)
     if incident is None:
         raise NotFoundError("Incident not found")
     return incident
+
+
+def list_occurrences(
+    db: Session, incident_id: uuid.UUID, *, limit: int, offset: int
+) -> tuple[list[IncidentOccurrence], int]:
+    query = select(IncidentOccurrence).where(IncidentOccurrence.incident_id == incident_id)
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    items = db.scalars(
+        query.order_by(IncidentOccurrence.occurred_at.desc(), IncidentOccurrence.id)
+        .limit(limit)
+        .offset(offset)
+    ).all()
+    return list(items), total
 
 
 def _invalid(incident: Incident, action: str) -> ConflictError:

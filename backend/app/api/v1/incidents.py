@@ -10,6 +10,7 @@ from app.schemas.incident import (
     DiagnosisOverride,
     DiagnosisRead,
     IncidentDetail,
+    IncidentOccurrenceRead,
     IncidentRead,
     IncidentSummary,
     OpenCount,
@@ -77,6 +78,25 @@ def open_counts(db: DbSession, _: ViewerUser) -> list[OpenCount]:
 @router.get("/{incident_id}", response_model=IncidentDetail)
 def get_incident(incident_id: uuid.UUID, db: DbSession, _: ViewerUser) -> IncidentDetail:
     return _detail(db, incident_id)
+
+
+@router.get("/{incident_id}/occurrences", response_model=Page[IncidentOccurrenceRead])
+def list_occurrences(
+    incident_id: uuid.UUID,
+    db: DbSession,
+    _: ViewerUser,
+    page: PageParams,
+) -> Page[IncidentOccurrenceRead]:
+    incident_service.get_incident(db, incident_id)
+    items, total = incident_service.list_occurrences(
+        db, incident_id, limit=page.limit, offset=page.offset
+    )
+    return Page[IncidentOccurrenceRead](
+        items=[IncidentOccurrenceRead.model_validate(item) for item in items],
+        total=total,
+        limit=page.limit,
+        offset=page.offset,
+    )
 
 
 @router.post("/{incident_id}/acknowledge", response_model=IncidentDetail)

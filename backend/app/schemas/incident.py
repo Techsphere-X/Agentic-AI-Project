@@ -37,6 +37,25 @@ class IncidentRead(BaseModel):
     resolution_note: str | None
 
 
+class IncidentOccurrenceRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    incident_id: uuid.UUID
+    connection_id: uuid.UUID
+    monitored_dag_id: uuid.UUID
+    dag_id: str
+    type: IncidentType
+    title: str
+    severity: IncidentSeverity
+    status: IncidentStatus
+    run_id: str | None
+    first_seen_at: datetime
+    occurred_at: datetime
+    summary: str | None
+    details: dict[str, Any]
+
+
 class EvidenceRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -120,6 +139,7 @@ class ClassifyLogResponse(BaseModel):
 class IncidentDetail(IncidentRead):
     evidence: list[EvidenceRead]
     events: list[IncidentEventRead]
+    occurrences: list[IncidentOccurrenceRead] = []
     diagnosis: DiagnosisRead | None = None
 
 

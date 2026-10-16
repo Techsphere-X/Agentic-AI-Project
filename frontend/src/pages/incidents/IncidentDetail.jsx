@@ -307,6 +307,29 @@ function Timeline({ events }) {
   )
 }
 
+function OccurrenceTimeline({ occurrences }) {
+  if (!occurrences?.length) {
+    return <p className="muted small">No occurrence history has been recorded yet.</p>
+  }
+  return (
+    <ol className="timeline">
+      {occurrences.map((occurrence) => (
+        <li key={occurrence.id} className="timeline-item">
+          <div className="timeline-title">
+            <strong>Occurrence detected</strong>
+            <span className="muted small"> · {formatDateTime(occurrence.occurred_at)}</span>
+          </div>
+          <div className="muted small">
+            {occurrence.dag_id} · {typeLabel(occurrence.type)} · {occurrence.severity} · {occurrence.status}
+          </div>
+          {occurrence.run_id && <div className="muted small mono">Run {occurrence.run_id}</div>}
+          {occurrence.summary && <div className="small">{occurrence.summary}</div>}
+        </li>
+      ))}
+    </ol>
+  )
+}
+
 export default function IncidentDetail() {
   const { id } = useParams()
   const { hasRole } = useAuth()
@@ -463,6 +486,9 @@ export default function IncidentDetail() {
       />
 
       <div className="detail-grid">
+        <Card title="Occurrence history">
+          <OccurrenceTimeline occurrences={incident.occurrences} />
+        </Card>
         <Card title="Evidence">
           <Evidence evidence={incident.evidence} />
         </Card>
