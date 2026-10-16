@@ -84,6 +84,12 @@ class Incident(TimestampMixin, Base):
         passive_deletes=True,
         order_by="IncidentEvent.created_at",
     )
+    occurrences: Mapped[list["IncidentOccurrence"]] = relationship(
+        back_populates="incident",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="IncidentOccurrence.occurred_at",
+    )
 
     @property
     def is_open(self) -> bool:
@@ -130,6 +136,40 @@ class IncidentEvent(Base):
     @property
     def actor_name(self) -> str:
         return self.actor.full_name if self.actor else "System"
+
+
+class IncidentOccurrence(Base):
+    """Immutable snapshot of one detection occurrence within a logical incident."""
+
+    __tablename__ = "incident_occurrences"
+    __table_args__ = (Index("ix_incident_occurrences_incident_occurred", "incident_id", "occurred_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    incident_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("incidents.id", ondelete="CASCADE"), index=True
+    )
+    connection_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("airflow_connections.id", ondelete="CASCADE"), index=True
+    )
+    monitored_dag_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("monitored_dags.id", ondelete="CASCADE"), index=True
+    )
+    dag_id: Mapped[str] = mapped_column(String(250))
+    type: Mapped[IncidentType] = mapped_column(_enum(IncidentType, "incident_occurrence_type"))
+    title: Mapped[str] = mapped_column(String(300))
+    severity: Mapped[IncidentSeverity] = mapped_column(
+        _enum(IncidentSeverity, "incident_occurrence_severity")
+    )
+    status: Mapped[IncidentStatus] = mapped_column(
+        _enum(IncidentStatus, "incident_occurrence_status")
+    )
+    run_id: Mapped[str | None] = mapped_column(String(250))
+    first_seen_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    occurred_at: Mapped[datetime] = mapped_column(UTCDateTime(), index=True)
+    summary: Mapped[str | None] = mapped_column(Text)
+    details: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+    incident: Mapped[Incident] = relationship(back_populates="occurrences")
 
 
 class DetectionLease(Base):

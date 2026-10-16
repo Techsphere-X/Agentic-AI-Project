@@ -102,6 +102,11 @@ def test_end_to_end_mock_flow(
     log = next(e for e in detail["evidence"] if e["kind"] == "TASK_LOG")
     assert "UniqueViolation" in log["content"] and "hunter2" not in log["content"]
     assert [e["event"] for e in detail["events"]] == ["opened", "evidence_added", "diagnosed"]
+    assert len(detail["occurrences"]) == 1
+    occurrences = client.get(
+        f"/api/v1/incidents/{failed['id']}/occurrences", headers=viewer_headers
+    ).json()
+    assert occurrences["total"] == 1
 
     summary_counts = client.get("/api/v1/incidents/summary", headers=viewer_headers).json()
     assert summary_counts["open_total"] == 2
@@ -124,6 +129,16 @@ def test_end_to_end_mock_flow(
     resolved = client.get(f"/api/v1/incidents/{failed['id']}", headers=viewer_headers).json()
     assert resolved["status"] == "RESOLVED" and resolved["resolution"] == "AUTO_RECOVERED"
     assert resolved["events"][-1]["actor_name"] == "System"
+
+    # A repeated SLA breach appends history to the same logical incident.
+    run_detection(client, operator_headers)
+    sla_detail = client.get(f"/api/v1/incidents/{sla['id']}", headers=viewer_headers).json()
+    assert sla_detail["occurrence_count"] == 3
+    assert len(sla_detail["occurrences"]) == 3
+    assert all(
+        older["occurred_at"] < newer["occurred_at"]
+        for older, newer in zip(sla_detail["occurrences"], sla_detail["occurrences"][1:], strict=False)
+    )
 
     # The SLA incident is still open (legacy never succeeds): resolve manually with a note.
     r = client.post(

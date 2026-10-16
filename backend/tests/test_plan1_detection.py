@@ -24,7 +24,7 @@ from app.models.airflow import (
     MonitoredDag,
 )
 from app.models.audit_log import AuditLog
-from app.models.incident import Incident
+from app.models.incident import Incident, IncidentOccurrence
 from app.orchestration.airflow import factory
 from app.orchestration.airflow.base import AirflowDagRun, AuthType, ConnectionStatus
 from app.services import detection_service
@@ -275,10 +275,21 @@ def test_sla_miss_opens_once_and_resolves_after_success(db: Session, fake: FakeA
     assert incident.type == IncidentType.SLA_MISSED
     assert incident.severity == IncidentSeverity.LOW
     assert "SLA is 60 min" in incident.summary
+    first_occurrence = incident.occurrences[0]
+    assert first_occurrence.run_id == "r1"
+    assert first_occurrence.summary == incident.summary
 
     again = detection_service.run_cycle(db, now=T0 + timedelta(minutes=5))
     assert (again.opened, again.recurred) == (0, 0)
-    assert incidents(db)[0].occurrence_count == 1
+    incident = incidents(db)[0]
+    assert incident.occurrence_count == 2
+    assert len(incident.occurrences) == 2
+    assert incident.occurrences[0].id == first_occurrence.id
+    assert incident.occurrences[0].occurred_at < incident.occurrences[1].occurred_at
+    assert incident.events[-1].event == "recurred"
+    assert db.scalar(
+        select(IncidentOccurrence).where(IncidentOccurrence.incident_id == incident.id)
+    ) is not None
 
     fake.add_run("etl", "r2", "success", iso(at(12, 6)), iso(at(12, 9)))
     done = detection_service.run_cycle(db, now=at(12, 10))

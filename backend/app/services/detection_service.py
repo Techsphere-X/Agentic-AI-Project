@@ -219,11 +219,27 @@ def _handle_finding(
     incident = _open_incident(db, fingerprint)
 
     if incident is not None:
-        if finding.type == IncidentType.SLA_MISSED:
-            incident.last_seen_at = now  # still breached; not a new occurrence
-            return
         incident.occurrence_count += 1
         incident.last_seen_at = now
+        if finding.type == IncidentType.SLA_MISSED:
+            incident_service.add_occurrence(
+                db,
+                incident,
+                occurred_at=now,
+                run_id=finding.run.run_id if finding.run else None,
+                details={"sla_minutes": finding.sla_minutes, "recurring": True},
+            )
+            incident_service.add_event(
+                db,
+                incident,
+                "recurred",
+                details={
+                    "run_id": finding.run.run_id if finding.run else None,
+                    "count": incident.occurrence_count,
+                    "sla_minutes": finding.sla_minutes,
+                },
+            )
+            return
         incident.occurred_at = finding.occurred_at
         incident.last_run_id = finding.run_id
         incident.summary = summary_text
@@ -234,6 +250,13 @@ def _handle_finding(
             details["severity_reasons"] = score.reasons
             incident.severity = escalated
         incident_service.add_event(db, incident, "recurred", details=details)
+        incident_service.add_occurrence(
+            db,
+            incident,
+            occurred_at=finding.occurred_at,
+            run_id=finding.run_id,
+            details={"recurring": True},
+        )
         _attach(db, incident, records, now)
         summary.recurred += 1
         _enqueue(db, incident, TriggerEvent.RECURRED, now, summary)
@@ -261,6 +284,13 @@ def _handle_finding(
     )
     db.add(incident)
     db.flush()  # makes the partial unique index apply to later findings in this batch
+    incident_service.add_occurrence(
+        db,
+        incident,
+        occurred_at=finding.occurred_at,
+        run_id=finding.run_id or (finding.run.run_id if finding.run else None),
+        details={"sla_minutes": finding.sla_minutes} if finding.sla_minutes else {},
+    )
     incident_service.add_event(
         db,
         incident,
