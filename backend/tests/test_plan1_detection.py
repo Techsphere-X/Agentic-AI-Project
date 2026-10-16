@@ -70,6 +70,13 @@ def test_running_runs_are_ignored_and_watermark_uses_terminal_runs() -> None:
     assert rules.next_watermark([], at(9)) == at(9)
 
 
+@pytest.mark.parametrize("state", ["queued", "scheduled", "running", "deferred", "up_for_retry"])
+def test_active_airflow_states_normalize_to_in_progress(state: str) -> None:
+    active = run("active", state, at(11))
+    assert active.normalized_state == "in_progress"
+    assert rules.in_progress_runs([active]) == [active]
+
+
 def test_sla_boundary() -> None:
     runs = [run("a", "success", at(10), minutes=0)]  # finished exactly 10:00
     assert rules.detect_sla_miss("d", runs, 120, now=at(12)) is None  # exactly at SLA: ok

@@ -231,6 +231,35 @@ def test_each_finished_run_starts_the_workflow_once(db: Session, fake: FakeAirfl
     ]
 
 
+@pytest.mark.parametrize("final_state", ["success", "failed"])
+def test_in_progress_run_is_enqueued_once_and_updated_when_terminal(
+    db: Session, fake: FakeAirflow, final_state: str
+) -> None:
+    conn = _conn(db)
+    _dag(db, conn, "etl")
+    workflow = _workflow(db, _record_only(states=["in_progress"]))
+    fake.add_run("etl", "r1", "running", iso(at(10)))
+
+    summary = detection_service.run_cycle(db, now=T0)
+    assert summary.automation_queued == 1
+    [check] = _checks(db)
+    assert check.run_state == "running"
+    workflow_run = db.get(WorkflowRun, check.workflow_run_id)
+    assert workflow_run.workflow_id == workflow.id
+    assert workflow_run.context["dag_run"]["normalized_state"] == "in_progress"
+
+    assert detection_service.run_cycle(db, now=at(10, 1)).automation_queued == 0
+    assert len(_checks(db)) == 1
+
+    fake.runs["etl"][0]["state"] = final_state
+    fake.runs["etl"][0]["end_date"] = iso(at(10, 5))
+    assert detection_service.run_cycle(db, now=at(10, 6)).automation_queued == 0
+    db.refresh(check)
+    assert check.run_state == final_state
+    db.refresh(workflow_run)
+    assert workflow_run.context["dag_run"]["normalized_state"] == final_state
+
+
 def test_reconciliation_workflow_filters_successful_target_dag(
     db: Session, fake: FakeAirflow
 ) -> None:
@@ -268,6 +297,8 @@ def test_reconciliation_workflow_filters_successful_target_dag(
         "dag_id": "agentic_reconciliation_pipeline",
         "run_id": "match-run",
         "state": "success",
+            "normalized_state": "success",
+            "airflow_state": "success",
         "environment": "DEV",
     }
 

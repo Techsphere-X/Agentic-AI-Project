@@ -41,7 +41,7 @@ function humanize(key) {
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
-function EnumChecks({ options, value, onChange, disabled }) {
+function EnumChecks({ options, labels = {}, value, onChange, disabled }) {
   const selected = new Set(value ?? [])
   return (
     <div className="check-group">
@@ -58,7 +58,7 @@ function EnumChecks({ options, value, onChange, disabled }) {
               onChange(options.filter((o) => next.has(o))) // keep schema order
             }}
           />
-          <span className="mono small">{option}</span>
+          <span className="small">{labels[option] ?? option}</span>
         </label>
       ))}
     </div>
@@ -202,7 +202,15 @@ function FieldControl({ name, schema, value, values, onChange, disabled, id }) {
   if (schema.type === 'array') {
     const items = schema.items ?? {}
     if (items.enum) {
-      return <EnumChecks options={items.enum} value={value} onChange={onChange} disabled={disabled} />
+      return (
+        <EnumChecks
+          options={items.enum}
+          labels={schema['x-options']}
+          value={value}
+          onChange={onChange}
+          disabled={disabled}
+        />
+      )
     }
     return (
       <input

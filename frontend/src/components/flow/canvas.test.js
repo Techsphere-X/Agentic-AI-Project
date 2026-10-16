@@ -136,6 +136,23 @@ test('database reconciliation block exposes its result branches', () => {
   )
 })
 
+test('DAG run trigger exposes ordered normalized state labels', () => {
+  assert.equal(
+    describeConfig('trigger.dag_run', {
+      states: ['success', 'in_progress', 'failed'],
+      dag_ids: ['agentic_reconciliation_pipeline'],
+    }),
+    'on Succeeded / In progress / Failed · agentic_reconciliation_pipeline',
+  )
+})
+
+test('Run a DAG exposes succeeded, in progress, and failed outputs', () => {
+  assert.equal(
+    describeConfig('pipeline.run_dag', { dag_id: 'orders', wait_for_completion: true, timeout_minutes: 60 }),
+    'orders · wait ≤ 60 min',
+  )
+})
+
 test('layout handles joins and stray nodes', () => {
   const positions = layeredLayout(
     [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'lonely' }],
@@ -288,7 +305,7 @@ test('connection state wording', () => {
 test('retypeNode keeps the target, applies new defaults and drops edges from missing ports', () => {
   const runDef = {
     type: 'pipeline.run_dag',
-    ports: ['success', 'failed'],
+    ports: ['success', 'in_progress', 'failed'],
     config_schema: { properties: { connection_id: { default: '' }, dag_id: { default: '' }, timeout_minutes: { default: 60 } } },
   }
   const waitDef = {

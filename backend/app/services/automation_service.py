@@ -369,9 +369,13 @@ def enqueue_for_dag_run(
             continue
         if trigger.type != "trigger.dag_run":
             continue
-        if dag_run.state not in trigger.config["states"]:
-            continue
         if trigger.config["dag_ids"] and dag.dag_id not in trigger.config["dag_ids"]:
+            continue
+        existing = _dag_run_check(db, workflow.id, conn, dag.dag_id, dag_run.run_id)
+        if existing is not None:
+            _refresh_dag_run_check(existing, dag_run, conn, dag)
+            continue
+        if dag_run.normalized_state not in trigger.config["states"]:
             continue
         if _started_by(db, workflow, conn, dag.dag_id, dag_run.run_id):
             continue  # its own "Run a DAG" block started this run: do not loop
@@ -393,6 +397,8 @@ def enqueue_for_dag_run(
                 "dag_id": dag.dag_id,
                 "run_id": dag_run.run_id,
                 "state": dag_run.state,
+                "normalized_state": dag_run.normalized_state,
+                "airflow_state": dag_run.state,
                 "environment": str(conn.environment),
             }
         }
@@ -409,6 +415,71 @@ def enqueue_for_dag_run(
         )
         runs.append(run)
     return runs
+
+
+def _dag_run_check(
+    db: Session,
+    workflow_id: uuid.UUID,
+    conn: AirflowConnection,
+    dag_id: str,
+    run_id: str,
+) -> DagRunCheck | None:
+    return db.scalar(
+        select(DagRunCheck)
+        .join(WorkflowRun, WorkflowRun.id == DagRunCheck.workflow_run_id)
+        .where(
+            WorkflowRun.workflow_id == workflow_id,
+            DagRunCheck.connection_id == conn.id,
+            DagRunCheck.dag_id == dag_id,
+            DagRunCheck.run_id == run_id,
+        )
+    )
+
+
+def _refresh_dag_run_check(
+    check: DagRunCheck,
+    dag_run: AirflowDagRun,
+    conn: AirflowConnection,
+    dag: MonitoredDag,
+) -> None:
+    check.run_state = dag_run.state
+    workflow_run = check.workflow_run
+    context = dict(workflow_run.context or {})
+    dag_context = dict(context.get("dag_run") or {})
+    dag_context.update(
+        {
+            "connection_id": str(conn.id),
+            "monitored_dag_id": str(dag.id),
+            "dag_id": dag.dag_id,
+            "run_id": dag_run.run_id,
+            "state": dag_run.normalized_state,
+            "normalized_state": dag_run.normalized_state,
+            "airflow_state": dag_run.state,
+            "environment": str(conn.environment),
+        }
+    )
+    context["dag_run"] = dag_context
+    workflow_run.context = context
+
+
+def refresh_dag_run_checks(
+    db: Session,
+    conn: AirflowConnection,
+    dag: MonitoredDag,
+    dag_run: AirflowDagRun,
+) -> int:
+    """Refresh existing in-progress workflow checks without starting new workflows."""
+    checks = db.scalars(
+        select(DagRunCheck).where(
+            DagRunCheck.connection_id == conn.id,
+            DagRunCheck.monitored_dag_id == dag.id,
+            DagRunCheck.dag_id == dag.dag_id,
+            DagRunCheck.run_id == dag_run.run_id,
+        )
+    ).all()
+    for check in checks:
+        _refresh_dag_run_check(check, dag_run, conn, dag)
+    return len(checks)
 
 
 def _started_by(
@@ -757,7 +828,11 @@ def _advance(db: Session, run: WorkflowRun, now: datetime, max_steps: int) -> No
             step.status = StepStatus.WAITING
             run.status = RunStatus.WAITING
             run.wake_at = result.wait_until
-            _set_queue(run, queue)
+            if result.port:
+                following = graph.next_nodes(node.id, result.port)
+                _set_queue(run, queue[1:] + [n for n in following if n not in done] + [node.id])
+            else:
+                _set_queue(run, queue)
             db.commit()
             return
 
