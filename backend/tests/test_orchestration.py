@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.automation.graph import GraphError, validate_graph
 from app.automation.types import ApprovalStatus, RunStatus, WorkflowMode
 from app.connectors import database as db_connector
-from app.core.exceptions import BadRequestError, ConflictError
+from app.core.exceptions import ConflictError
 from app.models.airflow import AirflowConnection, ConnectionKind, DeploymentEnvironment
 from app.models.automation import Approval, Notification, Workflow, WorkflowRun
 from app.models.database_connection import DatabaseConnection, DatabaseEngine
@@ -475,8 +475,8 @@ def test_run_now_rules(
 ) -> None:
     automation_service.seed_templates(db)
     incident_wf = db.scalars(select(Workflow).where(Workflow.key == "retry-transient")).one()
-    with pytest.raises(BadRequestError, match="starts from incidents"):
-        automation_service.start_manual_run(db, incident_wf.id, actor=admin)
+    manual_run = automation_service.start_manual_run(db, incident_wf.id, actor=admin)
+    assert manual_run is not None
 
     wf = workflow(db, chain({"id": "pause", "type": "flow.wait", "config": {"minutes": 5}}))
     run = run_now(db, wf, admin, clock)

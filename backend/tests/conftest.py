@@ -11,6 +11,7 @@ os.environ.update(
         "ADMIN_EMAIL": "admin@example.com",
         "ADMIN_PASSWORD": "CHANGE_ME",
         "AIRFLOW_ALLOWED_HOSTS": "[]",
+        "DIAGNOSTIC_LLM_ENABLED": "false",
     }
 )
 

@@ -104,6 +104,14 @@ class Settings(BaseSettings):
     DECISION_LLM_BREAKER_FAILURES: int = 3
     DECISION_LLM_BREAKER_COOLDOWN_SECONDS: int = 120
 
+    # Diagnostic LLM (Ollama / Qwen): deep generative analysis for root causes and fixes
+    DIAGNOSTIC_LLM_ENABLED: bool = True
+    DIAGNOSTIC_LLM_URL: str = "http://127.0.0.1:11434"
+    DIAGNOSTIC_LLM_MODEL: str = "qwen3:4b"
+    DIAGNOSTIC_LLM_TIMEOUT_SECONDS: float = 60
+    DIAGNOSTIC_LLM_BREAKER_FAILURES: int = 3
+    DIAGNOSTIC_LLM_BREAKER_COOLDOWN_SECONDS: int = 60
+
     # Workflow assistant: chat in the canvas editor that proposes graphs. It never saves; the
     # user applies a proposal to the canvas and saves as usual. "ollama" stays local;
     # "anthropic" sends the prompt and the current graph to the Claude API.

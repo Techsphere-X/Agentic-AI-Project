@@ -138,7 +138,16 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => {
-    loadDashboardData()
+    let cancelled = false
+    async function load() {
+      if (!cancelled) {
+        await loadDashboardData()
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
   }, [loadDashboardData])
 
   async function handleRunDetection() {

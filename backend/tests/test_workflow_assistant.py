@@ -255,7 +255,10 @@ def test_anthropic_uses_structured_output_and_maps_refusals() -> None:
 # ------------------------------------------------------------------------------- API
 
 
-def test_api_is_off_by_default(client: TestClient, viewer_headers) -> None:
+def test_api_is_off_by_default(
+    client: TestClient, viewer_headers, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(get_settings(), "ASSISTANT_ENABLED", False)
     status = client.get(f"{API}/assistant/status", headers=viewer_headers).json()
     assert status["enabled"] is False and status["provider"] == "ollama"
     body = {"messages": [{"role": "user", "content": "hi"}]}

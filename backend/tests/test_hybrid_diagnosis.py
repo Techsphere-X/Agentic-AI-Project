@@ -16,7 +16,12 @@ from app.core.config import get_settings
 from app.detection.types import EvidenceKind, IncidentSeverity, IncidentType
 from app.diagnosis import hybrid
 from app.diagnosis.hybrid import MLUnavailable
-from app.models.airflow import AirflowConnection, ConnectionKind, DeploymentEnvironment, MonitoredDag
+from app.models.airflow import (
+    AirflowConnection,
+    ConnectionKind,
+    DeploymentEnvironment,
+    MonitoredDag,
+)
 from app.models.incident import Incident, IncidentEvidence
 from app.orchestration.airflow.base import AuthType
 from app.services import diagnosis_service
@@ -58,16 +63,24 @@ def test_specific_regex_category_skips_the_model() -> None:
     client = FakeClient(FakePrediction("AUTH", 0.99))
     payload, model = hybrid.decide([OOM_LOG], client, T)
     assert (payload["category"], payload["source"], payload["ml_status"]) == (
-        "RESOURCE", "regex", "skipped",
+        "RESOURCE",
+        "regex",
+        "skipped",
     )
     assert payload["retryable"] is True
     assert model is None and client.calls == []
 
 
 def test_confident_model_overrides_unknown() -> None:
-    client = FakeClient(FakePrediction("TRANSIENT_NETWORK", 0.93, [
-        {"category": "TRANSIENT_NETWORK", "score": 0.93},
-    ]))
+    client = FakeClient(
+        FakePrediction(
+            "TRANSIENT_NETWORK",
+            0.93,
+            [
+                {"category": "TRANSIENT_NETWORK", "score": 0.93},
+            ],
+        )
+    )
     payload, model = hybrid.decide([UNKNOWN_LOG], client, T)
     assert payload["category"] == "TRANSIENT_NETWORK"
     assert (payload["source"], payload["ml_status"], payload["rule"]) == ("model", "used", "model")
@@ -81,17 +94,23 @@ def test_confident_model_overrides_unknown() -> None:
 def test_confident_model_overrides_generic_code_bug() -> None:
     payload, _ = hybrid.decide([CODE_LOG], FakeClient(FakePrediction("AUTH", 0.9)), T)
     assert (payload["category"], payload["source"], payload["retryable"]) == (
-        "AUTH", "model", False,
+        "AUTH",
+        "model",
+        False,
     )
 
 
 def test_low_confidence_model_is_only_a_suggestion() -> None:
     payload, _ = hybrid.decide([CODE_LOG], FakeClient(FakePrediction("TIMEOUT", 0.6)), T)
     assert (payload["category"], payload["source"], payload["ml_status"]) == (
-        "CODE_BUG", "regex", "used",
+        "CODE_BUG",
+        "regex",
+        "used",
     )
     assert payload["suggestion"] == {
-        "category": "TIMEOUT", "label": "Timeout", "confidence": 0.6,
+        "category": "TIMEOUT",
+        "label": "Timeout",
+        "confidence": 0.6,
     }
 
 
@@ -152,10 +171,17 @@ def test_client_sends_token_and_redacted_logs() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         seen["token"] = request.headers.get("X-ML-Token")
         seen["body"] = json.loads(request.content)
-        return httpx.Response(200, json={
-            "category": "AUTH", "confidence": 0.91, "top_predictions": [],
-            "model_version": "v1", "signal_line": "x", "window": "w",
-        })
+        return httpx.Response(
+            200,
+            json={
+                "category": "AUTH",
+                "confidence": 0.91,
+                "top_predictions": [],
+                "model_version": "v1",
+                "signal_line": "x",
+                "window": "w",
+            },
+        )
 
     result = _client(handler).classify(
         ["connect postgresql://etl:hunter2@db/x password=hunter2 Authorization: Bearer abc.def"]
@@ -236,9 +262,14 @@ def make_incident(db: Session, *logs: str) -> Incident:
     db.add(incident)
     db.flush()
     for i, log in enumerate(logs):
-        db.add(IncidentEvidence(
-            incident_id=incident.id, kind=EvidenceKind.TASK_LOG, source=f"task:{i}", content=log,
-        ))
+        db.add(
+            IncidentEvidence(
+                incident_id=incident.id,
+                kind=EvidenceKind.TASK_LOG,
+                source=f"task:{i}",
+                content=log,
+            )
+        )
     db.commit()
     return incident
 
@@ -260,7 +291,10 @@ def test_diagnose_and_store_persists_and_records_event(db: Session) -> None:
 
 
 def test_operator_correction_wins_and_is_not_overwritten(
-    db: Session, client: TestClient, operator, operator_headers: dict[str, str],
+    db: Session,
+    client: TestClient,
+    operator,
+    operator_headers: dict[str, str],
 ) -> None:
     incident = make_incident(db, CODE_LOG)
     diagnosis_service.diagnose_and_store(db, incident, client=None)
@@ -274,7 +308,9 @@ def test_operator_correction_wins_and_is_not_overwritten(
     assert response.status_code == 200, response.text
     diagnosis = response.json()["diagnosis"]
     assert (diagnosis["category"], diagnosis["source"], diagnosis["retryable"]) == (
-        "AUTH", "operator", False,
+        "AUTH",
+        "operator",
+        False,
     )
     assert diagnosis["note"] == "expired service account"
     assert diagnosis["previous"]["category"] == "CODE_BUG"
@@ -289,7 +325,9 @@ def test_operator_correction_wins_and_is_not_overwritten(
 
 
 def test_override_validation_and_roles(
-    db: Session, client: TestClient, operator_headers: dict[str, str],
+    db: Session,
+    client: TestClient,
+    operator_headers: dict[str, str],
     viewer_headers: dict[str, str],
 ) -> None:
     incident = make_incident(db, CODE_LOG)
@@ -300,7 +338,9 @@ def test_override_validation_and_roles(
 
 
 def test_detail_backfills_regex_only_without_calling_model(
-    db: Session, client: TestClient, viewer_headers: dict[str, str],
+    db: Session,
+    client: TestClient,
+    viewer_headers: dict[str, str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     incident = make_incident(db, OOM_LOG)
@@ -313,10 +353,14 @@ def test_detail_backfills_regex_only_without_calling_model(
     assert response.status_code == 200, response.text
     diagnosis = response.json()["diagnosis"]
     assert (diagnosis["category"], diagnosis["source"], diagnosis["ml_status"]) == (
-        "RESOURCE", "regex", "skipped",
+        "RESOURCE",
+        "regex",
+        "skipped",
     )
     second = client.get(f"/api/v1/incidents/{incident.id}", headers=viewer_headers).json()
-    assert second["diagnosis"]["diagnosed_at"] == diagnosis["diagnosed_at"]  # stored, not recomputed
+    assert (
+        second["diagnosis"]["diagnosed_at"] == diagnosis["diagnosed_at"]
+    )  # stored, not recomputed
     assert events(db, incident).count("diagnosed") == 1
 
 
@@ -324,8 +368,11 @@ def test_detail_backfills_regex_only_without_calling_model(
 
 
 def test_analyzer_regex_only_when_ml_disabled(
-    client: TestClient, viewer_headers: dict[str, str],
+    client: TestClient,
+    viewer_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(get_settings(), "ML_SERVICE_ENABLED", False)
     response = client.post(
         "/api/v1/diagnosis/classify", json={"log": CODE_LOG}, headers=viewer_headers
     )
@@ -336,7 +383,9 @@ def test_analyzer_regex_only_when_ml_disabled(
 
 
 def test_analyzer_uses_model_and_returns_window(
-    client: TestClient, viewer_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch,
+    client: TestClient,
+    viewer_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake = FakeClient(FakePrediction("AUTH", 0.97))
     monkeypatch.setattr(diagnosis_service, "model_client", lambda: fake)

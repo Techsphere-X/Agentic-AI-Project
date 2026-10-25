@@ -51,6 +51,7 @@ const NAV = [
       },
     ],
   },
+  { title: 'Diagnosis', items: [{ to: '/diagnosis/analyzer', label: 'Log analyzer', icon: 'analyzer' }] },
   { title: 'Settings', admin: true, items: [{ to: '/settings/users', label: 'Users', icon: 'users' }] },
 ]
 

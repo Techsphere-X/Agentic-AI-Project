@@ -113,8 +113,20 @@ class DiagnosisOverride(BaseModel):
     note: str | None = Field(default=None, max_length=2000)
 
 
+class LLMAnalysis(BaseModel):
+    summary: str
+    root_cause: str
+    failed_location: str | None = None
+    suggested_fix: str
+    retry_safe: bool = False
+    confidence: float = 0.85
+    model: str = "qwen3:4b"
+    latency_ms: float | None = None
+
+
 class ClassifyLogRequest(BaseModel):
     log: str = Field(min_length=1)
+    use_llm: bool = True
 
 
 class ModelOutput(BaseModel):
@@ -134,6 +146,7 @@ class ClassifyLogResponse(BaseModel):
     ml_status: str
     threshold: float
     window: str | None  # the preprocessed text the model actually saw
+    llm_analysis: LLMAnalysis | None = None
 
 
 class IncidentDetail(IncidentRead):

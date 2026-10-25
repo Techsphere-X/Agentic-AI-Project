@@ -82,7 +82,7 @@ export const incidentsApi = {
 }
 
 export const diagnosisApi = {
-  classifyLog: (log) => api.post('/diagnosis/classify', { log }),
+  classifyLog: (log, useLlm = true) => api.post('/diagnosis/classify', { log, use_llm: useLlm }),
 }
 
 export const detectionApi = {

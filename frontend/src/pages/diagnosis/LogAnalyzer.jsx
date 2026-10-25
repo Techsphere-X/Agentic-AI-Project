@@ -23,6 +23,7 @@ function decisionText(result) {
 
 export default function LogAnalyzer() {
   const [log, setLog] = useState('')
+  const [useLlm, setUseLlm] = useState(true)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -34,7 +35,7 @@ export default function LogAnalyzer() {
     setLoading(true)
     setError(null)
     try {
-      setResult(await diagnosisApi.classifyLog(log))
+      setResult(await diagnosisApi.classifyLog(log, useLlm))
     } catch (err) {
       setError(err.message)
       setResult(null)
@@ -51,8 +52,8 @@ export default function LogAnalyzer() {
         <div>
           <h1>Log analyzer</h1>
           <p className="muted">
-            Paste a task log to see how it would be diagnosed: the regex rules, the model, and the hybrid decision.
-            Nothing is saved.
+            Paste a task log to see how it is diagnosed: regex rules, DistilBERT classification, and deep generative
+            root-cause analysis powered by local Qwen 3:4B. Nothing is saved.
           </p>
         </div>
       </div>
@@ -72,15 +73,25 @@ export default function LogAnalyzer() {
               />
             )}
           </Field>
-          <div className="card-actions">
-            <Button variant="primary" type="submit" loading={loading} disabled={!log.trim() || tooBig}>
-              Analyze
-            </Button>
-            {log && (
-              <Button variant="ghost" onClick={() => { setLog(''); setResult(null) }}>
-                Clear
+          <div className="card-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <Button variant="primary" type="submit" loading={loading} disabled={!log.trim() || tooBig}>
+                {loading ? 'Analyzing with AI…' : 'Analyze'}
               </Button>
-            )}
+              {log && (
+                <Button variant="ghost" onClick={() => { setLog(''); setResult(null) }}>
+                  Clear
+                </Button>
+              )}
+            </div>
+            <label className="small muted" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={useLlm}
+                onChange={(e) => setUseLlm(e.target.checked)}
+              />
+              <span>🧠 Deep analysis with <strong>Qwen 3:4B</strong> (Ollama)</span>
+            </label>
           </div>
         </form>
       </Card>
@@ -89,7 +100,53 @@ export default function LogAnalyzer() {
 
       {result && (
         <>
-          <Card title="Decision" actions={<Badge tone={tone}>{statusText}</Badge>}>
+          {result.llm_analysis && (
+            <Card
+              className="ai-diagnosis-card"
+              title="🧠 Qwen 3:4B Deep AI Diagnosis"
+              actions={
+                <div className="ai-meta-badges">
+                  <Badge tone={result.llm_analysis.retry_safe ? 'success' : 'danger'}>
+                    {result.llm_analysis.retry_safe ? 'Safe to retry' : 'Requires fix before retry'}
+                  </Badge>
+                  <Badge tone="info">{result.llm_analysis.model}</Badge>
+                  {result.llm_analysis.latency_ms && (
+                    <span className="muted small">· {Math.round(result.llm_analysis.latency_ms)} ms</span>
+                  )}
+                </div>
+              }
+            >
+              <div className="ai-analysis-grid">
+                <div className="ai-analysis-section">
+                  <span className="ai-analysis-label">Summary</span>
+                  <p style={{ margin: 0 }}>{result.llm_analysis.summary}</p>
+                </div>
+
+                <div className="ai-analysis-section">
+                  <span className="ai-analysis-label">Root cause</span>
+                  <p style={{ margin: 0 }}>{result.llm_analysis.root_cause}</p>
+                </div>
+
+                {result.llm_analysis.failed_location && (
+                  <div className="ai-analysis-section">
+                    <span className="ai-analysis-label">Failed location</span>
+                    <p style={{ margin: 0 }}>
+                      <code style={{ background: '#1e2430', padding: '0.2rem 0.4rem', borderRadius: '4px' }}>
+                        {result.llm_analysis.failed_location}
+                      </code>
+                    </p>
+                  </div>
+                )}
+
+                <div className="ai-analysis-section">
+                  <span className="ai-analysis-label">Suggested remediation</span>
+                  <div className="ai-code-box">{result.llm_analysis.suggested_fix}</div>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          <Card title="Operational decision" actions={<Badge tone={tone}>{statusText}</Badge>}>
             <DiagnosisSummary diagnosis={result.final} />
             <p className="small muted">{decisionText(result)}</p>
           </Card>
@@ -99,7 +156,7 @@ export default function LogAnalyzer() {
               <DiagnosisSummary diagnosis={result.regex} />
               {result.regex.rule && <p className="muted small mono">rule: {result.regex.rule}</p>}
             </Card>
-            <Card title="Model">
+            <Card title="DistilBERT classifier">
               {result.model ? (
                 <>
                   <div className="cell-title">
@@ -115,13 +172,13 @@ export default function LogAnalyzer() {
                   </p>
                 </>
               ) : (
-                <p className="muted small">No model answer ({statusText.toLowerCase()}).</p>
+                <p className="muted small">No DistilBERT answer ({statusText.toLowerCase()}).</p>
               )}
             </Card>
           </div>
 
           {result.window && (
-            <Card title="What the model saw">
+            <Card title="What DistilBERT saw">
               <p className="muted small">
                 The log after cleanup (timestamps stripped, ids and paths masked) and windowed to the model's
                 512-token limit.
