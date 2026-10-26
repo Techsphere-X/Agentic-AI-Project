@@ -1769,7 +1769,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_api_v1_database",
-      "community": 46,
+      "community": 4,
       "norm_label": "database.py"
     },
     {
@@ -1779,7 +1779,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "backend_app_api_v1_database_test_result",
-      "community": 46,
+      "community": 4,
       "norm_label": "_test_result()"
     },
     {
@@ -1789,7 +1789,7 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "backend_app_api_v1_database_list_connections",
-      "community": 46,
+      "community": 4,
       "norm_label": "list_connections()"
     },
     {
@@ -1799,7 +1799,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_api_v1_database_py_dbsession",
-      "community": 46,
+      "community": 4,
       "norm_label": "dbsession"
     },
     {
@@ -1809,7 +1809,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_api_v1_database_py_vieweruser",
-      "community": 46,
+      "community": 4,
       "norm_label": "vieweruser"
     },
     {
@@ -1819,7 +1819,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_api_v1_database_py_pageparams",
-      "community": 46,
+      "community": 4,
       "norm_label": "pageparams"
     },
     {
@@ -1829,7 +1829,7 @@
       "source_location": "L53",
       "_origin": "ast",
       "id": "backend_app_api_v1_database_create_connection",
-      "community": 46,
+      "community": 4,
       "norm_label": "create_connection()"
     },
     {
@@ -1839,7 +1839,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_api_v1_database_py_adminuser",
-      "community": 46,
+      "community": 4,
       "norm_label": "adminuser"
     },
     {
@@ -1849,7 +1849,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_api_v1_database_py_clientip",
-      "community": 46,
+      "community": 4,
       "norm_label": "clientip"
     },
     {
@@ -1859,7 +1859,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "backend_app_api_v1_database_get_connection",
-      "community": 46,
+      "community": 4,
       "norm_label": "get_connection()"
     },
     {
@@ -1869,7 +1869,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_api_v1_database_py_uuid",
-      "community": 46,
+      "community": 4,
       "norm_label": "uuid"
     },
     {
@@ -1879,7 +1879,7 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "backend_app_api_v1_database_update_connection",
-      "community": 46,
+      "community": 4,
       "norm_label": "update_connection()"
     },
     {
@@ -1889,7 +1889,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "backend_app_api_v1_database_delete_connection",
-      "community": 46,
+      "community": 4,
       "norm_label": "delete_connection()"
     },
     {
@@ -1899,7 +1899,7 @@
       "source_location": "L83",
       "_origin": "ast",
       "id": "backend_app_api_v1_database_test_unsaved_connection",
-      "community": 46,
+      "community": 4,
       "norm_label": "test_unsaved_connection()"
     },
     {
@@ -1909,7 +1909,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_api_v1_database_py_operatoruser",
-      "community": 46,
+      "community": 4,
       "norm_label": "operatoruser"
     },
     {
@@ -1919,7 +1919,7 @@
       "source_location": "L93",
       "_origin": "ast",
       "id": "backend_app_api_v1_database_test_saved_connection",
-      "community": 46,
+      "community": 4,
       "norm_label": "test_saved_connection()"
     },
     {
@@ -2069,7 +2069,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_api_v1_health",
-      "community": 228,
+      "community": 9,
       "norm_label": "health.py"
     },
     {
@@ -2079,7 +2079,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "backend_app_api_v1_health_live",
-      "community": 228,
+      "community": 9,
       "norm_label": "live()"
     },
     {
@@ -2089,7 +2089,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "backend_app_api_v1_health_health",
-      "community": 228,
+      "community": 9,
       "norm_label": "health()"
     },
     {
@@ -2099,7 +2099,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_api_v1_health_py_dbsession",
-      "community": 228,
+      "community": 9,
       "norm_label": "dbsession"
     },
     {
@@ -2109,7 +2109,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_api_v1_health_py_vieweruser",
-      "community": 228,
+      "community": 9,
       "norm_label": "vieweruser"
     },
     {
@@ -2439,7 +2439,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "protocol",
-      "community": 192,
+      "community": 191,
       "norm_label": "protocol"
     },
     {
@@ -3119,7 +3119,7 @@
       "source_location": "L524",
       "_origin": "ast",
       "id": "backend_app_automation_graph_nodetype",
-      "community": 108,
+      "community": 12,
       "norm_label": "nodetype"
     },
     {
@@ -3139,7 +3139,7 @@
       "source_location": "L845",
       "_origin": "ast",
       "id": "backend_app_automation_graph_grapherror",
-      "community": 90,
+      "community": 18,
       "norm_label": "grapherror"
     },
     {
@@ -3159,7 +3159,7 @@
       "source_location": "L846",
       "_origin": "ast",
       "id": "backend_app_automation_graph_grapherror_init",
-      "community": 90,
+      "community": 18,
       "norm_label": ".__init__()"
     },
     {
@@ -3249,7 +3249,7 @@
       "source_location": "L1051",
       "_origin": "ast",
       "id": "backend_app_automation_graph_to_raw",
-      "community": 83,
+      "community": 90,
       "norm_label": "to_raw()"
     },
     {
@@ -3309,7 +3309,7 @@
       "source_location": "L1052",
       "_origin": "ast",
       "id": "backend_app_automation_graph_rationale_1052",
-      "community": 83,
+      "community": 90,
       "norm_label": "serialize a validated graph (defaults applied) back to json form."
     },
     {
@@ -3489,7 +3489,7 @@
       "source_location": "L203",
       "_origin": "ast",
       "id": "backend_app_automation_remediation_advisorunavailable",
-      "community": 32,
+      "community": 47,
       "norm_label": "advisorunavailable"
     },
     {
@@ -3499,7 +3499,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "exception",
-      "community": 32,
+      "community": 94,
       "norm_label": "exception"
     },
     {
@@ -3579,7 +3579,7 @@
       "source_location": "L204",
       "_origin": "ast",
       "id": "backend_app_automation_remediation_rationale_204",
-      "community": 32,
+      "community": 47,
       "norm_label": "the model could not be asked or gave no usable answer (down, slow, bad json, bre"
     },
     {
@@ -3979,7 +3979,7 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "backend_app_automation_types_triggerevent",
-      "community": 233,
+      "community": 2,
       "norm_label": "triggerevent"
     },
     {
@@ -4029,7 +4029,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_connectors_assistant_llm",
-      "community": 18,
+      "community": 44,
       "norm_label": "assistant_llm.py"
     },
     {
@@ -4039,7 +4039,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "backend_app_connectors_assistant_llm_assistantunavailable",
-      "community": 18,
+      "community": 44,
       "norm_label": "assistantunavailable"
     },
     {
@@ -4049,7 +4049,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "backend_app_connectors_assistant_llm_breaker",
-      "community": 18,
+      "community": 44,
       "norm_label": "_breaker()"
     },
     {
@@ -4059,7 +4059,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_connectors_assistant_llm_py_settings",
-      "community": 18,
+      "community": 44,
       "norm_label": "settings"
     },
     {
@@ -4069,7 +4069,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "backend_app_connectors_assistant_llm_parse_object",
-      "community": 18,
+      "community": 44,
       "norm_label": "_parse_object()"
     },
     {
@@ -4079,7 +4079,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_connectors_assistant_llm_py_any",
-      "community": 18,
+      "community": 44,
       "norm_label": "any"
     },
     {
@@ -4089,7 +4089,7 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "backend_app_connectors_assistant_llm_ollamaassistant",
-      "community": 18,
+      "community": 44,
       "norm_label": "ollamaassistant"
     },
     {
@@ -4099,7 +4099,7 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "backend_app_connectors_assistant_llm_ollamaassistant_init",
-      "community": 18,
+      "community": 44,
       "norm_label": ".__init__()"
     },
     {
@@ -4109,7 +4109,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_connectors_assistant_llm_py_basetransport",
-      "community": 18,
+      "community": 44,
       "norm_label": "basetransport"
     },
     {
@@ -4119,7 +4119,7 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "backend_app_connectors_assistant_llm_ollamaassistant_complete_json",
-      "community": 18,
+      "community": 44,
       "norm_label": ".complete_json()"
     },
     {
@@ -4129,7 +4129,7 @@
       "source_location": "L109",
       "_origin": "ast",
       "id": "backend_app_connectors_assistant_llm_ollamaassistant_close",
-      "community": 18,
+      "community": 44,
       "norm_label": ".close()"
     },
     {
@@ -4139,7 +4139,7 @@
       "source_location": "L113",
       "_origin": "ast",
       "id": "backend_app_connectors_assistant_llm_anthropicassistant",
-      "community": 18,
+      "community": 44,
       "norm_label": "anthropicassistant"
     },
     {
@@ -4149,7 +4149,7 @@
       "source_location": "L116",
       "_origin": "ast",
       "id": "backend_app_connectors_assistant_llm_anthropicassistant_init",
-      "community": 18,
+      "community": 44,
       "norm_label": ".__init__()"
     },
     {
@@ -4159,7 +4159,7 @@
       "source_location": "L133",
       "_origin": "ast",
       "id": "backend_app_connectors_assistant_llm_anthropicassistant_complete_json",
-      "community": 18,
+      "community": 44,
       "norm_label": ".complete_json()"
     },
     {
@@ -4169,7 +4169,7 @@
       "source_location": "L185",
       "_origin": "ast",
       "id": "backend_app_connectors_assistant_llm_model_name",
-      "community": 18,
+      "community": 44,
       "norm_label": "model_name()"
     },
     {
@@ -4179,7 +4179,7 @@
       "source_location": "L192",
       "_origin": "ast",
       "id": "backend_app_connectors_assistant_llm_get_assistant_llm",
-      "community": 18,
+      "community": 44,
       "norm_label": "get_assistant_llm()"
     },
     {
@@ -4189,7 +4189,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_connectors_assistant_llm_rationale_1",
-      "community": 18,
+      "community": 44,
       "norm_label": "llm clients for the workflow assistant (chat in the canvas editor).  sync on p"
     },
     {
@@ -4199,7 +4199,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "backend_app_connectors_assistant_llm_rationale_33",
-      "community": 18,
+      "community": 44,
       "norm_label": "the model could not answer (disabled, unreachable, refused, or returned bad json"
     },
     {
@@ -4209,7 +4209,7 @@
       "source_location": "L193",
       "_origin": "ast",
       "id": "backend_app_connectors_assistant_llm_rationale_193",
-      "community": 18,
+      "community": 44,
       "norm_label": "process-wide client so the breaker state is shared by every request."
     },
     {
@@ -4219,7 +4219,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_connectors_database",
-      "community": 226,
+      "community": 4,
       "norm_label": "database.py"
     },
     {
@@ -4229,7 +4229,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "backend_app_connectors_database_dbtarget",
-      "community": 226,
+      "community": 4,
       "norm_label": "dbtarget"
     },
     {
@@ -4259,7 +4259,7 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "backend_app_connectors_database_url",
-      "community": 226,
+      "community": 4,
       "norm_label": "_url()"
     },
     {
@@ -4269,7 +4269,7 @@
       "source_location": "L92",
       "_origin": "ast",
       "id": "backend_app_connectors_database_classify_error",
-      "community": 226,
+      "community": 4,
       "norm_label": "classify_error()"
     },
     {
@@ -4279,7 +4279,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_connectors_database_py_exception",
-      "community": 226,
+      "community": 4,
       "norm_label": "exception"
     },
     {
@@ -4289,7 +4289,7 @@
       "source_location": "L102",
       "_origin": "ast",
       "id": "backend_app_connectors_database_probe",
-      "community": 226,
+      "community": 4,
       "norm_label": "probe()"
     },
     {
@@ -4299,7 +4299,7 @@
       "source_location": "L130",
       "_origin": "ast",
       "id": "backend_app_connectors_database_create_engine",
-      "community": 226,
+      "community": 4,
       "norm_label": "_create_engine()"
     },
     {
@@ -4309,7 +4309,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_connectors_database_py_engine",
-      "community": 226,
+      "community": 4,
       "norm_label": "engine"
     },
     {
@@ -4319,7 +4319,7 @@
       "source_location": "L137",
       "_origin": "ast",
       "id": "backend_app_connectors_database_sqlerror",
-      "community": 226,
+      "community": 4,
       "norm_label": "sqlerror"
     },
     {
@@ -4329,7 +4329,7 @@
       "source_location": "L142",
       "_origin": "ast",
       "id": "backend_app_connectors_database_sqlresult",
-      "community": 100,
+      "community": 4,
       "norm_label": "sqlresult"
     },
     {
@@ -4339,7 +4339,7 @@
       "source_location": "L150",
       "_origin": "ast",
       "id": "backend_app_connectors_database_jsonable",
-      "community": 226,
+      "community": 4,
       "norm_label": "_jsonable()"
     },
     {
@@ -4349,7 +4349,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_connectors_database_py_any",
-      "community": 226,
+      "community": 4,
       "norm_label": "any"
     },
     {
@@ -4359,7 +4359,7 @@
       "source_location": "L162",
       "_origin": "ast",
       "id": "backend_app_connectors_database_session_setup",
-      "community": 226,
+      "community": 4,
       "norm_label": "_session_setup()"
     },
     {
@@ -4369,7 +4369,7 @@
       "source_location": "L177",
       "_origin": "ast",
       "id": "backend_app_connectors_database_execute",
-      "community": 226,
+      "community": 4,
       "norm_label": "execute()"
     },
     {
@@ -4379,7 +4379,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_connectors_database_rationale_1",
-      "community": 226,
+      "community": 4,
       "norm_label": "database access for the connection catalog: connectivity probes and running sql."
     },
     {
@@ -4389,7 +4389,7 @@
       "source_location": "L138",
       "_origin": "ast",
       "id": "backend_app_connectors_database_rationale_138",
-      "community": 226,
+      "community": 4,
       "norm_label": "the statement could not run (connection, permission, syntax, timeout, ...)."
     },
     {
@@ -4399,7 +4399,7 @@
       "source_location": "L163",
       "_origin": "ast",
       "id": "backend_app_connectors_database_rationale_163",
-      "community": 226,
+      "community": 4,
       "norm_label": "per-dialect read-only mode and statement timeout for this one transaction."
     },
     {
@@ -4409,7 +4409,7 @@
       "source_location": "L180",
       "_origin": "ast",
       "id": "backend_app_connectors_database_rationale_180",
-      "community": 226,
+      "community": 4,
       "norm_label": "run one sql statement in its own transaction and commit it (unless read-only)."
     },
     {
@@ -4469,7 +4469,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "backend_app_connectors_decision_llm_decisionllm",
-      "community": 32,
+      "community": 47,
       "norm_label": "decisionllm"
     },
     {
@@ -4479,7 +4479,7 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "backend_app_connectors_decision_llm_decisionllm_init",
-      "community": 43,
+      "community": 195,
       "norm_label": ".__init__()"
     },
     {
@@ -4489,7 +4489,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_connectors_decision_llm_py_settings",
-      "community": 43,
+      "community": 195,
       "norm_label": "settings"
     },
     {
@@ -4499,7 +4499,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_connectors_decision_llm_py_basetransport",
-      "community": 43,
+      "community": 195,
       "norm_label": "basetransport"
     },
     {
@@ -4519,7 +4519,7 @@
       "source_location": "L138",
       "_origin": "ast",
       "id": "backend_app_connectors_decision_llm_decisionllm_close",
-      "community": 32,
+      "community": 47,
       "norm_label": ".close()"
     },
     {
@@ -4529,7 +4529,7 @@
       "source_location": "L143",
       "_origin": "ast",
       "id": "backend_app_connectors_decision_llm_get_decision_llm",
-      "community": 32,
+      "community": 47,
       "norm_label": "get_decision_llm()"
     },
     {
@@ -4569,7 +4569,7 @@
       "source_location": "L144",
       "_origin": "ast",
       "id": "backend_app_connectors_decision_llm_rationale_144",
-      "community": 32,
+      "community": 47,
       "norm_label": "process-wide client so the breaker state is shared by every workflow run."
     },
     {
@@ -4579,7 +4579,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_connectors_diagnostic_llm",
-      "community": 231,
+      "community": 79,
       "norm_label": "diagnostic_llm.py"
     },
     {
@@ -4599,7 +4599,7 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "backend_app_connectors_diagnostic_llm_diagnosticllm",
-      "community": 231,
+      "community": 79,
       "norm_label": "diagnosticllm"
     },
     {
@@ -4609,7 +4609,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "backend_app_connectors_diagnostic_llm_diagnosticllm_init",
-      "community": 231,
+      "community": 79,
       "norm_label": ".__init__()"
     },
     {
@@ -4619,7 +4619,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_connectors_diagnostic_llm_py_settings",
-      "community": 231,
+      "community": 79,
       "norm_label": "settings"
     },
     {
@@ -4629,7 +4629,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_connectors_diagnostic_llm_py_basetransport",
-      "community": 231,
+      "community": 79,
       "norm_label": "basetransport"
     },
     {
@@ -4639,7 +4639,7 @@
       "source_location": "L82",
       "_origin": "ast",
       "id": "backend_app_connectors_diagnostic_llm_diagnosticllm_analyze",
-      "community": 231,
+      "community": 79,
       "norm_label": ".analyze()"
     },
     {
@@ -4649,7 +4649,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_connectors_diagnostic_llm_py_any",
-      "community": 231,
+      "community": 79,
       "norm_label": "any"
     },
     {
@@ -4659,7 +4659,7 @@
       "source_location": "L154",
       "_origin": "ast",
       "id": "backend_app_connectors_diagnostic_llm_get_diagnostic_llm",
-      "community": 231,
+      "community": 79,
       "norm_label": "get_diagnostic_llm()"
     },
     {
@@ -4669,7 +4669,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_connectors_diagnostic_llm_rationale_1",
-      "community": 231,
+      "community": 79,
       "norm_label": "diagnostic llm connector (ollama / qwen 3:4b) for deep generative log analysis."
     },
     {
@@ -4689,7 +4689,7 @@
       "source_location": "L83",
       "_origin": "ast",
       "id": "backend_app_connectors_diagnostic_llm_rationale_83",
-      "community": 231,
+      "community": 79,
       "norm_label": "run deep generative analysis on the log. returns dict on success, none on failur"
     },
     {
@@ -4699,7 +4699,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_connectors_ml_client",
-      "community": 43,
+      "community": 195,
       "norm_label": "ml_client.py"
     },
     {
@@ -4709,7 +4709,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "backend_app_connectors_ml_client_modelresult",
-      "community": 43,
+      "community": 195,
       "norm_label": "modelresult"
     },
     {
@@ -4719,7 +4719,7 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "backend_app_connectors_ml_client_redact",
-      "community": 47,
+      "community": 195,
       "norm_label": "redact()"
     },
     {
@@ -4729,7 +4729,7 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "backend_app_connectors_ml_client_fit",
-      "community": 43,
+      "community": 195,
       "norm_label": "_fit()"
     },
     {
@@ -4739,7 +4739,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "backend_app_connectors_ml_client_circuitbreaker",
-      "community": 43,
+      "community": 195,
       "norm_label": "circuitbreaker"
     },
     {
@@ -4749,7 +4749,7 @@
       "source_location": "L69",
       "_origin": "ast",
       "id": "backend_app_connectors_ml_client_circuitbreaker_is_open",
-      "community": 43,
+      "community": 195,
       "norm_label": ".is_open()"
     },
     {
@@ -4759,7 +4759,7 @@
       "source_location": "L72",
       "_origin": "ast",
       "id": "backend_app_connectors_ml_client_circuitbreaker_success",
-      "community": 43,
+      "community": 195,
       "norm_label": ".success()"
     },
     {
@@ -4769,7 +4769,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "backend_app_connectors_ml_client_circuitbreaker_failure",
-      "community": 43,
+      "community": 195,
       "norm_label": ".failure()"
     },
     {
@@ -4779,7 +4779,7 @@
       "source_location": "L91",
       "_origin": "ast",
       "id": "backend_app_connectors_ml_client_mlclient",
-      "community": 43,
+      "community": 195,
       "norm_label": "mlclient"
     },
     {
@@ -4789,7 +4789,7 @@
       "source_location": "L92",
       "_origin": "ast",
       "id": "backend_app_connectors_ml_client_mlclient_init",
-      "community": 43,
+      "community": 195,
       "norm_label": ".__init__()"
     },
     {
@@ -4799,7 +4799,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_connectors_ml_client_py_settings",
-      "community": 43,
+      "community": 195,
       "norm_label": "settings"
     },
     {
@@ -4809,7 +4809,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_connectors_ml_client_py_basetransport",
-      "community": 43,
+      "community": 195,
       "norm_label": "basetransport"
     },
     {
@@ -4819,7 +4819,7 @@
       "source_location": "L110",
       "_origin": "ast",
       "id": "backend_app_connectors_ml_client_mlclient_classify",
-      "community": 43,
+      "community": 195,
       "norm_label": ".classify()"
     },
     {
@@ -4829,7 +4829,7 @@
       "source_location": "L138",
       "_origin": "ast",
       "id": "backend_app_connectors_ml_client_mlclient_close",
-      "community": 43,
+      "community": 195,
       "norm_label": ".close()"
     },
     {
@@ -4849,7 +4849,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_connectors_ml_client_rationale_1",
-      "community": 43,
+      "community": 195,
       "norm_label": "client for the ml classification service (ml_service), with a circuit breaker."
     },
     {
@@ -4859,7 +4859,7 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "backend_app_connectors_ml_client_rationale_44",
-      "community": 47,
+      "community": 195,
       "norm_label": "secrets out: password=/token=/api keys, authorization/bearer values, url credent"
     },
     {
@@ -4869,7 +4869,7 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "backend_app_connectors_ml_client_rationale_49",
-      "community": 43,
+      "community": 195,
       "norm_label": "trim each log to an equal share of the byte budget, keeping its tail (where erro"
     },
     {
@@ -4889,7 +4889,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_connectors_notify",
-      "community": 186,
+      "community": 94,
       "norm_label": "notify.py"
     },
     {
@@ -4899,7 +4899,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "backend_app_connectors_notify_notifyerror",
-      "community": 186,
+      "community": 94,
       "norm_label": "notifyerror"
     },
     {
@@ -4909,7 +4909,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "backend_app_connectors_notify_message",
-      "community": 186,
+      "community": 94,
       "norm_label": "message"
     },
     {
@@ -4919,7 +4919,7 @@
       "source_location": "L38",
       "_origin": "ast",
       "id": "backend_app_connectors_notify_check_webhook_url",
-      "community": 186,
+      "community": 94,
       "norm_label": "check_webhook_url()"
     },
     {
@@ -4929,7 +4929,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "backend_app_connectors_notify_masked_url",
-      "community": 186,
+      "community": 94,
       "norm_label": "masked_url()"
     },
     {
@@ -4939,7 +4939,7 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "backend_app_connectors_notify_post",
-      "community": 186,
+      "community": 94,
       "norm_label": "_post()"
     },
     {
@@ -4949,7 +4949,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_connectors_notify_py_any",
-      "community": 186,
+      "community": 94,
       "norm_label": "any"
     },
     {
@@ -4959,7 +4959,7 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "backend_app_connectors_notify_slack_payload",
-      "community": 186,
+      "community": 94,
       "norm_label": "slack_payload()"
     },
     {
@@ -4969,7 +4969,7 @@
       "source_location": "L109",
       "_origin": "ast",
       "id": "backend_app_connectors_notify_teams_payload",
-      "community": 186,
+      "community": 94,
       "norm_label": "teams_payload()"
     },
     {
@@ -4979,7 +4979,7 @@
       "source_location": "L141",
       "_origin": "ast",
       "id": "backend_app_connectors_notify_webhook_payload",
-      "community": 186,
+      "community": 94,
       "norm_label": "webhook_payload()"
     },
     {
@@ -4989,7 +4989,7 @@
       "source_location": "L151",
       "_origin": "ast",
       "id": "backend_app_connectors_notify_send_http",
-      "community": 186,
+      "community": 94,
       "norm_label": "send_http()"
     },
     {
@@ -4999,7 +4999,7 @@
       "source_location": "L166",
       "_origin": "ast",
       "id": "backend_app_connectors_notify_smtp",
-      "community": 186,
+      "community": 94,
       "norm_label": "_smtp()"
     },
     {
@@ -5009,7 +5009,7 @@
       "source_location": "L174",
       "_origin": "ast",
       "id": "backend_app_connectors_notify_send_email",
-      "community": 186,
+      "community": 94,
       "norm_label": "send_email()"
     },
     {
@@ -5019,7 +5019,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_connectors_notify_rationale_1",
-      "community": 186,
+      "community": 94,
       "norm_label": "deliver messages to people: email (smtp), slack, microsoft teams and generic web"
     },
     {
@@ -5029,7 +5029,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "backend_app_connectors_notify_rationale_22",
-      "community": 186,
+      "community": 94,
       "norm_label": "the message could not be delivered."
     },
     {
@@ -5039,7 +5039,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "backend_app_connectors_notify_rationale_39",
-      "community": 186,
+      "community": 94,
       "norm_label": "validate a slack/teams/webhook url; returns it. raises notifyerror."
     },
     {
@@ -5049,7 +5049,7 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "backend_app_connectors_notify_rationale_55",
-      "community": 186,
+      "community": 94,
       "norm_label": "hooks.slack.com/... : enough to recognise it, without the secret path."
     },
     {
@@ -5059,7 +5059,7 @@
       "source_location": "L110",
       "_origin": "ast",
       "id": "backend_app_connectors_notify_rationale_110",
-      "community": 186,
+      "community": 94,
       "norm_label": "an adaptive card, the format teams \"workflows\" webhooks accept."
     },
     {
@@ -5079,7 +5079,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_core_config",
-      "community": 32,
+      "community": 44,
       "norm_label": "config.py"
     },
     {
@@ -5089,7 +5089,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "backend_app_core_config_settings",
-      "community": 32,
+      "community": 44,
       "norm_label": "settings"
     },
     {
@@ -5099,7 +5099,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "basesettings",
-      "community": 32,
+      "community": 44,
       "norm_label": "basesettings"
     },
     {
@@ -5109,7 +5109,7 @@
       "source_location": "L130",
       "_origin": "ast",
       "id": "backend_app_core_config_settings_check_production_safety",
-      "community": 32,
+      "community": 44,
       "norm_label": "._check_production_safety()"
     },
     {
@@ -5119,7 +5119,7 @@
       "source_location": "L150",
       "_origin": "ast",
       "id": "backend_app_core_config_settings_is_development",
-      "community": 32,
+      "community": 44,
       "norm_label": ".is_development()"
     },
     {
@@ -5129,7 +5129,7 @@
       "source_location": "L154",
       "_origin": "ast",
       "id": "backend_app_core_config_settings_jwt_secret",
-      "community": 32,
+      "community": 44,
       "norm_label": ".jwt_secret()"
     },
     {
@@ -5139,7 +5139,7 @@
       "source_location": "L161",
       "_origin": "ast",
       "id": "backend_app_core_config_settings_encryption_keys",
-      "community": 32,
+      "community": 44,
       "norm_label": ".encryption_keys()"
     },
     {
@@ -5149,7 +5149,7 @@
       "source_location": "L169",
       "_origin": "ast",
       "id": "backend_app_core_config_get_settings",
-      "community": 79,
+      "community": 2,
       "norm_label": "get_settings()"
     },
     {
@@ -5159,7 +5159,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_core_crypto",
-      "community": 208,
+      "community": 94,
       "norm_label": "crypto.py"
     },
     {
@@ -5169,7 +5169,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "backend_app_core_crypto_secretdecryptionerror",
-      "community": 208,
+      "community": 94,
       "norm_label": "secretdecryptionerror"
     },
     {
@@ -5179,7 +5179,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "backend_app_core_crypto_fernet",
-      "community": 208,
+      "community": 94,
       "norm_label": "_fernet()"
     },
     {
@@ -5189,7 +5189,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "multifernet",
-      "community": 208,
+      "community": 94,
       "norm_label": "multifernet"
     },
     {
@@ -5199,7 +5199,7 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "backend_app_core_crypto_encrypt_secret",
-      "community": 208,
+      "community": 94,
       "norm_label": "encrypt_secret()"
     },
     {
@@ -5209,7 +5209,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "backend_app_core_crypto_decrypt_secret",
-      "community": 208,
+      "community": 94,
       "norm_label": "decrypt_secret()"
     },
     {
@@ -5219,7 +5219,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "backend_app_core_crypto_rotate_secret",
-      "community": 208,
+      "community": 94,
       "norm_label": "rotate_secret()"
     },
     {
@@ -5229,7 +5229,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "backend_app_core_crypto_rationale_9",
-      "community": 208,
+      "community": 94,
       "norm_label": "stored secret cannot be decrypted with any configured encryption_key."
     },
     {
@@ -5239,7 +5239,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "backend_app_core_crypto_rationale_32",
-      "community": 208,
+      "community": 94,
       "norm_label": "re-encrypt with the primary (first) key."
     },
     {
@@ -5459,7 +5459,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "backend_app_core_exceptions_badrequesterror",
-      "community": 82,
+      "community": 37,
       "norm_label": "badrequesterror"
     },
     {
@@ -5829,7 +5829,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "backend_app_db_base_utcnow",
-      "community": 229,
+      "community": 208,
       "norm_label": "utcnow()"
     },
     {
@@ -5909,7 +5909,7 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "backend_app_db_base_timestampmixin",
-      "community": 205,
+      "community": 214,
       "norm_label": "timestampmixin"
     },
     {
@@ -5929,7 +5929,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_db_init_db",
-      "community": 21,
+      "community": 188,
       "norm_label": "init_db.py"
     },
     {
@@ -5939,7 +5939,7 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "backend_app_db_init_db_bootstrap_admin",
-      "community": 21,
+      "community": 188,
       "norm_label": "bootstrap_admin()"
     },
     {
@@ -5949,7 +5949,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_db_init_db_py_session",
-      "community": 21,
+      "community": 188,
       "norm_label": "session"
     },
     {
@@ -5959,7 +5959,7 @@
       "source_location": "L53",
       "_origin": "ast",
       "id": "backend_app_db_init_db_run_bootstrap",
-      "community": 21,
+      "community": 188,
       "norm_label": "run_bootstrap()"
     },
     {
@@ -5969,7 +5969,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_db_init_db_py_sessionmaker",
-      "community": 21,
+      "community": 188,
       "norm_label": "sessionmaker"
     },
     {
@@ -5979,7 +5979,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_db_init_db_rationale_1",
-      "community": 21,
+      "community": 188,
       "norm_label": "first-run bootstrap: create the initial admin when the users table is empty, and"
     },
     {
@@ -6569,7 +6569,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_detection_severity",
-      "community": 201,
+      "community": 96,
       "norm_label": "severity.py"
     },
     {
@@ -6579,7 +6579,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "backend_app_detection_severity_severityscore",
-      "community": 201,
+      "community": 96,
       "norm_label": "severityscore"
     },
     {
@@ -6589,7 +6589,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "backend_app_detection_severity_score",
-      "community": 201,
+      "community": 96,
       "norm_label": "score()"
     },
     {
@@ -6599,7 +6599,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "backend_app_detection_severity_max_severity",
-      "community": 201,
+      "community": 96,
       "norm_label": "max_severity()"
     },
     {
@@ -6609,7 +6609,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_detection_severity_rationale_1",
-      "community": 201,
+      "community": 96,
       "norm_label": "deterministic, explainable severity scoring."
     },
     {
@@ -6619,7 +6619,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_detection_types",
-      "community": 201,
+      "community": 96,
       "norm_label": "types.py"
     },
     {
@@ -6629,7 +6629,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "backend_app_detection_types_incidenttype",
-      "community": 201,
+      "community": 96,
       "norm_label": "incidenttype"
     },
     {
@@ -6639,7 +6639,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "backend_app_detection_types_incidentseverity",
-      "community": 201,
+      "community": 96,
       "norm_label": "incidentseverity"
     },
     {
@@ -6649,7 +6649,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "backend_app_detection_types_incidentseverity_rank",
-      "community": 201,
+      "community": 96,
       "norm_label": ".rank()"
     },
     {
@@ -6659,7 +6659,7 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "backend_app_detection_types_incidentstatus",
-      "community": 201,
+      "community": 96,
       "norm_label": "incidentstatus"
     },
     {
@@ -6669,7 +6669,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "backend_app_detection_types_incidentresolution",
-      "community": 201,
+      "community": 96,
       "norm_label": "incidentresolution"
     },
     {
@@ -6679,7 +6679,7 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "backend_app_detection_types_evidencekind",
-      "community": 201,
+      "community": 96,
       "norm_label": "evidencekind"
     },
     {
@@ -6689,7 +6689,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_detection_types_rationale_1",
-      "community": 201,
+      "community": 96,
       "norm_label": "detection vocabulary shared by rules, models and api (no framework imports)."
     },
     {
@@ -6709,7 +6709,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_diagnosis_hybrid",
-      "community": 192,
+      "community": 191,
       "norm_label": "hybrid.py"
     },
     {
@@ -6719,7 +6719,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "backend_app_diagnosis_hybrid_mlunavailable",
-      "community": 43,
+      "community": 195,
       "norm_label": "mlunavailable"
     },
     {
@@ -6729,7 +6729,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "backend_app_diagnosis_hybrid_modelprediction",
-      "community": 192,
+      "community": 191,
       "norm_label": "modelprediction"
     },
     {
@@ -6739,7 +6739,7 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "backend_app_diagnosis_hybrid_modelclassifier",
-      "community": 192,
+      "community": 191,
       "norm_label": "modelclassifier"
     },
     {
@@ -6749,7 +6749,7 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "backend_app_diagnosis_hybrid_modelclassifier_classify",
-      "community": 192,
+      "community": 191,
       "norm_label": ".classify()"
     },
     {
@@ -6759,7 +6759,7 @@
       "source_location": "L50",
       "_origin": "ast",
       "id": "backend_app_diagnosis_hybrid_payload",
-      "community": 192,
+      "community": 191,
       "norm_label": "_payload()"
     },
     {
@@ -6769,7 +6769,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "source",
-      "community": 192,
+      "community": 191,
       "norm_label": "source"
     },
     {
@@ -6779,7 +6779,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "mlstatus",
-      "community": 192,
+      "community": 191,
       "norm_label": "mlstatus"
     },
     {
@@ -6789,7 +6789,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_diagnosis_hybrid_py_any",
-      "community": 192,
+      "community": 191,
       "norm_label": "any"
     },
     {
@@ -6799,7 +6799,7 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "backend_app_diagnosis_hybrid_category",
-      "community": 192,
+      "community": 191,
       "norm_label": "_category()"
     },
     {
@@ -6809,7 +6809,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "backend_app_diagnosis_hybrid_decide",
-      "community": 192,
+      "community": 191,
       "norm_label": "decide()"
     },
     {
@@ -6819,7 +6819,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_diagnosis_hybrid_rationale_1",
-      "community": 192,
+      "community": 191,
       "norm_label": "hybrid diagnosis: regex first, the ml model only where regex is weak (aiplan1 \u00a73"
     },
     {
@@ -6829,7 +6829,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "backend_app_diagnosis_hybrid_rationale_33",
-      "community": 43,
+      "community": 195,
       "norm_label": "the model could not be consulted (down, slow, not ready, breaker open)."
     },
     {
@@ -6839,7 +6839,7 @@
       "source_location": "L84",
       "_origin": "ast",
       "id": "backend_app_diagnosis_hybrid_rationale_84",
-      "community": 192,
+      "community": 191,
       "norm_label": "return (stored diagnosis payload, raw model prediction or none)."
     },
     {
@@ -6849,7 +6849,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_diagnosis_log_classifier",
-      "community": 188,
+      "community": 191,
       "norm_label": "log_classifier.py"
     },
     {
@@ -6869,7 +6869,7 @@
       "source_location": "L53",
       "_origin": "ast",
       "id": "backend_app_diagnosis_log_classifier_rule",
-      "community": 188,
+      "community": 191,
       "norm_label": "_rule"
     },
     {
@@ -6879,7 +6879,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "backend_app_diagnosis_log_classifier_status",
-      "community": 188,
+      "community": 191,
       "norm_label": "_status()"
     },
     {
@@ -6889,7 +6889,7 @@
       "source_location": "L193",
       "_origin": "ast",
       "id": "backend_app_diagnosis_log_classifier_diagnosis",
-      "community": 188,
+      "community": 191,
       "norm_label": "diagnosis"
     },
     {
@@ -6899,7 +6899,7 @@
       "source_location": "L201",
       "_origin": "ast",
       "id": "backend_app_diagnosis_log_classifier_diagnosis_as_dict",
-      "community": 188,
+      "community": 191,
       "norm_label": ".as_dict()"
     },
     {
@@ -6909,7 +6909,7 @@
       "source_location": "L205",
       "_origin": "ast",
       "id": "backend_app_diagnosis_log_classifier_unknown",
-      "community": 188,
+      "community": 191,
       "norm_label": "_unknown()"
     },
     {
@@ -6919,7 +6919,7 @@
       "source_location": "L215",
       "_origin": "ast",
       "id": "backend_app_diagnosis_log_classifier_line_at",
-      "community": 188,
+      "community": 191,
       "norm_label": "_line_at()"
     },
     {
@@ -6929,7 +6929,7 @@
       "source_location": "L222",
       "_origin": "ast",
       "id": "backend_app_diagnosis_log_classifier_signal_text",
-      "community": 188,
+      "community": 191,
       "norm_label": "_signal_text()"
     },
     {
@@ -6939,7 +6939,7 @@
       "source_location": "L251",
       "_origin": "ast",
       "id": "backend_app_diagnosis_log_classifier_classify",
-      "community": 188,
+      "community": 191,
       "norm_label": "classify()"
     },
     {
@@ -6949,7 +6949,7 @@
       "source_location": "L266",
       "_origin": "ast",
       "id": "backend_app_diagnosis_log_classifier_classify_logs",
-      "community": 188,
+      "community": 191,
       "norm_label": "classify_logs()"
     },
     {
@@ -6959,7 +6959,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_diagnosis_log_classifier_rationale_1",
-      "community": 188,
+      "community": 191,
       "norm_label": "deterministic failure classification from task log text.  pure: no database, h"
     },
     {
@@ -6969,7 +6969,7 @@
       "source_location": "L65",
       "_origin": "ast",
       "id": "backend_app_diagnosis_log_classifier_rationale_65",
-      "community": 188,
+      "community": 191,
       "norm_label": "an http status code as a standalone number, never part of a timestamp or a longe"
     },
     {
@@ -6979,7 +6979,7 @@
       "source_location": "L223",
       "_origin": "ast",
       "id": "backend_app_diagnosis_log_classifier_rationale_223",
-      "community": 188,
+      "community": 191,
       "norm_label": "the log without lines that never carry the cause (see the module docstring)."
     },
     {
@@ -6989,7 +6989,7 @@
       "source_location": "L252",
       "_origin": "ast",
       "id": "backend_app_diagnosis_log_classifier_rationale_252",
-      "community": 188,
+      "community": 191,
       "norm_label": "classify a failure from its log text (first matching rule wins)."
     },
     {
@@ -6999,7 +6999,7 @@
       "source_location": "L267",
       "_origin": "ast",
       "id": "backend_app_diagnosis_log_classifier_rationale_267",
-      "community": 188,
+      "community": 191,
       "norm_label": "classify the first log (newest first) that yields a known category."
     },
     {
@@ -7119,7 +7119,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_models_airflow",
-      "community": 210,
+      "community": 15,
       "norm_label": "airflow.py"
     },
     {
@@ -7129,7 +7129,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "backend_app_models_airflow_connectionkind",
-      "community": 210,
+      "community": 15,
       "norm_label": "connectionkind"
     },
     {
@@ -7139,7 +7139,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "backend_app_models_airflow_deploymentenvironment",
-      "community": 210,
+      "community": 15,
       "norm_label": "deploymentenvironment"
     },
     {
@@ -7149,7 +7149,7 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "backend_app_models_airflow_enum",
-      "community": 210,
+      "community": 15,
       "norm_label": "_enum()"
     },
     {
@@ -7179,7 +7179,7 @@
       "source_location": "L85",
       "_origin": "ast",
       "id": "backend_app_models_airflow_airflowconnection_status_stale",
-      "community": 229,
+      "community": 208,
       "norm_label": ".status_stale()"
     },
     {
@@ -7209,7 +7209,7 @@
       "source_location": "L137",
       "_origin": "ast",
       "id": "backend_app_models_airflow_airflowtriggerreservation",
-      "community": 32,
+      "community": 214,
       "norm_label": "airflowtriggerreservation"
     },
     {
@@ -7219,7 +7219,7 @@
       "source_location": "L86",
       "_origin": "ast",
       "id": "backend_app_models_airflow_rationale_86",
-      "community": 229,
+      "community": 208,
       "norm_label": "true when the connection monitor should have re-checked this connection but has"
     },
     {
@@ -7239,7 +7239,7 @@
       "source_location": "L138",
       "_origin": "ast",
       "id": "backend_app_models_airflow_rationale_138",
-      "community": 32,
+      "community": 214,
       "norm_label": "database guard for a dag trigger that may still be active in airflow."
     },
     {
@@ -7299,7 +7299,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_models_automation",
-      "community": 42,
+      "community": 214,
       "norm_label": "automation.py"
     },
     {
@@ -7309,7 +7309,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "backend_app_models_automation_enum",
-      "community": 235,
+      "community": 214,
       "norm_label": "_enum()"
     },
     {
@@ -7319,7 +7319,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_models_automation_py_strenum",
-      "community": 235,
+      "community": 214,
       "norm_label": "strenum"
     },
     {
@@ -7329,7 +7329,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "backend_app_models_automation_workflow",
-      "community": 42,
+      "community": 214,
       "norm_label": "workflow"
     },
     {
@@ -7339,7 +7339,7 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "backend_app_models_automation_workflowrun",
-      "community": 229,
+      "community": 2,
       "norm_label": "workflowrun"
     },
     {
@@ -7349,7 +7349,7 @@
       "source_location": "L98",
       "_origin": "ast",
       "id": "backend_app_models_automation_workflowrun_workflow_name",
-      "community": 229,
+      "community": 2,
       "norm_label": ".workflow_name()"
     },
     {
@@ -7359,7 +7359,7 @@
       "source_location": "L102",
       "_origin": "ast",
       "id": "backend_app_models_automation_workflowstep",
-      "community": 42,
+      "community": 214,
       "norm_label": "workflowstep"
     },
     {
@@ -7369,7 +7369,7 @@
       "source_location": "L121",
       "_origin": "ast",
       "id": "backend_app_models_automation_approval",
-      "community": 42,
+      "community": 214,
       "norm_label": "approval"
     },
     {
@@ -7379,7 +7379,7 @@
       "source_location": "L150",
       "_origin": "ast",
       "id": "backend_app_models_automation_approval_decided_by_name",
-      "community": 42,
+      "community": 214,
       "norm_label": ".decided_by_name()"
     },
     {
@@ -7389,7 +7389,7 @@
       "source_location": "L154",
       "_origin": "ast",
       "id": "backend_app_models_automation_approval_workflow_name",
-      "community": 42,
+      "community": 214,
       "norm_label": ".workflow_name()"
     },
     {
@@ -7399,7 +7399,7 @@
       "source_location": "L158",
       "_origin": "ast",
       "id": "backend_app_models_automation_dagruncheck",
-      "community": 42,
+      "community": 214,
       "norm_label": "dagruncheck"
     },
     {
@@ -7409,7 +7409,7 @@
       "source_location": "L188",
       "_origin": "ast",
       "id": "backend_app_models_automation_dagruncheck_workflow_name",
-      "community": 42,
+      "community": 214,
       "norm_label": ".workflow_name()"
     },
     {
@@ -7419,7 +7419,7 @@
       "source_location": "L192",
       "_origin": "ast",
       "id": "backend_app_models_automation_notification",
-      "community": 42,
+      "community": 214,
       "norm_label": "notification"
     },
     {
@@ -7429,7 +7429,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "backend_app_models_automation_rationale_27",
-      "community": 42,
+      "community": 214,
       "norm_label": "an automation: a graph of typed nodes ({nodes, edges}) started by a trigger node"
     },
     {
@@ -7439,7 +7439,7 @@
       "source_location": "L159",
       "_origin": "ast",
       "id": "backend_app_models_automation_rationale_159",
-      "community": 42,
+      "community": 214,
       "norm_label": "validation status of one finished dag run, recorded by the workflow it started."
     },
     {
@@ -7449,7 +7449,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_models_database_connection",
-      "community": 46,
+      "community": 4,
       "norm_label": "database_connection.py"
     },
     {
@@ -7459,7 +7459,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "backend_app_models_database_connection_databaseengine",
-      "community": 46,
+      "community": 4,
       "norm_label": "databaseengine"
     },
     {
@@ -7549,7 +7549,7 @@
       "source_location": "L99",
       "_origin": "ast",
       "id": "backend_app_models_incident_incidentevidence",
-      "community": 32,
+      "community": 214,
       "norm_label": "incidentevidence"
     },
     {
@@ -7589,7 +7589,7 @@
       "source_location": "L175",
       "_origin": "ast",
       "id": "backend_app_models_incident_detectionlease",
-      "community": 214,
+      "community": 89,
       "norm_label": "detectionlease"
     },
     {
@@ -7619,7 +7619,7 @@
       "source_location": "L176",
       "_origin": "ast",
       "id": "backend_app_models_incident_rationale_176",
-      "community": 214,
+      "community": 89,
       "norm_label": "single-row lock so only one worker runs detection at a time."
     },
     {
@@ -7629,7 +7629,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_models_notification_channel",
-      "community": 205,
+      "community": 214,
       "norm_label": "notification_channel.py"
     },
     {
@@ -7639,7 +7639,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "backend_app_models_notification_channel_channelkind",
-      "community": 205,
+      "community": 214,
       "norm_label": "channelkind"
     },
     {
@@ -7649,7 +7649,7 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "backend_app_models_notification_channel_channelstatus",
-      "community": 205,
+      "community": 214,
       "norm_label": "channelstatus"
     },
     {
@@ -7709,7 +7709,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "backend_app_models_user_user",
-      "community": 21,
+      "community": 40,
       "norm_label": "user"
     },
     {
@@ -8709,7 +8709,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "backend_app_orchestration_airflow_factory_run_async",
-      "community": 32,
+      "community": 82,
       "norm_label": "run_async()"
     },
     {
@@ -8719,7 +8719,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "t",
-      "community": 32,
+      "community": 82,
       "norm_label": "t"
     },
     {
@@ -8729,7 +8729,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "backend_app_orchestration_airflow_factory_rationale_22",
-      "community": 32,
+      "community": 82,
       "norm_label": "run an adapter coroutine from sync code.      inside a fastapi sync endpoint ("
     },
     {
@@ -9099,7 +9099,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_schemas_airflow",
-      "community": 210,
+      "community": 15,
       "norm_label": "airflow.py"
     },
     {
@@ -9109,7 +9109,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "backend_app_schemas_airflow_validate_target",
-      "community": 210,
+      "community": 15,
       "norm_label": "_validate_target()"
     },
     {
@@ -9119,7 +9119,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "backend_app_schemas_airflow_targetfields",
-      "community": 210,
+      "community": 15,
       "norm_label": "_targetfields"
     },
     {
@@ -9129,7 +9129,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "backend_app_schemas_airflow_airflowconntestrequest",
-      "community": 210,
+      "community": 15,
       "norm_label": "airflowconntestrequest"
     },
     {
@@ -9139,7 +9139,7 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "backend_app_schemas_airflow_airflowconntestrequest_validate",
-      "community": 210,
+      "community": 15,
       "norm_label": "._validate()"
     },
     {
@@ -9149,7 +9149,7 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "backend_app_schemas_airflow_airflowconncreate",
-      "community": 210,
+      "community": 15,
       "norm_label": "airflowconncreate"
     },
     {
@@ -9159,7 +9159,7 @@
       "source_location": "L57",
       "_origin": "ast",
       "id": "backend_app_schemas_airflow_airflowconncreate_validate",
-      "community": 210,
+      "community": 15,
       "norm_label": "._validate()"
     },
     {
@@ -9169,7 +9169,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "backend_app_schemas_airflow_airflowconnupdate",
-      "community": 210,
+      "community": 15,
       "norm_label": "airflowconnupdate"
     },
     {
@@ -9199,7 +9199,7 @@
       "source_location": "L111",
       "_origin": "ast",
       "id": "backend_app_schemas_airflow_dagread",
-      "community": 210,
+      "community": 15,
       "norm_label": "dagread"
     },
     {
@@ -9209,7 +9209,7 @@
       "source_location": "L128",
       "_origin": "ast",
       "id": "backend_app_schemas_airflow_dagsyncresult",
-      "community": 210,
+      "community": 15,
       "norm_label": "dagsyncresult"
     },
     {
@@ -9219,7 +9219,7 @@
       "source_location": "L136",
       "_origin": "ast",
       "id": "backend_app_schemas_airflow_dagmonitorupdate",
-      "community": 210,
+      "community": 15,
       "norm_label": "dagmonitorupdate"
     },
     {
@@ -9229,7 +9229,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "backend_app_schemas_airflow_rationale_16",
-      "community": 210,
+      "community": 15,
       "norm_label": "shared cross-field validation for anything that points at an airflow instance."
     },
     {
@@ -9239,7 +9239,7 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "backend_app_schemas_airflow_rationale_35",
-      "community": 210,
+      "community": 15,
       "norm_label": "test settings that have not been saved yet."
     },
     {
@@ -9249,7 +9249,7 @@
       "source_location": "L65",
       "_origin": "ast",
       "id": "backend_app_schemas_airflow_rationale_65",
-      "community": 210,
+      "community": 15,
       "norm_label": "partial update. omitting `secret` keeps the stored one."
     },
     {
@@ -9259,7 +9259,7 @@
       "source_location": "L137",
       "_origin": "ast",
       "id": "backend_app_schemas_airflow_rationale_137",
-      "community": 210,
+      "community": 15,
       "norm_label": "partial update; `sla_minutes: null` removes the sla."
     },
     {
@@ -9459,7 +9459,7 @@
       "source_location": "L187",
       "_origin": "ast",
       "id": "backend_app_schemas_automation_approvalread",
-      "community": 0,
+      "community": 42,
       "norm_label": "approvalread"
     },
     {
@@ -9479,7 +9479,7 @@
       "source_location": "L214",
       "_origin": "ast",
       "id": "backend_app_schemas_automation_decisionrequest",
-      "community": 0,
+      "community": 42,
       "norm_label": "decisionrequest"
     },
     {
@@ -9549,7 +9549,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_schemas_channel",
-      "community": 205,
+      "community": 214,
       "norm_label": "channel.py"
     },
     {
@@ -9559,7 +9559,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "backend_app_schemas_channel_emailsettings",
-      "community": 205,
+      "community": 214,
       "norm_label": "emailsettings"
     },
     {
@@ -9569,7 +9569,7 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "backend_app_schemas_channel_channelcreate",
-      "community": 205,
+      "community": 214,
       "norm_label": "channelcreate"
     },
     {
@@ -9579,7 +9579,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "backend_app_schemas_channel_channelupdate",
-      "community": 205,
+      "community": 214,
       "norm_label": "channelupdate"
     },
     {
@@ -9599,7 +9599,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "backend_app_schemas_channel_channeltestrequest",
-      "community": 205,
+      "community": 214,
       "norm_label": "channeltestrequest"
     },
     {
@@ -9609,7 +9609,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "backend_app_schemas_channel_channeltestresult",
-      "community": 205,
+      "community": 214,
       "norm_label": "channeltestresult"
     },
     {
@@ -9619,7 +9619,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "backend_app_schemas_channel_rationale_34",
-      "community": 205,
+      "community": 214,
       "norm_label": "partial update. `secret` present replaces it (null or \"\" clears it)."
     },
     {
@@ -9649,7 +9649,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_schemas_database",
-      "community": 46,
+      "community": 4,
       "norm_label": "database.py"
     },
     {
@@ -9659,7 +9659,7 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "backend_app_schemas_database_targetfields",
-      "community": 46,
+      "community": 4,
       "norm_label": "_targetfields"
     },
     {
@@ -9669,7 +9669,7 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "backend_app_schemas_database_dbconntestrequest",
-      "community": 46,
+      "community": 4,
       "norm_label": "dbconntestrequest"
     },
     {
@@ -9679,7 +9679,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "backend_app_schemas_database_dbconncreate",
-      "community": 46,
+      "community": 4,
       "norm_label": "dbconncreate"
     },
     {
@@ -9689,7 +9689,7 @@
       "source_location": "L38",
       "_origin": "ast",
       "id": "backend_app_schemas_database_dbconnupdate",
-      "community": 46,
+      "community": 4,
       "norm_label": "dbconnupdate"
     },
     {
@@ -9699,7 +9699,7 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "backend_app_schemas_database_dbconnread",
-      "community": 46,
+      "community": 4,
       "norm_label": "dbconnread"
     },
     {
@@ -9709,7 +9709,7 @@
       "source_location": "L71",
       "_origin": "ast",
       "id": "backend_app_schemas_database_dbconntestresultread",
-      "community": 46,
+      "community": 4,
       "norm_label": "dbconntestresultread"
     },
     {
@@ -9719,7 +9719,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "backend_app_schemas_database_rationale_24",
-      "community": 46,
+      "community": 4,
       "norm_label": "test connection details before saving them."
     },
     {
@@ -9729,7 +9729,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "backend_app_schemas_database_rationale_39",
-      "community": 46,
+      "community": 4,
       "norm_label": "partial update. `secret` present replaces the password (null or \"\" clears it)."
     },
     {
@@ -9739,7 +9739,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_schemas_health",
-      "community": 228,
+      "community": 9,
       "norm_label": "health.py"
     },
     {
@@ -9749,7 +9749,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "backend_app_schemas_health_livenessresponse",
-      "community": 228,
+      "community": 9,
       "norm_label": "livenessresponse"
     },
     {
@@ -9759,7 +9759,7 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "backend_app_schemas_health_databasehealth",
-      "community": 228,
+      "community": 9,
       "norm_label": "databasehealth"
     },
     {
@@ -9769,7 +9769,7 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "backend_app_schemas_health_airflowconnectionhealth",
-      "community": 228,
+      "community": 9,
       "norm_label": "airflowconnectionhealth"
     },
     {
@@ -9779,7 +9779,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "backend_app_schemas_health_databaseconnectionhealth",
-      "community": 228,
+      "community": 9,
       "norm_label": "databaseconnectionhealth"
     },
     {
@@ -9789,7 +9789,7 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "backend_app_schemas_health_healthstatusresponse",
-      "community": 228,
+      "community": 9,
       "norm_label": "healthstatusresponse"
     },
     {
@@ -9799,7 +9799,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "backend_app_schemas_health_rationale_30",
-      "community": 228,
+      "community": 9,
       "norm_label": "a database registered in the connection catalog (not the platform's own database"
     },
     {
@@ -9819,7 +9819,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "backend_app_schemas_incident_incidentread",
-      "community": 9,
+      "community": 96,
       "norm_label": "incidentread"
     },
     {
@@ -10099,7 +10099,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "backend_app_services_airflow_service_probeoutcome",
-      "community": 82,
+      "community": 37,
       "norm_label": "probeoutcome"
     },
     {
@@ -10599,7 +10599,7 @@
       "source_location": "L99",
       "_origin": "ast",
       "id": "backend_app_services_automation_nodes_actionfailed",
-      "community": 32,
+      "community": 214,
       "norm_label": "actionfailed"
     },
     {
@@ -10869,7 +10869,7 @@
       "source_location": "L389",
       "_origin": "ast",
       "id": "backend_app_services_automation_nodes_extract_log_error",
-      "community": 21,
+      "community": 100,
       "norm_label": "_extract_log_error()"
     },
     {
@@ -11349,7 +11349,7 @@
       "source_location": "L100",
       "_origin": "ast",
       "id": "backend_app_services_automation_nodes_rationale_100",
-      "community": 32,
+      "community": 214,
       "norm_label": "an action ran but did not succeed (the node follows its 'failed' port)."
     },
     {
@@ -11409,7 +11409,7 @@
       "source_location": "L390",
       "_origin": "ast",
       "id": "backend_app_services_automation_nodes_rationale_390",
-      "community": 21,
+      "community": 100,
       "norm_label": "extract (headline, stack_trace, snippet, task_id) from raw log text."
     },
     {
@@ -11559,7 +11559,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_ticksummary",
-      "community": 42,
+      "community": 214,
       "norm_label": "ticksummary"
     },
     {
@@ -11569,7 +11569,7 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_ticksummary_as_dict",
-      "community": 219,
+      "community": 37,
       "norm_label": ".as_dict()"
     },
     {
@@ -11579,7 +11579,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_py_any",
-      "community": 219,
+      "community": 37,
       "norm_label": "any"
     },
     {
@@ -11649,7 +11649,7 @@
       "source_location": "L131",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_validated",
-      "community": 219,
+      "community": 37,
       "norm_label": "_validated()"
     },
     {
@@ -11659,7 +11659,7 @@
       "source_location": "L143",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_build_template",
-      "community": 219,
+      "community": 37,
       "norm_label": "build_template()"
     },
     {
@@ -11669,7 +11669,7 @@
       "source_location": "L166",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_create_workflow",
-      "community": 219,
+      "community": 37,
       "norm_label": "create_workflow()"
     },
     {
@@ -11679,7 +11679,7 @@
       "source_location": "L211",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_update_workflow",
-      "community": 219,
+      "community": 37,
       "norm_label": "update_workflow()"
     },
     {
@@ -11689,7 +11689,7 @@
       "source_location": "L246",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_without_layout",
-      "community": 219,
+      "community": 37,
       "norm_label": "_without_layout()"
     },
     {
@@ -11719,7 +11719,7 @@
       "source_location": "L288",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_trigger_matches",
-      "community": 233,
+      "community": 2,
       "norm_label": "_trigger_matches()"
     },
     {
@@ -11729,7 +11729,7 @@
       "source_location": "L304",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_dedup_key",
-      "community": 233,
+      "community": 2,
       "norm_label": "_dedup_key()"
     },
     {
@@ -11739,7 +11739,7 @@
       "source_location": "L310",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_enqueue_for_incident",
-      "community": 233,
+      "community": 2,
       "norm_label": "enqueue_for_incident()"
     },
     {
@@ -11749,7 +11749,7 @@
       "source_location": "L348",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_enqueue_for_dag_run",
-      "community": 234,
+      "community": 2,
       "norm_label": "enqueue_for_dag_run()"
     },
     {
@@ -11769,7 +11769,7 @@
       "source_location": "L434",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_refresh_dag_run_check",
-      "community": 234,
+      "community": 89,
       "norm_label": "_refresh_dag_run_check()"
     },
     {
@@ -11779,7 +11779,7 @@
       "source_location": "L460",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_refresh_dag_run_checks",
-      "community": 234,
+      "community": 89,
       "norm_label": "refresh_dag_run_checks()"
     },
     {
@@ -11789,7 +11789,7 @@
       "source_location": "L480",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_started_by",
-      "community": 234,
+      "community": 2,
       "norm_label": "_started_by()"
     },
     {
@@ -11799,7 +11799,7 @@
       "source_location": "L498",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_add_run",
-      "community": 233,
+      "community": 2,
       "norm_label": "_add_run()"
     },
     {
@@ -11859,7 +11859,7 @@
       "source_location": "L658",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_finish",
-      "community": 229,
+      "community": 2,
       "norm_label": "_finish()"
     },
     {
@@ -11869,7 +11869,7 @@
       "source_location": "L703",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_waiting_step",
-      "community": 229,
+      "community": 2,
       "norm_label": "_waiting_step()"
     },
     {
@@ -11879,7 +11879,7 @@
       "source_location": "L710",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_advance",
-      "community": 229,
+      "community": 2,
       "norm_label": "advance()"
     },
     {
@@ -11889,7 +11889,7 @@
       "source_location": "L859",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_set_queue",
-      "community": 229,
+      "community": 2,
       "norm_label": "_set_queue()"
     },
     {
@@ -11939,7 +11939,7 @@
       "source_location": "L954",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_get_run",
-      "community": 229,
+      "community": 2,
       "norm_label": "get_run()"
     },
     {
@@ -11949,7 +11949,7 @@
       "source_location": "L970",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_cancel_run",
-      "community": 229,
+      "community": 2,
       "norm_label": "cancel_run()"
     },
     {
@@ -12069,7 +12069,7 @@
       "source_location": "L313",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_rationale_313",
-      "community": 233,
+      "community": 2,
       "norm_label": "create pending runs for enabled workflows triggered by this incident event."
     },
     {
@@ -12079,7 +12079,7 @@
       "source_location": "L356",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_rationale_356",
-      "community": 234,
+      "community": 2,
       "norm_label": "create pending runs (each with a pending dagruncheck) for enabled \"when a dag ru"
     },
     {
@@ -12089,7 +12089,7 @@
       "source_location": "L466",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_rationale_466",
-      "community": 234,
+      "community": 89,
       "norm_label": "refresh existing in-progress workflow checks without starting new workflows."
     },
     {
@@ -12099,7 +12099,7 @@
       "source_location": "L507",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_rationale_507",
-      "community": 233,
+      "community": 2,
       "norm_label": "add a pending run; none if the dedup key was taken meanwhile (another worker)."
     },
     {
@@ -12129,7 +12129,7 @@
       "source_location": "L711",
       "_origin": "ast",
       "id": "backend_app_services_automation_service_rationale_711",
-      "community": 229,
+      "community": 2,
       "norm_label": "execute nodes until the run waits or ends. the caller must hold the run's claim."
     },
     {
@@ -12769,7 +12769,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_services_diagnosis_service",
-      "community": 195,
+      "community": 191,
       "norm_label": "diagnosis_service.py"
     },
     {
@@ -12779,7 +12779,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "backend_app_services_diagnosis_service_model_client",
-      "community": 195,
+      "community": 191,
       "norm_label": "model_client()"
     },
     {
@@ -12789,7 +12789,7 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "backend_app_services_diagnosis_service_task_logs",
-      "community": 195,
+      "community": 191,
       "norm_label": "task_logs()"
     },
     {
@@ -12799,7 +12799,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_services_diagnosis_service_py_session",
-      "community": 195,
+      "community": 191,
       "norm_label": "session"
     },
     {
@@ -12809,7 +12809,7 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "backend_app_services_diagnosis_service_is_operator",
-      "community": 195,
+      "community": 191,
       "norm_label": "is_operator()"
     },
     {
@@ -12819,7 +12819,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_services_diagnosis_service_py_any",
-      "community": 195,
+      "community": 191,
       "norm_label": "any"
     },
     {
@@ -12829,7 +12829,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "backend_app_services_diagnosis_service_event_details",
-      "community": 195,
+      "community": 191,
       "norm_label": "_event_details()"
     },
     {
@@ -12839,7 +12839,7 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "backend_app_services_diagnosis_service_diagnose_and_store",
-      "community": 195,
+      "community": 191,
       "norm_label": "diagnose_and_store()"
     },
     {
@@ -12849,7 +12849,7 @@
       "source_location": "L93",
       "_origin": "ast",
       "id": "backend_app_services_diagnosis_service_ensure",
-      "community": 195,
+      "community": 191,
       "norm_label": "ensure()"
     },
     {
@@ -12859,7 +12859,7 @@
       "source_location": "L100",
       "_origin": "ast",
       "id": "backend_app_services_diagnosis_service_stored_or_backfill",
-      "community": 195,
+      "community": 191,
       "norm_label": "stored_or_backfill()"
     },
     {
@@ -12869,7 +12869,7 @@
       "source_location": "L115",
       "_origin": "ast",
       "id": "backend_app_services_diagnosis_service_set_override",
-      "community": 195,
+      "community": 191,
       "norm_label": "set_override()"
     },
     {
@@ -12879,7 +12879,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_app_services_diagnosis_service_py_uuid",
-      "community": 195,
+      "community": 191,
       "norm_label": "uuid"
     },
     {
@@ -12889,7 +12889,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_app_services_diagnosis_service_rationale_1",
-      "community": 195,
+      "community": 191,
       "norm_label": "diagnose once, persist it (aiplan1 \u00a71): the stored `incident.diagnosis` is what"
     },
     {
@@ -12899,7 +12899,7 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "backend_app_services_diagnosis_service_rationale_41",
-      "community": 195,
+      "community": 191,
       "norm_label": "the incident's task logs, newest first (flushes so just-attached evidence is inc"
     },
     {
@@ -12909,7 +12909,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "backend_app_services_diagnosis_service_rationale_77",
-      "community": 195,
+      "community": 191,
       "norm_label": "(re)diagnose from the stored task logs; operator corrections are kept as they ar"
     },
     {
@@ -12919,7 +12919,7 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "backend_app_services_diagnosis_service_rationale_94",
-      "community": 195,
+      "community": 191,
       "norm_label": "the stored diagnosis, computing (with the model, if enabled) only when missing."
     },
     {
@@ -12929,7 +12929,7 @@
       "source_location": "L101",
       "_origin": "ast",
       "id": "backend_app_services_diagnosis_service_rationale_101",
-      "community": 195,
+      "community": 191,
       "norm_label": "read path for the incident page. never calls the model: a missing diagnosis (inc"
     },
     {
@@ -13029,7 +13029,7 @@
       "source_location": "L129",
       "_origin": "ast",
       "id": "backend_app_services_incident_service_diagnose",
-      "community": 188,
+      "community": 191,
       "norm_label": "diagnose()"
     },
     {
@@ -13129,7 +13129,7 @@
       "source_location": "L130",
       "_origin": "ast",
       "id": "backend_app_services_incident_service_rationale_130",
-      "community": 188,
+      "community": 191,
       "norm_label": "classify the incident's failure from its task logs (newest first)."
     },
     {
@@ -13149,7 +13149,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "backend_app_services_notification_channel_service_delivery",
-      "community": 205,
+      "community": 94,
       "norm_label": "delivery"
     },
     {
@@ -13529,7 +13529,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_tests_conftest",
-      "community": 21,
+      "community": 91,
       "norm_label": "conftest.py"
     },
     {
@@ -13539,7 +13539,7 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "backend_tests_conftest_session_factory",
-      "community": 21,
+      "community": 91,
       "norm_label": "session_factory()"
     },
     {
@@ -13549,7 +13549,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_conftest_py_sessionmaker",
-      "community": 21,
+      "community": 91,
       "norm_label": "sessionmaker"
     },
     {
@@ -13559,7 +13559,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_conftest_py_session",
-      "community": 21,
+      "community": 91,
       "norm_label": "session"
     },
     {
@@ -13569,7 +13569,7 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "backend_tests_conftest_db",
-      "community": 21,
+      "community": 91,
       "norm_label": "db()"
     },
     {
@@ -13579,7 +13579,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "backend_tests_conftest_client",
-      "community": 21,
+      "community": 91,
       "norm_label": "client()"
     },
     {
@@ -13589,7 +13589,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_conftest_py_testclient",
-      "community": 21,
+      "community": 91,
       "norm_label": "testclient"
     },
     {
@@ -13599,7 +13599,7 @@
       "source_location": "L71",
       "_origin": "ast",
       "id": "backend_tests_conftest_reset_globals",
-      "community": 21,
+      "community": 91,
       "norm_label": "_reset_globals()"
     },
     {
@@ -13609,7 +13609,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_conftest_py_monkeypatch",
-      "community": 21,
+      "community": 91,
       "norm_label": "monkeypatch"
     },
     {
@@ -13619,7 +13619,7 @@
       "source_location": "L82",
       "_origin": "ast",
       "id": "backend_tests_conftest_make_user",
-      "community": 21,
+      "community": 91,
       "norm_label": "make_user()"
     },
     {
@@ -13629,7 +13629,7 @@
       "source_location": "L97",
       "_origin": "ast",
       "id": "backend_tests_conftest_login",
-      "community": 21,
+      "community": 91,
       "norm_label": "login()"
     },
     {
@@ -13639,7 +13639,7 @@
       "source_location": "L104",
       "_origin": "ast",
       "id": "backend_tests_conftest_admin",
-      "community": 21,
+      "community": 91,
       "norm_label": "admin()"
     },
     {
@@ -13649,7 +13649,7 @@
       "source_location": "L109",
       "_origin": "ast",
       "id": "backend_tests_conftest_operator",
-      "community": 21,
+      "community": 91,
       "norm_label": "operator()"
     },
     {
@@ -13659,7 +13659,7 @@
       "source_location": "L114",
       "_origin": "ast",
       "id": "backend_tests_conftest_viewer",
-      "community": 21,
+      "community": 91,
       "norm_label": "viewer()"
     },
     {
@@ -13669,7 +13669,7 @@
       "source_location": "L119",
       "_origin": "ast",
       "id": "backend_tests_conftest_admin_headers",
-      "community": 21,
+      "community": 91,
       "norm_label": "admin_headers()"
     },
     {
@@ -13679,7 +13679,7 @@
       "source_location": "L124",
       "_origin": "ast",
       "id": "backend_tests_conftest_operator_headers",
-      "community": 21,
+      "community": 91,
       "norm_label": "operator_headers()"
     },
     {
@@ -13689,7 +13689,7 @@
       "source_location": "L129",
       "_origin": "ast",
       "id": "backend_tests_conftest_viewer_headers",
-      "community": 21,
+      "community": 91,
       "norm_label": "viewer_headers()"
     },
     {
@@ -13949,7 +13949,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block",
-      "community": 40,
+      "community": 8,
       "norm_label": "test_choose_fix_block.py"
     },
     {
@@ -13959,7 +13959,7 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_pick",
-      "community": 40,
+      "community": 8,
       "norm_label": "pick()"
     },
     {
@@ -13969,7 +13969,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_py_settings",
-      "community": 40,
+      "community": 8,
       "norm_label": "settings"
     },
     {
@@ -13979,7 +13979,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_py_any",
-      "community": 40,
+      "community": 8,
       "norm_label": "any"
     },
     {
@@ -13989,7 +13989,7 @@
       "source_location": "L104",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_test_default_rules",
-      "community": 40,
+      "community": 8,
       "norm_label": "test_default_rules()"
     },
     {
@@ -13999,7 +13999,7 @@
       "source_location": "L108",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_test_settings_change_the_choice",
-      "community": 40,
+      "community": 8,
       "norm_label": "test_settings_change_the_choice()"
     },
     {
@@ -14009,7 +14009,7 @@
       "source_location": "L120",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_test_allowed_fixes_are_the_guard_rail",
-      "community": 40,
+      "community": 8,
       "norm_label": "test_allowed_fixes_are_the_guard_rail()"
     },
     {
@@ -14039,7 +14039,7 @@
       "source_location": "L161",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_partner_clock",
-      "community": 40,
+      "community": 8,
       "norm_label": "partner_clock()"
     },
     {
@@ -14049,7 +14049,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_py_monkeypatch",
-      "community": 40,
+      "community": 8,
       "norm_label": "monkeypatch"
     },
     {
@@ -14059,7 +14059,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_py_clock",
-      "community": 40,
+      "community": 8,
       "norm_label": "clock"
     },
     {
@@ -14069,7 +14069,7 @@
       "source_location": "L168",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_orders_clock",
-      "community": 40,
+      "community": 8,
       "norm_label": "orders_clock()"
     },
     {
@@ -14079,7 +14079,7 @@
       "source_location": "L174",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_decision_graph",
-      "community": 40,
+      "community": 8,
       "norm_label": "decision_graph()"
     },
     {
@@ -14089,7 +14089,7 @@
       "source_location": "L192",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_install",
-      "community": 40,
+      "community": 8,
       "norm_label": "install()"
     },
     {
@@ -14099,7 +14099,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_py_session",
-      "community": 40,
+      "community": 8,
       "norm_label": "session"
     },
     {
@@ -14109,7 +14109,7 @@
       "source_location": "L198",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_test_transient_failure_chooses_retry",
-      "community": 40,
+      "community": 8,
       "norm_label": "test_transient_failure_chooses_retry()"
     },
     {
@@ -14119,7 +14119,7 @@
       "source_location": "L217",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_test_bad_data_is_handed_to_a_person",
-      "community": 40,
+      "community": 8,
       "norm_label": "test_bad_data_is_handed_to_a_person()"
     },
     {
@@ -14129,7 +14129,7 @@
       "source_location": "L228",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_test_unconnected_choice_goes_to_a_person",
-      "community": 40,
+      "community": 8,
       "norm_label": "test_unconnected_choice_goes_to_a_person()"
     },
     {
@@ -14139,7 +14139,7 @@
       "source_location": "L241",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_test_paused_dag_is_left_alone",
-      "community": 40,
+      "community": 8,
       "norm_label": "test_paused_dag_is_left_alone()"
     },
     {
@@ -14149,7 +14149,7 @@
       "source_location": "L251",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_test_template_retries_verifies_and_resolves",
-      "community": 40,
+      "community": 8,
       "norm_label": "test_template_retries_verifies_and_resolves()"
     },
     {
@@ -14159,7 +14159,7 @@
       "source_location": "L276",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_test_earlier_fix_attempts_are_counted",
-      "community": 40,
+      "community": 8,
       "norm_label": "test_earlier_fix_attempts_are_counted()"
     },
     {
@@ -14169,7 +14169,7 @@
       "source_location": "L300",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_advice",
-      "community": 40,
+      "community": 8,
       "norm_label": "advice()"
     },
     {
@@ -14179,7 +14179,7 @@
       "source_location": "L304",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_test_ai_off_and_fixed_states_never_ask",
-      "community": 40,
+      "community": 8,
       "norm_label": "test_ai_off_and_fixed_states_never_ask()"
     },
     {
@@ -14189,7 +14189,7 @@
       "source_location": "L316",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_test_ai_suggests_or_decides_within_the_allowed_fixes",
-      "community": 40,
+      "community": 8,
       "norm_label": "test_ai_suggests_or_decides_within_the_allowed_fixes()"
     },
     {
@@ -14199,7 +14199,7 @@
       "source_location": "L330",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_test_ai_answers_the_rules_cannot_accept_fall_back_to_the_rules",
-      "community": 40,
+      "community": 8,
       "norm_label": "test_ai_answers_the_rules_cannot_accept_fall_back_to_the_rules()"
     },
     {
@@ -14209,7 +14209,7 @@
       "source_location": "L345",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_llm",
-      "community": 40,
+      "community": 8,
       "norm_label": "llm()"
     },
     {
@@ -14219,7 +14219,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_py_request",
-      "community": 40,
+      "community": 8,
       "norm_label": "request"
     },
     {
@@ -14229,7 +14229,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_py_response",
-      "community": 40,
+      "community": 8,
       "norm_label": "response"
     },
     {
@@ -14239,7 +14239,7 @@
       "source_location": "L352",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_ollama_reply",
-      "community": 40,
+      "community": 8,
       "norm_label": "ollama_reply()"
     },
     {
@@ -14249,7 +14249,7 @@
       "source_location": "L356",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_test_ollama_client_constrains_and_parses_the_answer",
-      "community": 40,
+      "community": 8,
       "norm_label": "test_ollama_client_constrains_and_parses_the_answer()"
     },
     {
@@ -14259,7 +14259,7 @@
       "source_location": "L384",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_test_ollama_client_failures_are_unavailable",
-      "community": 40,
+      "community": 8,
       "norm_label": "test_ollama_client_failures_are_unavailable()"
     },
     {
@@ -14269,7 +14269,7 @@
       "source_location": "L390",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_test_ollama_breaker_opens_after_repeated_failures",
-      "community": 40,
+      "community": 8,
       "norm_label": "test_ollama_breaker_opens_after_repeated_failures()"
     },
     {
@@ -14279,7 +14279,7 @@
       "source_location": "L406",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_fakeadvisor",
-      "community": 40,
+      "community": 47,
       "norm_label": "fakeadvisor"
     },
     {
@@ -14289,7 +14289,7 @@
       "source_location": "L407",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_fakeadvisor_init",
-      "community": 40,
+      "community": 47,
       "norm_label": ".__init__()"
     },
     {
@@ -14299,7 +14299,7 @@
       "source_location": "L411",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_fakeadvisor_advise",
-      "community": 40,
+      "community": 8,
       "norm_label": ".advise()"
     },
     {
@@ -14309,7 +14309,7 @@
       "source_location": "L418",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_test_ai_decides_the_route_in_a_workflow",
-      "community": 40,
+      "community": 8,
       "norm_label": "test_ai_decides_the_route_in_a_workflow()"
     },
     {
@@ -14319,7 +14319,7 @@
       "source_location": "L435",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_test_ai_suggestion_does_not_change_the_route",
-      "community": 40,
+      "community": 8,
       "norm_label": "test_ai_suggestion_does_not_change_the_route()"
     },
     {
@@ -14329,7 +14329,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_tests_test_choose_fix_block_rationale_1",
-      "community": 40,
+      "community": 8,
       "norm_label": "the \"choose the fix\" block (decide.choose_fix): the decision table and the engin"
     },
     {
@@ -15159,7 +15159,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_tests_test_database_reconciliation",
-      "community": 100,
+      "community": 4,
       "norm_label": "test_database_reconciliation.py"
     },
     {
@@ -15169,7 +15169,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "backend_tests_test_database_reconciliation_sql_result",
-      "community": 100,
+      "community": 4,
       "norm_label": "sql_result()"
     },
     {
@@ -15179,7 +15179,7 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "backend_tests_test_database_reconciliation_stubcontext",
-      "community": 100,
+      "community": 4,
       "norm_label": "stubcontext"
     },
     {
@@ -15189,7 +15189,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "backend_tests_test_database_reconciliation_stubcontext_init",
-      "community": 100,
+      "community": 4,
       "norm_label": ".__init__()"
     },
     {
@@ -15199,7 +15199,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "backend_tests_test_database_reconciliation_stubcontext_database_connection",
-      "community": 100,
+      "community": 4,
       "norm_label": ".database_connection()"
     },
     {
@@ -15209,7 +15209,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "backend_tests_test_database_reconciliation_stubcontext_set_context",
-      "community": 100,
+      "community": 4,
       "norm_label": ".set_context()"
     },
     {
@@ -15219,7 +15219,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "backend_tests_test_database_reconciliation_stubcontext_get_context",
-      "community": 100,
+      "community": 4,
       "norm_label": ".get_context()"
     },
     {
@@ -15229,7 +15229,7 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "backend_tests_test_database_reconciliation_stubcontext_record_result",
-      "community": 100,
+      "community": 4,
       "norm_label": ".record_result()"
     },
     {
@@ -15239,7 +15239,7 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "backend_tests_test_database_reconciliation_reconcile_node",
-      "community": 100,
+      "community": 4,
       "norm_label": "reconcile_node()"
     },
     {
@@ -15249,7 +15249,7 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "backend_tests_test_database_reconciliation_run_reconciliation",
-      "community": 100,
+      "community": 4,
       "norm_label": "run_reconciliation()"
     },
     {
@@ -15259,7 +15259,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_database_reconciliation_py_monkeypatch",
-      "community": 100,
+      "community": 4,
       "norm_label": "monkeypatch"
     },
     {
@@ -15279,7 +15279,7 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "backend_tests_test_database_reconciliation_test_matching_row_counts_are_routed_to_matched",
-      "community": 100,
+      "community": 4,
       "norm_label": "test_matching_row_counts_are_routed_to_matched()"
     },
     {
@@ -15289,7 +15289,7 @@
       "source_location": "L106",
       "_origin": "ast",
       "id": "backend_tests_test_database_reconciliation_test_mismatched_row_counts_are_routed_to_mismatched",
-      "community": 100,
+      "community": 4,
       "norm_label": "test_mismatched_row_counts_are_routed_to_mismatched()"
     },
     {
@@ -15299,7 +15299,7 @@
       "source_location": "L117",
       "_origin": "ast",
       "id": "backend_tests_test_database_reconciliation_test_matching_rows_are_order_independent",
-      "community": 100,
+      "community": 4,
       "norm_label": "test_matching_rows_are_order_independent()"
     },
     {
@@ -15309,7 +15309,7 @@
       "source_location": "L126",
       "_origin": "ast",
       "id": "backend_tests_test_database_reconciliation_test_key_based_comparison_handles_changed_rows",
-      "community": 100,
+      "community": 4,
       "norm_label": "test_key_based_comparison_handles_changed_rows()"
     },
     {
@@ -15319,7 +15319,7 @@
       "source_location": "L138",
       "_origin": "ast",
       "id": "backend_tests_test_database_reconciliation_test_difference_list_is_bounded",
-      "community": 100,
+      "community": 4,
       "norm_label": "test_difference_list_is_bounded()"
     },
     {
@@ -15329,7 +15329,7 @@
       "source_location": "L148",
       "_origin": "ast",
       "id": "backend_tests_test_database_reconciliation_test_query_failure_uses_failed_port_without_raw_secret",
-      "community": 100,
+      "community": 4,
       "norm_label": "test_query_failure_uses_failed_port_without_raw_secret()"
     },
     {
@@ -15339,7 +15339,7 @@
       "source_location": "L160",
       "_origin": "ast",
       "id": "backend_tests_test_database_reconciliation_test_invalid_query_result_uses_failed_port",
-      "community": 100,
+      "community": 4,
       "norm_label": "test_invalid_query_result_uses_failed_port()"
     },
     {
@@ -15349,7 +15349,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_tests_test_database_reconciliation_rationale_1",
-      "community": 100,
+      "community": 4,
       "norm_label": "database reconciliation workflow block tests."
     },
     {
@@ -15359,7 +15359,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_tests_test_diagnose_block",
-      "community": 91,
+      "community": 8,
       "norm_label": "test_diagnose_block.py"
     },
     {
@@ -15369,7 +15369,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "backend_tests_test_diagnose_block_partner_clock",
-      "community": 91,
+      "community": 8,
       "norm_label": "partner_clock()"
     },
     {
@@ -15379,7 +15379,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_diagnose_block_py_monkeypatch",
-      "community": 91,
+      "community": 8,
       "norm_label": "monkeypatch"
     },
     {
@@ -15389,7 +15389,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_diagnose_block_py_clock",
-      "community": 91,
+      "community": 8,
       "norm_label": "clock"
     },
     {
@@ -15399,7 +15399,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "backend_tests_test_diagnose_block_orders_clock",
-      "community": 91,
+      "community": 8,
       "norm_label": "orders_clock()"
     },
     {
@@ -15409,7 +15409,7 @@
       "source_location": "L38",
       "_origin": "ast",
       "id": "backend_tests_test_diagnose_block_graph",
-      "community": 91,
+      "community": 8,
       "norm_label": "graph()"
     },
     {
@@ -15419,7 +15419,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_diagnose_block_py_any",
-      "community": 91,
+      "community": 8,
       "norm_label": "any"
     },
     {
@@ -15429,7 +15429,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "backend_tests_test_diagnose_block_install",
-      "community": 91,
+      "community": 8,
       "norm_label": "install()"
     },
     {
@@ -15439,7 +15439,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_diagnose_block_py_session",
-      "community": 91,
+      "community": 8,
       "norm_label": "session"
     },
     {
@@ -15449,7 +15449,7 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "backend_tests_test_diagnose_block_run_and_titles",
-      "community": 91,
+      "community": 8,
       "norm_label": "run_and_titles()"
     },
     {
@@ -15469,7 +15469,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "backend_tests_test_diagnose_block_test_old_and_new_wiring_validate",
-      "community": 91,
+      "community": 8,
       "norm_label": "test_old_and_new_wiring_validate()"
     },
     {
@@ -15479,7 +15479,7 @@
       "source_location": "L84",
       "_origin": "ast",
       "id": "backend_tests_test_diagnose_block_test_outcome_rules",
-      "community": 91,
+      "community": 8,
       "norm_label": "test_outcome_rules()"
     },
     {
@@ -15489,7 +15489,7 @@
       "source_location": "L98",
       "_origin": "ast",
       "id": "backend_tests_test_diagnose_block_test_transient_failure_routes_retryable",
-      "community": 91,
+      "community": 8,
       "norm_label": "test_transient_failure_routes_retryable()"
     },
     {
@@ -15499,7 +15499,7 @@
       "source_location": "L110",
       "_origin": "ast",
       "id": "backend_tests_test_diagnose_block_test_bad_data_routes_needs_fix",
-      "community": 91,
+      "community": 8,
       "norm_label": "test_bad_data_routes_needs_fix()"
     },
     {
@@ -15509,7 +15509,7 @@
       "source_location": "L119",
       "_origin": "ast",
       "id": "backend_tests_test_diagnose_block_test_low_confidence_routes_unknown",
-      "community": 91,
+      "community": 8,
       "norm_label": "test_low_confidence_routes_unknown()"
     },
     {
@@ -15519,7 +15519,7 @@
       "source_location": "L128",
       "_origin": "ast",
       "id": "backend_tests_test_diagnose_block_test_unconnected_outcome_falls_back_to_any_outcome",
-      "community": 91,
+      "community": 8,
       "norm_label": "test_unconnected_outcome_falls_back_to_any_outcome()"
     },
     {
@@ -15529,7 +15529,7 @@
       "source_location": "L139",
       "_origin": "ast",
       "id": "backend_tests_test_diagnose_block_test_refresh_uses_new_logs",
-      "community": 91,
+      "community": 8,
       "norm_label": "test_refresh_uses_new_logs()"
     },
     {
@@ -15539,7 +15539,7 @@
       "source_location": "L157",
       "_origin": "ast",
       "id": "backend_tests_test_diagnose_block_test_operator_correction_passes_threshold_and_survives_refresh",
-      "community": 91,
+      "community": 8,
       "norm_label": "test_operator_correction_passes_threshold_and_survives_refresh()"
     },
     {
@@ -15549,7 +15549,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_tests_test_diagnose_block_rationale_1",
-      "community": 91,
+      "community": 8,
       "norm_label": "the \"diagnose failure\" workflow block (diagnose.classify_log): outcome outputs a"
     },
     {
@@ -15809,7 +15809,7 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "backend_tests_test_hybrid_diagnosis_fakeclient_classify",
-      "community": 43,
+      "community": 83,
       "norm_label": ".classify()"
     },
     {
@@ -15899,7 +15899,7 @@
       "source_location": "L153",
       "_origin": "ast",
       "id": "backend_tests_test_hybrid_diagnosis_clock",
-      "community": 43,
+      "community": 186,
       "norm_label": "clock"
     },
     {
@@ -15909,7 +15909,7 @@
       "source_location": "L154",
       "_origin": "ast",
       "id": "backend_tests_test_hybrid_diagnosis_clock_init",
-      "community": 43,
+      "community": 186,
       "norm_label": ".__init__()"
     },
     {
@@ -15919,7 +15919,7 @@
       "source_location": "L157",
       "_origin": "ast",
       "id": "backend_tests_test_hybrid_diagnosis_clock_call",
-      "community": 43,
+      "community": 186,
       "norm_label": ".__call__()"
     },
     {
@@ -15929,7 +15929,7 @@
       "source_location": "L161",
       "_origin": "ast",
       "id": "backend_tests_test_hybrid_diagnosis_client",
-      "community": 43,
+      "community": 186,
       "norm_label": "_client()"
     },
     {
@@ -15939,7 +15939,7 @@
       "source_location": "L168",
       "_origin": "ast",
       "id": "backend_tests_test_hybrid_diagnosis_test_client_sends_token_and_redacted_logs",
-      "community": 43,
+      "community": 186,
       "norm_label": "test_client_sends_token_and_redacted_logs()"
     },
     {
@@ -15959,7 +15959,7 @@
       "source_location": "L199",
       "_origin": "ast",
       "id": "backend_tests_test_hybrid_diagnosis_test_breaker_opens_after_failures_then_recovers",
-      "community": 43,
+      "community": 186,
       "norm_label": "test_breaker_opens_after_failures_then_recovers()"
     },
     {
@@ -15969,7 +15969,7 @@
       "source_location": "L224",
       "_origin": "ast",
       "id": "backend_tests_test_hybrid_diagnosis_test_bad_payload_and_connection_errors_are_unavailable",
-      "community": 43,
+      "community": 186,
       "norm_label": "test_bad_payload_and_connection_errors_are_unavailable()"
     },
     {
@@ -16109,7 +16109,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_tests_test_log_analysis_and_ai_blocks",
-      "community": 21,
+      "community": 100,
       "norm_label": "test_log_analysis_and_ai_blocks.py"
     },
     {
@@ -16129,7 +16129,7 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "backend_tests_test_log_analysis_and_ai_blocks_test_graph_validation",
-      "community": 21,
+      "community": 100,
       "norm_label": "test_graph_validation()"
     },
     {
@@ -16139,7 +16139,7 @@
       "source_location": "L69",
       "_origin": "ast",
       "id": "backend_tests_test_log_analysis_and_ai_blocks_test_extract_log_error_traceback",
-      "community": 21,
+      "community": 100,
       "norm_label": "test_extract_log_error_traceback()"
     },
     {
@@ -16149,7 +16149,7 @@
       "source_location": "L87",
       "_origin": "ast",
       "id": "backend_tests_test_log_analysis_and_ai_blocks_test_extract_log_error_no_traceback",
-      "community": 21,
+      "community": 100,
       "norm_label": "test_extract_log_error_no_traceback()"
     },
     {
@@ -16159,7 +16159,7 @@
       "source_location": "L99",
       "_origin": "ast",
       "id": "backend_tests_test_log_analysis_and_ai_blocks_incident",
-      "community": 21,
+      "community": 100,
       "norm_label": "_incident()"
     },
     {
@@ -16169,7 +16169,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_log_analysis_and_ai_blocks_py_session",
-      "community": 21,
+      "community": 100,
       "norm_label": "session"
     },
     {
@@ -16179,7 +16179,7 @@
       "source_location": "L142",
       "_origin": "ast",
       "id": "backend_tests_test_log_analysis_and_ai_blocks_test_analyze_task_logs_executor_no_logs",
-      "community": 21,
+      "community": 100,
       "norm_label": "test_analyze_task_logs_executor_no_logs()"
     },
     {
@@ -16189,7 +16189,7 @@
       "source_location": "L171",
       "_origin": "ast",
       "id": "backend_tests_test_log_analysis_and_ai_blocks_test_analyze_task_logs_executor_with_logs",
-      "community": 21,
+      "community": 100,
       "norm_label": "test_analyze_task_logs_executor_with_logs()"
     },
     {
@@ -16199,7 +16199,7 @@
       "source_location": "L201",
       "_origin": "ast",
       "id": "backend_tests_test_log_analysis_and_ai_blocks_test_ai_generate_fix_executor",
-      "community": 21,
+      "community": 100,
       "norm_label": "test_ai_generate_fix_executor()"
     },
     {
@@ -16209,7 +16209,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_log_analysis_and_ai_blocks_py_monkeypatch",
-      "community": 21,
+      "community": 100,
       "norm_label": "monkeypatch"
     },
     {
@@ -16219,7 +16219,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_tests_test_log_analysis_and_ai_blocks_rationale_1",
-      "community": 21,
+      "community": 100,
       "norm_label": "tests for the decoupled log analysis (analyze.task_logs) and ai solution (ai.gen"
     },
     {
@@ -16259,7 +16259,7 @@
       "source_location": "L50",
       "_origin": "ast",
       "id": "backend_tests_test_notification_channels_http_handler",
-      "community": 222,
+      "community": 5,
       "norm_label": ".handler()"
     },
     {
@@ -16269,7 +16269,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_notification_channels_py_request",
-      "community": 222,
+      "community": 5,
       "norm_label": "request"
     },
     {
@@ -16279,7 +16279,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_notification_channels_py_response",
-      "community": 222,
+      "community": 5,
       "norm_label": "response"
     },
     {
@@ -16629,7 +16629,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "backend_tests_test_orchestration_clock_call",
-      "community": 21,
+      "community": 201,
       "norm_label": ".__call__()"
     },
     {
@@ -16639,7 +16639,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_orchestration_py_datetime",
-      "community": 21,
+      "community": 201,
       "norm_label": "datetime"
     },
     {
@@ -16659,7 +16659,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_orchestration_py_monkeypatch",
-      "community": 21,
+      "community": 192,
       "norm_label": "monkeypatch"
     },
     {
@@ -16669,7 +16669,7 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "backend_tests_test_orchestration_warehouse",
-      "community": 21,
+      "community": 192,
       "norm_label": "warehouse()"
     },
     {
@@ -16679,7 +16679,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_orchestration_py_path",
-      "community": 21,
+      "community": 192,
       "norm_label": "path"
     },
     {
@@ -17049,7 +17049,7 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "backend_tests_test_orchestration_rationale_49",
-      "community": 21,
+      "community": 192,
       "norm_label": "a sqlite database every database connection resolves to."
     },
     {
@@ -17119,7 +17119,7 @@
       "source_location": "L74",
       "_origin": "ast",
       "id": "backend_tests_test_phase1_foundation_test_secret_encryption_round_trip",
-      "community": 208,
+      "community": 94,
       "norm_label": "test_secret_encryption_round_trip()"
     },
     {
@@ -17289,7 +17289,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_phase2_auth.py"
     },
     {
@@ -17299,7 +17299,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_actions",
-      "community": 21,
+      "community": 40,
       "norm_label": "actions()"
     },
     {
@@ -17309,7 +17309,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_py_session",
-      "community": 21,
+      "community": 40,
       "norm_label": "session"
     },
     {
@@ -17319,7 +17319,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_test_login_success_sets_httponly_refresh_cookie",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_login_success_sets_httponly_refresh_cookie()"
     },
     {
@@ -17329,7 +17329,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_py_testclient",
-      "community": 21,
+      "community": 40,
       "norm_label": "testclient"
     },
     {
@@ -17339,7 +17339,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_test_login_failure_is_generic_and_audited",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_login_failure_is_generic_and_audited()"
     },
     {
@@ -17349,7 +17349,7 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_test_login_rejects_inactive_user",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_login_rejects_inactive_user()"
     },
     {
@@ -17359,7 +17359,7 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_test_login_lockout_after_max_failures",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_login_lockout_after_max_failures()"
     },
     {
@@ -17369,7 +17369,7 @@
       "source_location": "L82",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_test_refresh_token_cannot_be_used_as_access_token",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_refresh_token_cannot_be_used_as_access_token()"
     },
     {
@@ -17389,7 +17389,7 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_test_missing_or_garbage_token_rejected",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_missing_or_garbage_token_rejected()"
     },
     {
@@ -17399,7 +17399,7 @@
       "source_location": "L102",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_test_refresh_rotates_token",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_refresh_rotates_token()"
     },
     {
@@ -17409,7 +17409,7 @@
       "source_location": "L116",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_test_refresh_reuse_revokes_whole_chain",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_refresh_reuse_revokes_whole_chain()"
     },
     {
@@ -17419,7 +17419,7 @@
       "source_location": "L130",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_test_refresh_without_cookie_rejected",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_refresh_without_cookie_rejected()"
     },
     {
@@ -17429,7 +17429,7 @@
       "source_location": "L134",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_test_logout_revokes_refresh_token",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_logout_revokes_refresh_token()"
     },
     {
@@ -17439,7 +17439,7 @@
       "source_location": "L147",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_test_deactivated_user_rejected_immediately",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_deactivated_user_rejected_immediately()"
     },
     {
@@ -17449,7 +17449,7 @@
       "source_location": "L156",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_test_role_change_applies_on_next_request",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_role_change_applies_on_next_request()"
     },
     {
@@ -17459,7 +17459,7 @@
       "source_location": "L172",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_test_deactivation_revokes_refresh_tokens",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_deactivation_revokes_refresh_tokens()"
     },
     {
@@ -17469,7 +17469,7 @@
       "source_location": "L184",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_test_admin_creates_and_lists_users",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_admin_creates_and_lists_users()"
     },
     {
@@ -17479,7 +17479,7 @@
       "source_location": "L213",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_test_short_password_rejected",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_short_password_rejected()"
     },
     {
@@ -17489,7 +17489,7 @@
       "source_location": "L224",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_test_non_admin_cannot_manage_users",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_non_admin_cannot_manage_users()"
     },
     {
@@ -17499,7 +17499,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "fixturerequest",
-      "community": 21,
+      "community": 40,
       "norm_label": "fixturerequest"
     },
     {
@@ -17509,7 +17509,7 @@
       "source_location": "L239",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_test_last_admin_cannot_be_demoted_or_deactivated",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_last_admin_cannot_be_demoted_or_deactivated()"
     },
     {
@@ -17519,7 +17519,7 @@
       "source_location": "L246",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_test_admin_can_be_demoted_when_another_admin_exists",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_admin_can_be_demoted_when_another_admin_exists()"
     },
     {
@@ -17529,7 +17529,7 @@
       "source_location": "L256",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_test_user_update_is_audited_without_password",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_user_update_is_audited_without_password()"
     },
     {
@@ -17539,7 +17539,7 @@
       "source_location": "L272",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_test_bootstrap_creates_admin_once",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_bootstrap_creates_admin_once()"
     },
     {
@@ -17549,7 +17549,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_py_monkeypatch",
-      "community": 21,
+      "community": 40,
       "norm_label": "monkeypatch"
     },
     {
@@ -17559,7 +17559,7 @@
       "source_location": "L281",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_test_bootstrap_skipped_with_placeholder_password",
-      "community": 21,
+      "community": 40,
       "norm_label": "test_bootstrap_skipped_with_placeholder_password()"
     },
     {
@@ -17569,7 +17569,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_tests_test_phase2_auth_rationale_1",
-      "community": 21,
+      "community": 40,
       "norm_label": "phase 2: authentication, tokens, rbac, user management, bootstrap."
     },
     {
@@ -18989,7 +18989,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter",
-      "community": 43,
+      "community": 83,
       "norm_label": "test_plan2_diagnosis_adapter.py"
     },
     {
@@ -18999,7 +18999,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_test_classifier_categories",
-      "community": 43,
+      "community": 83,
       "norm_label": "test_classifier_categories()"
     },
     {
@@ -19009,7 +19009,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_test_specific_causes_win_over_generic_code_errors",
-      "community": 43,
+      "community": 83,
       "norm_label": "test_specific_causes_win_over_generic_code_errors()"
     },
     {
@@ -19019,7 +19019,7 @@
       "source_location": "L67",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_test_noise_lines_and_timestamps_do_not_decide_the_category",
-      "community": 43,
+      "community": 83,
       "norm_label": "test_noise_lines_and_timestamps_do_not_decide_the_category()"
     },
     {
@@ -19029,7 +19029,7 @@
       "source_location": "L83",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_test_killed_task_reported_at_info_level_is_a_resource_failure",
-      "community": 43,
+      "community": 83,
       "norm_label": "test_killed_task_reported_at_info_level_is_a_resource_failure()"
     },
     {
@@ -19039,7 +19039,7 @@
       "source_location": "L107",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_test_common_vendor_errors",
-      "community": 43,
+      "community": 83,
       "norm_label": "test_common_vendor_errors()"
     },
     {
@@ -19049,7 +19049,7 @@
       "source_location": "L111",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_test_retryable_flags_and_empty_logs",
-      "community": 43,
+      "community": 191,
       "norm_label": "test_retryable_flags_and_empty_logs()"
     },
     {
@@ -19059,7 +19059,7 @@
       "source_location": "L120",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_test_mock_failure_logs_classify_as_expected",
-      "community": 43,
+      "community": 83,
       "norm_label": "test_mock_failure_logs_classify_as_expected()"
     },
     {
@@ -19069,7 +19069,7 @@
       "source_location": "L130",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_live",
-      "community": 43,
+      "community": 83,
       "norm_label": "live()"
     },
     {
@@ -19079,7 +19079,7 @@
       "source_location": "L142",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_seeded",
-      "community": 43,
+      "community": 83,
       "norm_label": "seeded()"
     },
     {
@@ -19089,7 +19089,7 @@
       "source_location": "L151",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_test_clear_task_instances",
-      "community": 43,
+      "community": 83,
       "norm_label": "test_clear_task_instances()"
     },
     {
@@ -19099,7 +19099,7 @@
       "source_location": "L167",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_test_trigger_dag_run",
-      "community": 43,
+      "community": 83,
       "norm_label": "test_trigger_dag_run()"
     },
     {
@@ -19109,7 +19109,7 @@
       "source_location": "L178",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_test_pause_get_dag_and_get_run",
-      "community": 43,
+      "community": 83,
       "norm_label": "test_pause_get_dag_and_get_run()"
     },
     {
@@ -19119,7 +19119,7 @@
       "source_location": "L197",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_test_rejected_write_surfaces_airflow_message",
-      "community": 43,
+      "community": 83,
       "norm_label": "test_rejected_write_surfaces_airflow_message()"
     },
     {
@@ -19129,7 +19129,7 @@
       "source_location": "L210",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_partner_clock",
-      "community": 43,
+      "community": 83,
       "norm_label": "partner_clock()"
     },
     {
@@ -19139,7 +19139,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_py_monkeypatch",
-      "community": 43,
+      "community": 83,
       "norm_label": "monkeypatch"
     },
     {
@@ -19149,7 +19149,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_py_datetime",
-      "community": 43,
+      "community": 83,
       "norm_label": "datetime"
     },
     {
@@ -19159,7 +19159,7 @@
       "source_location": "L219",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_mock_adapter",
-      "community": 43,
+      "community": 83,
       "norm_label": "mock_adapter()"
     },
     {
@@ -19169,7 +19169,7 @@
       "source_location": "L223",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_test_mock_transient_failure_recovers_after_clear",
-      "community": 43,
+      "community": 83,
       "norm_label": "test_mock_transient_failure_recovers_after_clear()"
     },
     {
@@ -19179,7 +19179,7 @@
       "source_location": "L246",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_test_mock_data_error_fails_again_after_clear",
-      "community": 43,
+      "community": 83,
       "norm_label": "test_mock_data_error_fails_again_after_clear()"
     },
     {
@@ -19189,7 +19189,7 @@
       "source_location": "L259",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_test_mock_trigger_and_pause",
-      "community": 43,
+      "community": 83,
       "norm_label": "test_mock_trigger_and_pause()"
     },
     {
@@ -19199,7 +19199,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_rationale_1",
-      "community": 43,
+      "community": 83,
       "norm_label": "plan 2 / phase 1: log classifier and the airflow adapter write path (live v1/v2"
     },
     {
@@ -19209,7 +19209,7 @@
       "source_location": "L211",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_diagnosis_adapter_rationale_211",
-      "community": 43,
+      "community": 83,
       "norm_label": "30s into a partner_api_sync bucket whose previous run failed (list: mutable time"
     },
     {
@@ -19339,7 +19339,7 @@
       "source_location": "L112",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_engine_detect",
-      "community": 91,
+      "community": 8,
       "norm_label": "detect()"
     },
     {
@@ -19349,7 +19349,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_engine_py_cyclesummary",
-      "community": 91,
+      "community": 8,
       "norm_label": "cyclesummary"
     },
     {
@@ -19379,7 +19379,7 @@
       "source_location": "L131",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_engine_ports",
-      "community": 40,
+      "community": 8,
       "norm_label": "ports()"
     },
     {
@@ -19729,7 +19729,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "backend_tests_test_plan2_graph_policy_test_every_template_is_valid",
-      "community": 33,
+      "community": 90,
       "norm_label": "test_every_template_is_valid()"
     },
     {
@@ -19889,7 +19889,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_tests_test_plan3_backend",
-      "community": 227,
+      "community": 8,
       "norm_label": "test_plan3_backend.py"
     },
     {
@@ -19899,7 +19899,7 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "backend_tests_test_plan3_backend_graph",
-      "community": 227,
+      "community": 8,
       "norm_label": "graph()"
     },
     {
@@ -19909,7 +19909,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "backend_tests_test_plan3_backend_test_positions_round_trip",
-      "community": 227,
+      "community": 8,
       "norm_label": "test_positions_round_trip()"
     },
     {
@@ -19919,7 +19919,7 @@
       "source_location": "L46",
       "_origin": "ast",
       "id": "backend_tests_test_plan3_backend_test_bad_positions_are_rejected",
-      "community": 227,
+      "community": 8,
       "norm_label": "test_bad_positions_are_rejected()"
     },
     {
@@ -19929,7 +19929,7 @@
       "source_location": "L53",
       "_origin": "ast",
       "id": "backend_tests_test_plan3_backend_test_layout_only_changes_keep_the_version",
-      "community": 227,
+      "community": 8,
       "norm_label": "test_layout_only_changes_keep_the_version()"
     },
     {
@@ -19939,7 +19939,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_plan3_backend_py_session",
-      "community": 227,
+      "community": 8,
       "norm_label": "session"
     },
     {
@@ -19949,7 +19949,7 @@
       "source_location": "L68",
       "_origin": "ast",
       "id": "backend_tests_test_plan3_backend_test_validate_endpoint_never_saves",
-      "community": 227,
+      "community": 8,
       "norm_label": "test_validate_endpoint_never_saves()"
     },
     {
@@ -19959,7 +19959,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_plan3_backend_py_testclient",
-      "community": 227,
+      "community": 8,
       "norm_label": "testclient"
     },
     {
@@ -19969,7 +19969,7 @@
       "source_location": "L85",
       "_origin": "ast",
       "id": "backend_tests_test_plan3_backend_test_delete_workflow",
-      "community": 227,
+      "community": 8,
       "norm_label": "test_delete_workflow()"
     },
     {
@@ -19979,7 +19979,7 @@
       "source_location": "L98",
       "_origin": "ast",
       "id": "backend_tests_test_plan3_backend_test_workflow_with_runs_cannot_be_deleted",
-      "community": 227,
+      "community": 8,
       "norm_label": "test_workflow_with_runs_cannot_be_deleted()"
     },
     {
@@ -19989,7 +19989,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_plan3_backend_py_monkeypatch",
-      "community": 227,
+      "community": 8,
       "norm_label": "monkeypatch"
     },
     {
@@ -19999,7 +19999,7 @@
       "source_location": "L117",
       "_origin": "ast",
       "id": "backend_tests_test_plan3_backend_test_failure_monitor_off_keeps_sla_monitor",
-      "community": 227,
+      "community": 8,
       "norm_label": "test_failure_monitor_off_keeps_sla_monitor()"
     },
     {
@@ -20009,7 +20009,7 @@
       "source_location": "L145",
       "_origin": "ast",
       "id": "backend_tests_test_plan3_backend_test_dag_patch_and_open_counts",
-      "community": 227,
+      "community": 8,
       "norm_label": "test_dag_patch_and_open_counts()"
     },
     {
@@ -20019,7 +20019,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_tests_test_plan3_backend_rationale_1",
-      "community": 227,
+      "community": 8,
       "norm_label": "plan 3 / phase 1: canvas support in the backend (positions, validate, delete, mo"
     },
     {
@@ -20029,7 +20029,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_tests_test_plan4_loop",
-      "community": 230,
+      "community": 8,
       "norm_label": "test_plan4_loop.py"
     },
     {
@@ -20039,7 +20039,7 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "backend_tests_test_plan4_loop_clock",
-      "community": 230,
+      "community": 8,
       "norm_label": "clock()"
     },
     {
@@ -20049,7 +20049,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_plan4_loop_py_monkeypatch",
-      "community": 230,
+      "community": 8,
       "norm_label": "monkeypatch"
     },
     {
@@ -20059,7 +20059,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "backend_tests_test_plan4_loop_test_leases_are_exclusive_per_name",
-      "community": 230,
+      "community": 8,
       "norm_label": "test_leases_are_exclusive_per_name()"
     },
     {
@@ -20069,7 +20069,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_plan4_loop_py_session",
-      "community": 230,
+      "community": 8,
       "norm_label": "session"
     },
     {
@@ -20079,7 +20079,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "backend_tests_test_plan4_loop_test_scheduled_detection_does_not_tick_but_manual_does",
-      "community": 230,
+      "community": 8,
       "norm_label": "test_scheduled_detection_does_not_tick_but_manual_does()"
     },
     {
@@ -20089,7 +20089,7 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "backend_tests_test_plan4_loop_test_automation_loop_advances_runs",
-      "community": 230,
+      "community": 8,
       "norm_label": "test_automation_loop_advances_runs()"
     },
     {
@@ -20099,7 +20099,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_plan4_loop_py_sessionmaker",
-      "community": 230,
+      "community": 8,
       "norm_label": "sessionmaker"
     },
     {
@@ -20109,7 +20109,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "backend_tests_test_plan4_loop_test_status_endpoint",
-      "community": 230,
+      "community": 8,
       "norm_label": "test_status_endpoint()"
     },
     {
@@ -20119,7 +20119,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_plan4_loop_py_testclient",
-      "community": 230,
+      "community": 8,
       "norm_label": "testclient"
     },
     {
@@ -20129,7 +20129,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_tests_test_plan4_loop_rationale_1",
-      "community": 230,
+      "community": 8,
       "norm_label": "plan 4 / phase 1: the automation engine runs on its own leased loop."
     },
     {
@@ -20209,7 +20209,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_tests_test_sla_block",
-      "community": 83,
+      "community": 90,
       "norm_label": "test_sla_block.py"
     },
     {
@@ -20249,7 +20249,7 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "backend_tests_test_sla_block_custommockadapter",
-      "community": 83,
+      "community": 90,
       "norm_label": "custommockadapter"
     },
     {
@@ -20269,7 +20269,7 @@
       "source_location": "L68",
       "_origin": "ast",
       "id": "backend_tests_test_sla_block_custommockadapter_list_dag_runs",
-      "community": 83,
+      "community": 90,
       "norm_label": ".list_dag_runs()"
     },
     {
@@ -20279,7 +20279,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_sla_block_py_datetime",
-      "community": 83,
+      "community": 90,
       "norm_label": "datetime"
     },
     {
@@ -20289,7 +20289,7 @@
       "source_location": "L71",
       "_origin": "ast",
       "id": "backend_tests_test_sla_block_custommockadapter_get_dag_run",
-      "community": 83,
+      "community": 90,
       "norm_label": ".get_dag_run()"
     },
     {
@@ -20299,7 +20299,7 @@
       "source_location": "L75",
       "_origin": "ast",
       "id": "backend_tests_test_sla_block_test_sla_block_execution_exceeded",
-      "community": 83,
+      "community": 90,
       "norm_label": "test_sla_block_execution_exceeded()"
     },
     {
@@ -20309,7 +20309,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_sla_block_py_session",
-      "community": 83,
+      "community": 90,
       "norm_label": "session"
     },
     {
@@ -20319,7 +20319,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_sla_block_py_monkeypatch",
-      "community": 83,
+      "community": 90,
       "norm_label": "monkeypatch"
     },
     {
@@ -20329,7 +20329,7 @@
       "source_location": "L185",
       "_origin": "ast",
       "id": "backend_tests_test_sla_block_test_sla_block_execution_met",
-      "community": 83,
+      "community": 90,
       "norm_label": "test_sla_block_execution_met()"
     },
     {
@@ -20339,7 +20339,7 @@
       "source_location": "L273",
       "_origin": "ast",
       "id": "backend_tests_test_sla_block_test_in_flight_sla_detection_exceeded",
-      "community": 83,
+      "community": 90,
       "norm_label": "test_in_flight_sla_detection_exceeded()"
     },
     {
@@ -20349,7 +20349,7 @@
       "source_location": "L377",
       "_origin": "ast",
       "id": "backend_tests_test_sla_block_test_in_flight_sla_detection_idle_dag_no_false_alarm",
-      "community": 83,
+      "community": 90,
       "norm_label": "test_in_flight_sla_detection_idle_dag_no_false_alarm()"
     },
     {
@@ -20369,7 +20369,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_tests_test_sla_block_rationale_1",
-      "community": 83,
+      "community": 90,
       "norm_label": "tests for the adaptive sla block (check.sla): historical baseline estimation, bu"
     },
     {
@@ -20379,7 +20379,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant",
-      "community": 18,
+      "community": 46,
       "norm_label": "test_workflow_assistant.py"
     },
     {
@@ -20389,7 +20389,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_node",
-      "community": 18,
+      "community": 46,
       "norm_label": "node()"
     },
     {
@@ -20399,7 +20399,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_py_any",
-      "community": 18,
+      "community": 46,
       "norm_label": "any"
     },
     {
@@ -20409,7 +20409,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_answer_graph",
-      "community": 18,
+      "community": 46,
       "norm_label": "answer_graph()"
     },
     {
@@ -20419,7 +20419,7 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_fakellm",
-      "community": 18,
+      "community": 46,
       "norm_label": "fakellm"
     },
     {
@@ -20429,7 +20429,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_fakellm_init",
-      "community": 18,
+      "community": 46,
       "norm_label": ".__init__()"
     },
     {
@@ -20439,7 +20439,7 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_fakellm_complete_json",
-      "community": 18,
+      "community": 46,
       "norm_label": ".complete_json()"
     },
     {
@@ -20449,7 +20449,7 @@
       "source_location": "L68",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_proposal",
-      "community": 18,
+      "community": 46,
       "norm_label": "proposal()"
     },
     {
@@ -20459,7 +20459,7 @@
       "source_location": "L72",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_ask",
-      "community": 18,
+      "community": 46,
       "norm_label": "ask()"
     },
     {
@@ -20469,7 +20469,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_test_catalog_prompt_lists_every_block_type_and_its_ports",
-      "community": 18,
+      "community": 46,
       "norm_label": "test_catalog_prompt_lists_every_block_type_and_its_ports()"
     },
     {
@@ -20489,7 +20489,7 @@
       "source_location": "L109",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_test_valid_proposal_is_normalized_and_diffed",
-      "community": 18,
+      "community": 46,
       "norm_label": "test_valid_proposal_is_normalized_and_diffed()"
     },
     {
@@ -20499,7 +20499,7 @@
       "source_location": "L126",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_test_answer_without_graph_is_just_a_reply",
-      "community": 18,
+      "community": 46,
       "norm_label": "test_answer_without_graph_is_just_a_reply()"
     },
     {
@@ -20509,7 +20509,7 @@
       "source_location": "L132",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_test_invalid_proposal_triggers_a_repair_turn_with_the_problems",
-      "community": 18,
+      "community": 46,
       "norm_label": "test_invalid_proposal_triggers_a_repair_turn_with_the_problems()"
     },
     {
@@ -20519,7 +20519,7 @@
       "source_location": "L142",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_test_gives_up_after_max_repairs_and_returns_the_invalid_graph",
-      "community": 18,
+      "community": 46,
       "norm_label": "test_gives_up_after_max_repairs_and_returns_the_invalid_graph()"
     },
     {
@@ -20529,7 +20529,7 @@
       "source_location": "L151",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_test_bad_config_json_is_reported_per_block",
-      "community": 18,
+      "community": 46,
       "norm_label": "test_bad_config_json_is_reported_per_block()"
     },
     {
@@ -20539,7 +20539,7 @@
       "source_location": "L159",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_test_kept_blocks_keep_their_position_and_changes_are_detected",
-      "community": 18,
+      "community": 46,
       "norm_label": "test_kept_blocks_keep_their_position_and_changes_are_detected()"
     },
     {
@@ -20549,7 +20549,7 @@
       "source_location": "L180",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_test_fix_mode_sends_the_problems_and_a_default_request",
-      "community": 18,
+      "community": 46,
       "norm_label": "test_fix_mode_sends_the_problems_and_a_default_request()"
     },
     {
@@ -20559,7 +20559,7 @@
       "source_location": "L194",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_test_conversation_must_end_with_the_user",
-      "community": 18,
+      "community": 46,
       "norm_label": "test_conversation_must_end_with_the_user()"
     },
     {
@@ -20569,7 +20569,7 @@
       "source_location": "L207",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_test_ollama_payload_and_failure_modes",
-      "community": 18,
+      "community": 46,
       "norm_label": "test_ollama_payload_and_failure_modes()"
     },
     {
@@ -20579,7 +20579,7 @@
       "source_location": "L230",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_test_anthropic_uses_structured_output_and_maps_refusals",
-      "community": 18,
+      "community": 46,
       "norm_label": "test_anthropic_uses_structured_output_and_maps_refusals()"
     },
     {
@@ -20589,7 +20589,7 @@
       "source_location": "L258",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_test_api_is_off_by_default",
-      "community": 18,
+      "community": 46,
       "norm_label": "test_api_is_off_by_default()"
     },
     {
@@ -20599,7 +20599,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_py_testclient",
-      "community": 18,
+      "community": 46,
       "norm_label": "testclient"
     },
     {
@@ -20609,7 +20609,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_py_monkeypatch",
-      "community": 18,
+      "community": 46,
       "norm_label": "monkeypatch"
     },
     {
@@ -20619,7 +20619,7 @@
       "source_location": "L270",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_test_api_returns_a_proposal",
-      "community": 18,
+      "community": 46,
       "norm_label": "test_api_returns_a_proposal()"
     },
     {
@@ -20629,7 +20629,7 @@
       "source_location": "L285",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_test_api_maps_provider_failures_to_503",
-      "community": 18,
+      "community": 46,
       "norm_label": "test_api_maps_provider_failures_to_503()"
     },
     {
@@ -20639,7 +20639,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "backend_tests_test_workflow_assistant_rationale_27",
-      "community": 18,
+      "community": 46,
       "norm_label": "a graph as the model sends it: configs as json strings."
     },
     {
@@ -24159,7 +24159,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "ml_service_app_model",
-      "community": 87,
+      "community": 179,
       "norm_label": "model.py"
     },
     {
@@ -24169,7 +24169,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "ml_service_app_model_predictorprotocol",
-      "community": 87,
+      "community": 179,
       "norm_label": "predictorprotocol"
     },
     {
@@ -24179,7 +24179,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "ml_service_app_model_predictorprotocol_predict",
-      "community": 87,
+      "community": 179,
       "norm_label": ".predict()"
     },
     {
@@ -24199,7 +24199,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "ml_service_app_model_predictorprotocol_vram_used_mb",
-      "community": 87,
+      "community": 179,
       "norm_label": ".vram_used_mb()"
     },
     {
@@ -24209,7 +24209,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "ml_service_app_model_ece",
-      "community": 80,
+      "community": 179,
       "norm_label": "ece()"
     },
     {
@@ -24349,7 +24349,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "ml_service_app_model_rationale_1",
-      "community": 87,
+      "community": 179,
       "norm_label": "distilbert failure classifier: loads a versioned weights directory and predicts"
     },
     {
@@ -24359,7 +24359,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "ml_service_app_model_rationale_33",
-      "community": 80,
+      "community": 179,
       "norm_label": "expected calibration error: |accuracy - confidence| averaged over confidence bin"
     },
     {
@@ -24529,7 +24529,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "ml_service_app_schemas",
-      "community": 179,
+      "community": 9,
       "norm_label": "schemas.py"
     },
     {
@@ -24539,7 +24539,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "ml_service_app_schemas_classifyrequest",
-      "community": 179,
+      "community": 9,
       "norm_label": "classifyrequest"
     },
     {
@@ -24549,7 +24549,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "ml_service_app_schemas_scoredcategory",
-      "community": 179,
+      "community": 9,
       "norm_label": "scoredcategory"
     },
     {
@@ -24559,7 +24559,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "ml_service_app_schemas_classifyresponse",
-      "community": 179,
+      "community": 9,
       "norm_label": "classifyresponse"
     },
     {
@@ -24569,7 +24569,7 @@
       "source_location": "L38",
       "_origin": "ast",
       "id": "ml_service_app_schemas_healthresponse",
-      "community": 179,
+      "community": 9,
       "norm_label": "healthresponse"
     },
     {
@@ -24599,7 +24599,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "ml_service_test_pred",
-      "community": 87,
+      "community": 179,
       "norm_label": "test_pred.py"
     },
     {
@@ -31021,276 +31021,6 @@
       "id": "plan4_4_definition_of_done",
       "community": 92,
       "norm_label": "4. definition of done"
-    },
-    {
-      "label": "presentation.md",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L1",
-      "_origin": "ast",
-      "id": "presentation",
-      "community": 44,
-      "norm_label": "presentation.md"
-    },
-    {
-      "label": "Presentation Content: Automating Managed Services Using Agentic AI",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L1",
-      "_origin": "ast",
-      "id": "presentation_presentation_content_automating_managed_services_using_agentic_ai",
-      "community": 44,
-      "norm_label": "presentation content: automating managed services using agentic ai"
-    },
-    {
-      "label": "Slide 1: Title Slide",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L10",
-      "_origin": "ast",
-      "id": "presentation_slide_1_title_slide",
-      "community": 44,
-      "norm_label": "slide 1: title slide"
-    },
-    {
-      "label": "Automating Managed Services Using Agentic AI",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L12",
-      "_origin": "ast",
-      "id": "presentation_automating_managed_services_using_agentic_ai",
-      "community": 44,
-      "norm_label": "automating managed services using agentic ai"
-    },
-    {
-      "label": "Slide 2: Introduction: The Three Key Ideas",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L24",
-      "_origin": "ast",
-      "id": "presentation_slide_2_introduction_the_three_key_ideas",
-      "community": 44,
-      "norm_label": "slide 2: introduction: the three key ideas"
-    },
-    {
-      "label": "What is an AI Agent?",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L26",
-      "_origin": "ast",
-      "id": "presentation_what_is_an_ai_agent",
-      "community": 44,
-      "norm_label": "what is an ai agent?"
-    },
-    {
-      "label": "What is Automation?",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L30",
-      "_origin": "ast",
-      "id": "presentation_what_is_automation",
-      "community": 44,
-      "norm_label": "what is automation?"
-    },
-    {
-      "label": "What is a Managed Service in Data Monitoring?",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L34",
-      "_origin": "ast",
-      "id": "presentation_what_is_a_managed_service_in_data_monitoring",
-      "community": 44,
-      "norm_label": "what is a managed service in data monitoring?"
-    },
-    {
-      "label": "Slide 3: The Problem",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L43",
-      "_origin": "ast",
-      "id": "presentation_slide_3_the_problem",
-      "community": 44,
-      "norm_label": "slide 3: the problem"
-    },
-    {
-      "label": "Slide 4: Objectives",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L59",
-      "_origin": "ast",
-      "id": "presentation_slide_4_objectives",
-      "community": 44,
-      "norm_label": "slide 4: objectives"
-    },
-    {
-      "label": "Slide 5: System Architecture",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L75",
-      "_origin": "ast",
-      "id": "presentation_slide_5_system_architecture",
-      "community": 44,
-      "norm_label": "slide 5: system architecture"
-    },
-    {
-      "label": "Slide 6: Core Workflow: The Agent Loop",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L99",
-      "_origin": "ast",
-      "id": "presentation_slide_6_core_workflow_the_agent_loop",
-      "community": 44,
-      "norm_label": "slide 6: core workflow: the agent loop"
-    },
-    {
-      "label": "Slide 7: Feature: Airflow Connection & Pipeline Monitoring",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L117",
-      "_origin": "ast",
-      "id": "presentation_slide_7_feature_airflow_connection_pipeline_monitoring",
-      "community": 44,
-      "norm_label": "slide 7: feature: airflow connection & pipeline monitoring"
-    },
-    {
-      "label": "Slide 8: Feature: Database Connections",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L130",
-      "_origin": "ast",
-      "id": "presentation_slide_8_feature_database_connections",
-      "community": 44,
-      "norm_label": "slide 8: feature: database connections"
-    },
-    {
-      "label": "Slide 9: Feature: Detection & Incident Management",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L143",
-      "_origin": "ast",
-      "id": "presentation_slide_9_feature_detection_incident_management",
-      "community": 44,
-      "norm_label": "slide 9: feature: detection & incident management"
-    },
-    {
-      "label": "Slide 10: Feature: AI-Powered Hybrid Diagnosis",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L157",
-      "_origin": "ast",
-      "id": "presentation_slide_10_feature_ai_powered_hybrid_diagnosis",
-      "community": 44,
-      "norm_label": "slide 10: feature: ai-powered hybrid diagnosis"
-    },
-    {
-      "label": "Slide 11: Feature: Automation Workflows (The Agent's Brain)",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L182",
-      "_origin": "ast",
-      "id": "presentation_slide_11_feature_automation_workflows_the_agent_s_brain",
-      "community": 44,
-      "norm_label": "slide 11: feature: automation workflows (the agent's brain)"
-    },
-    {
-      "label": "Slide 12: Feature: \"Choose the Fix\": Rules + Local LLM",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L204",
-      "_origin": "ast",
-      "id": "presentation_slide_12_feature_choose_the_fix_rules_local_llm",
-      "community": 44,
-      "norm_label": "slide 12: feature: \"choose the fix\": rules + local llm"
-    },
-    {
-      "label": "Slide 13: Feature: Safety, Approvals & Audit",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L216",
-      "_origin": "ast",
-      "id": "presentation_slide_13_feature_safety_approvals_audit",
-      "community": 44,
-      "norm_label": "slide 13: feature: safety, approvals & audit"
-    },
-    {
-      "label": "Slide 14: Feature: Alert & Notification Channels",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L230",
-      "_origin": "ast",
-      "id": "presentation_slide_14_feature_alert_notification_channels",
-      "community": 44,
-      "norm_label": "slide 14: feature: alert & notification channels"
-    },
-    {
-      "label": "Slide 15: Feature: Visual Workflow Editor & AI Assistant",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L242",
-      "_origin": "ast",
-      "id": "presentation_slide_15_feature_visual_workflow_editor_ai_assistant",
-      "community": 44,
-      "norm_label": "slide 15: feature: visual workflow editor & ai assistant"
-    },
-    {
-      "label": "Slide 16: Feature: Dashboard, Incidents UI & Log Analyzer",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L257",
-      "_origin": "ast",
-      "id": "presentation_slide_16_feature_dashboard_incidents_ui_log_analyzer",
-      "community": 44,
-      "norm_label": "slide 16: feature: dashboard, incidents ui & log analyzer"
-    },
-    {
-      "label": "Slide 17: Testing & Quality",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L267",
-      "_origin": "ast",
-      "id": "presentation_slide_17_testing_quality",
-      "community": 44,
-      "norm_label": "slide 17: testing & quality"
-    },
-    {
-      "label": "Slide 18: Demo Scenario (Optional Live Demo)",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L279",
-      "_origin": "ast",
-      "id": "presentation_slide_18_demo_scenario_optional_live_demo",
-      "community": 44,
-      "norm_label": "slide 18: demo scenario (optional live demo)"
-    },
-    {
-      "label": "Slide 19: Future Work",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L290",
-      "_origin": "ast",
-      "id": "presentation_slide_19_future_work",
-      "community": 44,
-      "norm_label": "slide 19: future work"
-    },
-    {
-      "label": "Slide 20: Conclusion",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L300",
-      "_origin": "ast",
-      "id": "presentation_slide_20_conclusion",
-      "community": 44,
-      "norm_label": "slide 20: conclusion"
-    },
-    {
-      "label": "Thank You!",
-      "file_type": "document",
-      "source_file": "presentation.md",
-      "source_location": "L309",
-      "_origin": "ast",
-      "id": "presentation_thank_you",
-      "community": 44,
-      "norm_label": "thank you!"
     },
     {
       "label": "project.md",
@@ -116847,266 +116577,6 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L12",
-      "weight": 1.0,
-      "source": "presentation",
-      "target": "presentation_automating_managed_services_using_agentic_ai",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L1",
-      "weight": 1.0,
-      "source": "presentation",
-      "target": "presentation_presentation_content_automating_managed_services_using_agentic_ai",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L10",
-      "weight": 1.0,
-      "source": "presentation_presentation_content_automating_managed_services_using_agentic_ai",
-      "target": "presentation_slide_1_title_slide",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L157",
-      "weight": 1.0,
-      "source": "presentation_automating_managed_services_using_agentic_ai",
-      "target": "presentation_slide_10_feature_ai_powered_hybrid_diagnosis",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L182",
-      "weight": 1.0,
-      "source": "presentation_automating_managed_services_using_agentic_ai",
-      "target": "presentation_slide_11_feature_automation_workflows_the_agent_s_brain",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L204",
-      "weight": 1.0,
-      "source": "presentation_automating_managed_services_using_agentic_ai",
-      "target": "presentation_slide_12_feature_choose_the_fix_rules_local_llm",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L216",
-      "weight": 1.0,
-      "source": "presentation_automating_managed_services_using_agentic_ai",
-      "target": "presentation_slide_13_feature_safety_approvals_audit",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L230",
-      "weight": 1.0,
-      "source": "presentation_automating_managed_services_using_agentic_ai",
-      "target": "presentation_slide_14_feature_alert_notification_channels",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L242",
-      "weight": 1.0,
-      "source": "presentation_automating_managed_services_using_agentic_ai",
-      "target": "presentation_slide_15_feature_visual_workflow_editor_ai_assistant",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L257",
-      "weight": 1.0,
-      "source": "presentation_automating_managed_services_using_agentic_ai",
-      "target": "presentation_slide_16_feature_dashboard_incidents_ui_log_analyzer",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L267",
-      "weight": 1.0,
-      "source": "presentation_automating_managed_services_using_agentic_ai",
-      "target": "presentation_slide_17_testing_quality",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L279",
-      "weight": 1.0,
-      "source": "presentation_automating_managed_services_using_agentic_ai",
-      "target": "presentation_slide_18_demo_scenario_optional_live_demo",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L290",
-      "weight": 1.0,
-      "source": "presentation_automating_managed_services_using_agentic_ai",
-      "target": "presentation_slide_19_future_work",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L300",
-      "weight": 1.0,
-      "source": "presentation_automating_managed_services_using_agentic_ai",
-      "target": "presentation_slide_20_conclusion",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L24",
-      "weight": 1.0,
-      "source": "presentation_automating_managed_services_using_agentic_ai",
-      "target": "presentation_slide_2_introduction_the_three_key_ideas",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L43",
-      "weight": 1.0,
-      "source": "presentation_automating_managed_services_using_agentic_ai",
-      "target": "presentation_slide_3_the_problem",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L59",
-      "weight": 1.0,
-      "source": "presentation_automating_managed_services_using_agentic_ai",
-      "target": "presentation_slide_4_objectives",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L75",
-      "weight": 1.0,
-      "source": "presentation_automating_managed_services_using_agentic_ai",
-      "target": "presentation_slide_5_system_architecture",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L99",
-      "weight": 1.0,
-      "source": "presentation_automating_managed_services_using_agentic_ai",
-      "target": "presentation_slide_6_core_workflow_the_agent_loop",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L117",
-      "weight": 1.0,
-      "source": "presentation_automating_managed_services_using_agentic_ai",
-      "target": "presentation_slide_7_feature_airflow_connection_pipeline_monitoring",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L130",
-      "weight": 1.0,
-      "source": "presentation_automating_managed_services_using_agentic_ai",
-      "target": "presentation_slide_8_feature_database_connections",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L143",
-      "weight": 1.0,
-      "source": "presentation_automating_managed_services_using_agentic_ai",
-      "target": "presentation_slide_9_feature_detection_incident_management",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L34",
-      "weight": 1.0,
-      "source": "presentation_slide_2_introduction_the_three_key_ideas",
-      "target": "presentation_what_is_a_managed_service_in_data_monitoring",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L26",
-      "weight": 1.0,
-      "source": "presentation_slide_2_introduction_the_three_key_ideas",
-      "target": "presentation_what_is_an_ai_agent",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L30",
-      "weight": 1.0,
-      "source": "presentation_slide_2_introduction_the_three_key_ideas",
-      "target": "presentation_what_is_automation",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "presentation.md",
-      "source_location": "L309",
-      "weight": 1.0,
-      "source": "presentation_slide_20_conclusion",
-      "target": "presentation_thank_you",
-      "confidence_score": 1.0
-    },
-    {
       "relation": "conceptually_related_to",
       "confidence": "INFERRED",
       "confidence_score": 0.75,
@@ -117433,5 +116903,5 @@
       "source_file": "plan4.md"
     }
   ],
-  "built_at_commit": "4550f47f580f2dbfcde64ae5ec2d3aab7359cc8f"
+  "built_at_commit": "0fdee38ead4b7316e430832c4bfbad65d31fd70d"
 }

@@ -80,9 +80,9 @@
     "semantic_hash": "3a1e754c869fcd34aaa89cd46015f8aa"
   },
   "backend/app/api/v1/health.py": {
-    "mtime": 1790445290.1667497,
-    "ast_hash": "424aab0d7ab4eb27f85841c21de06f83",
-    "semantic_hash": "424aab0d7ab4eb27f85841c21de06f83"
+    "mtime": 1793012347.975139,
+    "ast_hash": "ac77a1a14f1c01776647150276820387",
+    "semantic_hash": ""
   },
   "backend/app/api/v1/incidents.py": {
     "mtime": 1792292559.3639753,
@@ -730,8 +730,8 @@
     "semantic_hash": "6b959ddd7e238670d844b0e5d3f74948"
   },
   "frontend/src/pages/dashboard/Dashboard.jsx": {
-    "mtime": 1792905194.3241003,
-    "ast_hash": "7a20670fb1b95dab5f8b795acc8e55f3",
+    "mtime": 1793012782.023518,
+    "ast_hash": "dc87eacc380256a6b4d851a2f3a2dd68",
     "semantic_hash": ""
   },
   "frontend/src/pages/incidents/IncidentDetail.jsx": {
@@ -780,8 +780,8 @@
     "semantic_hash": ""
   },
   "frontend/src/services/endpoints.js": {
-    "mtime": 1793011177.5068035,
-    "ast_hash": "db50627d22a8da78ede94bc78fca196b",
+    "mtime": 1793012487.6806133,
+    "ast_hash": "a4cd9a6b9f55c0734fe70bcb38cda618",
     "semantic_hash": ""
   },
   "frontend/src/types/index.js": {
@@ -1352,6 +1352,26 @@
   "backend/tests/test_diagnostic_llm.py": {
     "mtime": 1792907767.6073258,
     "ast_hash": "71b327e5b58a4943e660fc5f8e43ac38",
+    "semantic_hash": ""
+  },
+  "backend/app/schemas/connector_metrics.py": {
+    "mtime": 1793012275.3614976,
+    "ast_hash": "770aac390790962084572d5e64dadb10",
+    "semantic_hash": ""
+  },
+  "backend/app/services/connector_metrics_service.py": {
+    "mtime": 1793012304.0517204,
+    "ast_hash": "051493f25051e02dc8b0b9c9c14bc3b3",
+    "semantic_hash": ""
+  },
+  "backend/tests/test_connector_metrics.py": {
+    "mtime": 1793012455.6377773,
+    "ast_hash": "5a13877a96c7b6b47289de6049d7325d",
+    "semantic_hash": ""
+  },
+  "frontend/src/pages/dashboard/ConnectorMetricsSection.jsx": {
+    "mtime": 1793012534.7575748,
+    "ast_hash": "6c30a93c3f9bb93523dce01a6d1215ae",
     "semantic_hash": ""
   }
 }

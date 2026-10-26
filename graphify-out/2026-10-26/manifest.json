@@ -90,7 +90,7 @@
     "semantic_hash": ""
   },
   "backend/app/api/v1/router.py": {
-    "mtime": 1790833124.757,
+    "mtime": 1793011176.8540535,
     "ast_hash": "61f32536a7a93361581a0ddd0b2f21db",
     "semantic_hash": ""
   },
@@ -245,7 +245,7 @@
     "semantic_hash": "3aa4ea69d172d9224591fc4529c72db0"
   },
   "backend/app/models/__init__.py": {
-    "mtime": 1792292559.4068923,
+    "mtime": 1793011176.8767104,
     "ast_hash": "9ea64d63f1362f1f57602a1b8698ad3d",
     "semantic_hash": ""
   },
@@ -390,7 +390,7 @@
     "semantic_hash": ""
   },
   "backend/app/services/connection_monitor_service.py": {
-    "mtime": 1791023538.770641,
+    "mtime": 1793011177.0735466,
     "ast_hash": "8a7a829876952baa5694a0a103f674b9",
     "semantic_hash": ""
   },
@@ -570,12 +570,12 @@
     "semantic_hash": "53757f54bfe2bdda1e4b5d8dcca4c4ba"
   },
   "frontend/src/App.jsx": {
-    "mtime": 1792020893.8149762,
+    "mtime": 1793011177.1031828,
     "ast_hash": "63f532eff63d4201e812526568bf499b",
     "semantic_hash": ""
   },
   "frontend/src/components/NavIcon.jsx": {
-    "mtime": 1791483472.8980618,
+    "mtime": 1793011177.1125813,
     "ast_hash": "1b604a7415178e52f703c4f311b0faf0",
     "semantic_hash": ""
   },
@@ -610,7 +610,7 @@
     "semantic_hash": "f598f970afa4f811b351afa76abe1d0c"
   },
   "frontend/src/connectionState.js": {
-    "mtime": 1790470257.2205586,
+    "mtime": 1793011177.1591678,
     "ast_hash": "d2ac7ce0360892c9dea67a0bc6a67304",
     "semantic_hash": "d2ac7ce0360892c9dea67a0bc6a67304"
   },
@@ -630,7 +630,7 @@
     "semantic_hash": "6569dd46880484be0f2783095c93c6d3"
   },
   "frontend/src/layouts/AppLayout.jsx": {
-    "mtime": 1792905913.4085517,
+    "mtime": 1793011177.2132535,
     "ast_hash": "7a0d447e5ea2292424c8fbcb698f237b",
     "semantic_hash": ""
   },
@@ -705,8 +705,8 @@
     "semantic_hash": "59c0f7ec22c52f18d95f8e62c2dc49e7"
   },
   "frontend/src/pages/connections/Catalog.jsx": {
-    "mtime": 1791342120.8591144,
-    "ast_hash": "a41ec2049aea3a08992ab472401ad4fb",
+    "mtime": 1793011177.2431111,
+    "ast_hash": "f8961ef8fac568c04b744d89b891a92a",
     "semantic_hash": ""
   },
   "frontend/src/pages/connections/DagPanel.jsx": {
@@ -780,7 +780,7 @@
     "semantic_hash": ""
   },
   "frontend/src/services/endpoints.js": {
-    "mtime": 1792907162.361666,
+    "mtime": 1793011177.5068035,
     "ast_hash": "db50627d22a8da78ede94bc78fca196b",
     "semantic_hash": ""
   },
@@ -1342,11 +1342,6 @@
   ".agents/skills/gravitas/resources/verification-engine.md": {
     "mtime": 1792904411.4761372,
     "ast_hash": "77b907d4b8b8b7e49a4b9c0459d72426",
-    "semantic_hash": ""
-  },
-  "presentation.md": {
-    "mtime": 1792023196.8179572,
-    "ast_hash": "9ce703d57a3902c82c5059ea9130a9e5",
     "semantic_hash": ""
   },
   "backend/app/connectors/diagnostic_llm.py": {

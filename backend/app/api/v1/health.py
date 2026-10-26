@@ -9,6 +9,7 @@ from app.core.dependencies import DbSession, ViewerUser
 from app.models.airflow import AirflowConnection
 from app.models.database_connection import DatabaseConnection
 from app.orchestration.airflow.base import ConnectionStatus
+from app.schemas.connector_metrics import ConnectorMetricsResponse
 from app.schemas.health import (
     AirflowConnectionHealth,
     DatabaseConnectionHealth,
@@ -16,6 +17,7 @@ from app.schemas.health import (
     HealthStatusResponse,
     LivenessResponse,
 )
+from app.services import connector_metrics_service
 
 router = APIRouter(prefix="/health", tags=["health"])
 
@@ -91,3 +93,9 @@ def health(db: DbSession, _: ViewerUser) -> HealthStatusResponse:
         airflow=airflow,
         databases=databases,
     )
+
+
+@router.get("/connector-metrics", response_model=ConnectorMetricsResponse)
+def get_connector_metrics(db: DbSession, _: ViewerUser) -> ConnectorMetricsResponse:
+    """Return aggregated run KPIs, successes, failures, and reliability rankings per connector."""
+    return connector_metrics_service.get_connector_metrics(db)

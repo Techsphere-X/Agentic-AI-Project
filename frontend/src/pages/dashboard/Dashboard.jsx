@@ -5,12 +5,14 @@ import { connectionState, databaseState } from '../../connectionState'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { formatRelative } from '../../format'
+import ConnectorMetricsSection from './ConnectorMetricsSection'
 import {
   airflowApi,
   automationApi,
   channelsApi,
   databaseApi,
   detectionApi,
+  healthApi,
   incidentsApi,
 } from '../../services/endpoints'
 
@@ -74,6 +76,8 @@ export default function Dashboard() {
   const [assistant, setAssistant] = useState(null)
   const [recentIncidents, setRecentIncidents] = useState(null)
   const [recentRuns, setRecentRuns] = useState(null)
+  const [connectorMetrics, setConnectorMetrics] = useState(null)
+  const [loadingMetrics, setLoadingMetrics] = useState(false)
   const [runningDetection, setRunningDetection] = useState(false)
   const [error, setError] = useState(null)
 
@@ -87,6 +91,11 @@ export default function Dashboard() {
       automationApi
         .assistantStatus()
         .then((a) => setAssistant(a))
+        .catch(() => {})
+
+      healthApi
+        .connectorMetrics()
+        .then((m) => setConnectorMetrics(m))
         .catch(() => {})
 
       databaseApi
@@ -162,6 +171,19 @@ export default function Dashboard() {
       toast.error(`Detection scan failed: ${err.message}`)
     } finally {
       setRunningDetection(false)
+    }
+  }
+
+  const refreshMetrics = async () => {
+    setLoadingMetrics(true)
+    try {
+      const m = await healthApi.connectorMetrics()
+      setConnectorMetrics(m)
+      toast.success('Connector performance metrics updated')
+    } catch (err) {
+      toast.error(`Failed to refresh metrics: ${err.message}`)
+    } finally {
+      setLoadingMetrics(false)
     }
   }
 
@@ -396,6 +418,13 @@ export default function Dashboard() {
           </p>
         </div>
       </div>
+
+      {/* ----------------- Connector Performance & Run KPIs (Graph + Leaderboard) ----------------- */}
+      <ConnectorMetricsSection
+        data={connectorMetrics}
+        loading={loadingMetrics}
+        onRefresh={refreshMetrics}
+      />
 
       {/* ----------------- AI Copilot Recipes Showcase ----------------- */}
       <div className="copilot-launcher-card">

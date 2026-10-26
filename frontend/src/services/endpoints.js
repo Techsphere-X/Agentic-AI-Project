@@ -18,6 +18,7 @@ export const authApi = {
 
 export const healthApi = {
   status: () => api.get('/health'),
+  connectorMetrics: () => api.get('/health/connector-metrics'),
 }
 
 export const usersApi = {
