@@ -1,24 +1,21 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { useOutletContext, useSearchParams } from 'react-router'
 import { Badge, Button, Card, EmptyState, Modal, StatusPill } from '../../components/ui'
-import { channelState, connectionState, databaseState, wedataState } from '../../connectionState'
+import { channelState, connectionState, databaseState } from '../../connectionState'
 import { formatRelative } from '../../format'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
-import { airflowApi, channelsApi, databaseApi, wedataApi } from '../../services/endpoints'
+import { airflowApi, channelsApi, databaseApi } from '../../services/endpoints'
 import AirflowConnectionForm, { TestResult } from './AirflowConnectionForm'
 import DagPanel from './DagPanel'
 import DatabaseConnectionForm from './DatabaseConnectionForm'
 import { CHANNEL_KINDS, ENGINES } from './engines'
 import NotificationChannelForm from './NotificationChannelForm'
-import WeDataConnectionForm from './WeDataConnectionForm'
-import WeDataTaskPanel from './WeDataTaskPanel'
 
 const POLL_MS = 15000
 
 const TYPES = {
   airflow: { label: 'Airflow', plural: 'Airflow connections', api: airflowApi, state: connectionState, tone: 'info' },
-  wedata: { label: 'Tencent WeData', plural: 'WeData connections', api: wedataApi, state: wedataState, tone: 'primary' },
   database: { label: 'Database', plural: 'Database connections', api: databaseApi, state: databaseState, tone: 'neutral' },
   channel: { label: 'Notification', plural: 'Notification channels', api: channelsApi, state: channelState, tone: 'warning' },
 }
@@ -29,12 +26,6 @@ const PAGE_COPY = {
     description: 'Airflow instances connected to this platform. Open a connection to choose which DAGs are monitored.',
     addLabel: 'Add Airflow',
     emptyAdmin: 'Add an Airflow instance to start monitoring DAGs. Use the Mock Airflow type if none is running locally.',
-  },
-  wedata: {
-    title: 'Tencent Cloud WeData connections',
-    description: 'WeData projects and workspaces connected to this platform. Open a connection to choose which tasks and pipelines are monitored.',
-    addLabel: 'Add WeData',
-    emptyAdmin: 'Add a Tencent Cloud WeData connection to start monitoring data tasks. Use Mock mode for offline development.',
   },
   database: {
     title: 'Database connections',
@@ -52,14 +43,12 @@ const PAGE_COPY = {
 
 function endpoint(type, c) {
   if (type === 'airflow') return c.base_url
-  if (type === 'wedata') return `${c.region} / ${c.project_id}`
   if (type === 'channel') return c.target
   return `${c.host}:${c.port}/${c.database}`
 }
 
 function version(type, c) {
   if (type === 'airflow') return c.airflow_version ? `Airflow ${c.airflow_version} (${c.api_version})` : '—'
-  if (type === 'wedata') return 'WeData 3.0 (TC3)'
   if (type === 'channel') return CHANNEL_KINDS[c.kind]?.label ?? c.kind
   return c.server_version ? `${ENGINES[c.engine]?.label ?? c.engine} ${c.server_version}` : ENGINES[c.engine]?.label ?? c.engine
 }
@@ -71,7 +60,6 @@ function subtitle(type, c) {
   }
   const parts = [c.environment.toLowerCase()]
   if (type === 'airflow') parts.push(`${c.auth_type.toLowerCase()} auth`)
-  else if (type === 'wedata') parts.push(c.endpoint)
   else parts.push(c.username)
   return parts.join(' · ')
 }
@@ -243,16 +231,6 @@ export default function Catalog({ type }) {
                               DAGs {open ? '▴' : '▾'}
                             </Button>
                           )}
-                          {type === 'wedata' && (
-                            <Button
-                              size="sm"
-                              variant={open ? 'primary' : 'secondary'}
-                              aria-expanded={open}
-                              onClick={() => setParam('open', open ? null : c.id)}
-                            >
-                              Tasks {open ? '▴' : '▾'}
-                            </Button>
-                          )}
                           {canOperate && (
                             <Button size="sm" onClick={() => onTest(type, c)} loading={testingId === c.id}>
                               Test
@@ -273,8 +251,7 @@ export default function Catalog({ type }) {
                       {open && (
                         <tr className="row-detail">
                           <td colSpan={7}>
-                            {type === 'airflow' && <DagPanel connection={c} onConnectionChanged={reloadAll} />}
-                            {type === 'wedata' && <WeDataTaskPanel connection={c} onConnectionChanged={reloadAll} />}
+                            <DagPanel connection={c} onConnectionChanged={reloadAll} />
                           </td>
                         </tr>
                       )}
@@ -302,17 +279,6 @@ export default function Catalog({ type }) {
 
       {editing?.type === 'airflow' && (
         <AirflowConnectionForm
-          connection={editing.connection}
-          allowMock={allowMock}
-          onClose={() => setEditing(null)}
-          onSaved={async () => {
-            setEditing(null)
-            await reloadAll()
-          }}
-        />
-      )}
-      {editing?.type === 'wedata' && (
-        <WeDataConnectionForm
           connection={editing.connection}
           allowMock={allowMock}
           onClose={() => setEditing(null)}
@@ -358,7 +324,7 @@ export default function Catalog({ type }) {
         >
           <p>
             This removes <strong>{deleting.connection.name}</strong>
-            {deleting.type === 'airflow' && ' and all of its synced and monitored DAGs'}{deleting.type === 'wedata' && ' and all of its synced and monitored tasks'}. The action is
+            {deleting.type === 'airflow' && ' and all of its synced and monitored DAGs'}. The action is
             recorded in the audit log.
           </p>
         </Modal>

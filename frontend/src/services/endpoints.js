@@ -117,22 +117,3 @@ export const automationApi = {
   listNotifications: (query) => api.get('/automation/notifications', query),
   readAllNotifications: () => api.post('/automation/notifications/read-all'),
 }
-
-export const wedataApi = {
-  listConnections: () => api.get('/wedata/connections', { limit: 200 }),
-  getConnection: (id) => api.get(`/wedata/connections/${id}`),
-  createConnection: (data) => api.post('/wedata/connections', data),
-  updateConnection: (id, data) => api.patch(`/wedata/connections/${id}`, data),
-  deleteConnection: (id) => api.delete(`/wedata/connections/${id}`),
-  testUnsaved: (data) => api.post('/wedata/test-connection', data),
-  testSaved: (id) => api.post(`/wedata/connections/${id}/test`),
-  syncTasks: (id) => api.post(`/wedata/connections/${id}/sync`),
-  listTasks: (id, query) => api.get(`/wedata/connections/${id}/tasks`, query),
-  setMonitored: (connId, taskId, isMonitored) =>
-    api.patch(`/wedata/connections/${connId}/tasks/${taskId}`, { is_monitored: isMonitored }),
-  listInstances: (connId, taskId, query) =>
-    api.get(`/wedata/connections/${connId}/tasks/${taskId}/instances`, query),
-  rerunInstance: (connId, taskId, runId) =>
-    api.post(`/wedata/connections/${connId}/tasks/${taskId}/instances/${runId}/rerun`),
-}
-

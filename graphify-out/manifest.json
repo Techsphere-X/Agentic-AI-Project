@@ -90,8 +90,8 @@
     "semantic_hash": ""
   },
   "backend/app/api/v1/router.py": {
-    "mtime": 1792936358.5877213,
-    "ast_hash": "6b910ba8f3904a05cb066e7b3a46863f",
+    "mtime": 1793011176.8540535,
+    "ast_hash": "61f32536a7a93361581a0ddd0b2f21db",
     "semantic_hash": ""
   },
   "backend/app/api/v1/users.py": {
@@ -245,8 +245,8 @@
     "semantic_hash": "3aa4ea69d172d9224591fc4529c72db0"
   },
   "backend/app/models/__init__.py": {
-    "mtime": 1792936089.5533252,
-    "ast_hash": "10878a7c192ea55344bcd0536fad1a7d",
+    "mtime": 1793011176.8767104,
+    "ast_hash": "9ea64d63f1362f1f57602a1b8698ad3d",
     "semantic_hash": ""
   },
   "backend/app/models/airflow.py": {
@@ -390,8 +390,8 @@
     "semantic_hash": ""
   },
   "backend/app/services/connection_monitor_service.py": {
-    "mtime": 1792936304.487645,
-    "ast_hash": "dc045af94a89738d7e986076b45ca6cb",
+    "mtime": 1793011177.0735466,
+    "ast_hash": "8a7a829876952baa5694a0a103f674b9",
     "semantic_hash": ""
   },
   "backend/app/services/database_connection_service.py": {
@@ -570,13 +570,13 @@
     "semantic_hash": "53757f54bfe2bdda1e4b5d8dcca4c4ba"
   },
   "frontend/src/App.jsx": {
-    "mtime": 1792936947.5996444,
-    "ast_hash": "7fd0431235f489e305f048f16cd26f6d",
+    "mtime": 1793011177.1031828,
+    "ast_hash": "63f532eff63d4201e812526568bf499b",
     "semantic_hash": ""
   },
   "frontend/src/components/NavIcon.jsx": {
-    "mtime": 1792936959.0828354,
-    "ast_hash": "23f9617508e709d6c26e76915de21163",
+    "mtime": 1793011177.1125813,
+    "ast_hash": "1b604a7415178e52f703c4f311b0faf0",
     "semantic_hash": ""
   },
   "frontend/src/components/RouteGuards.jsx": {
@@ -610,9 +610,9 @@
     "semantic_hash": "f598f970afa4f811b351afa76abe1d0c"
   },
   "frontend/src/connectionState.js": {
-    "mtime": 1792936548.926455,
-    "ast_hash": "208540638d807d5b82b907b20aa06bf0",
-    "semantic_hash": ""
+    "mtime": 1793011177.1591678,
+    "ast_hash": "d2ac7ce0360892c9dea67a0bc6a67304",
+    "semantic_hash": "d2ac7ce0360892c9dea67a0bc6a67304"
   },
   "frontend/src/context/AuthContext.jsx": {
     "mtime": 1790235353.0567508,
@@ -630,8 +630,8 @@
     "semantic_hash": "6569dd46880484be0f2783095c93c6d3"
   },
   "frontend/src/layouts/AppLayout.jsx": {
-    "mtime": 1792936971.848109,
-    "ast_hash": "c87a0ff7fe16cbec9a267b4bb7d96499",
+    "mtime": 1793011177.2132535,
+    "ast_hash": "7a0d447e5ea2292424c8fbcb698f237b",
     "semantic_hash": ""
   },
   "frontend/src/layouts/AuthLayout.jsx": {
@@ -705,8 +705,8 @@
     "semantic_hash": "59c0f7ec22c52f18d95f8e62c2dc49e7"
   },
   "frontend/src/pages/connections/Catalog.jsx": {
-    "mtime": 1792936928.1145663,
-    "ast_hash": "6e8b2549f516c5c775e3ca9141b06966",
+    "mtime": 1793011177.2431111,
+    "ast_hash": "f8961ef8fac568c04b744d89b891a92a",
     "semantic_hash": ""
   },
   "frontend/src/pages/connections/DagPanel.jsx": {
@@ -780,8 +780,8 @@
     "semantic_hash": ""
   },
   "frontend/src/services/endpoints.js": {
-    "mtime": 1792936564.1269138,
-    "ast_hash": "524bbe1336d270d54a6341f2f2d53f56",
+    "mtime": 1793011177.5068035,
+    "ast_hash": "db50627d22a8da78ede94bc78fca196b",
     "semantic_hash": ""
   },
   "frontend/src/types/index.js": {
@@ -1344,11 +1344,6 @@
     "ast_hash": "77b907d4b8b8b7e49a4b9c0459d72426",
     "semantic_hash": ""
   },
-  "presentation.md": {
-    "mtime": 1792023196.8179572,
-    "ast_hash": "9ce703d57a3902c82c5059ea9130a9e5",
-    "semantic_hash": ""
-  },
   "backend/app/connectors/diagnostic_llm.py": {
     "mtime": 1792907748.7026114,
     "ast_hash": "ce92284bd497c1dffc8573b7f04a1968",
@@ -1357,71 +1352,6 @@
   "backend/tests/test_diagnostic_llm.py": {
     "mtime": 1792907767.6073258,
     "ast_hash": "71b327e5b58a4943e660fc5f8e43ac38",
-    "semantic_hash": ""
-  },
-  "backend/alembic/versions/2026_10_25_2000-wedata_connections.py": {
-    "mtime": 1792936156.7617111,
-    "ast_hash": "1775f32305cf6de7e7ed5ad3a906b0b3",
-    "semantic_hash": ""
-  },
-  "backend/app/api/v1/wedata.py": {
-    "mtime": 1792936345.8094888,
-    "ast_hash": "9af702a3203f5eb63af14c665123510c",
-    "semantic_hash": ""
-  },
-  "backend/app/models/wedata.py": {
-    "mtime": 1792936323.5491393,
-    "ast_hash": "2ca7cb11c9f50acdf77a34469c99055f",
-    "semantic_hash": ""
-  },
-  "backend/app/orchestration/wedata/__init__.py": {
-    "mtime": 1792936051.43223,
-    "ast_hash": "e17a36c6dc6cbdda5f0d90011d762400",
-    "semantic_hash": ""
-  },
-  "backend/app/orchestration/wedata/base.py": {
-    "mtime": 1792935973.7047088,
-    "ast_hash": "9b6665f918c82e93bf46b5d5ec1c437d",
-    "semantic_hash": ""
-  },
-  "backend/app/orchestration/wedata/client.py": {
-    "mtime": 1792936005.5674772,
-    "ast_hash": "4f1dc6a2f4b1802f22aa31675b5aaa00",
-    "semantic_hash": ""
-  },
-  "backend/app/orchestration/wedata/factory.py": {
-    "mtime": 1792936044.2523012,
-    "ast_hash": "f22e5592af77323ee4004289f78881d8",
-    "semantic_hash": ""
-  },
-  "backend/app/orchestration/wedata/mock.py": {
-    "mtime": 1792936032.7438626,
-    "ast_hash": "fe1c96413c3bdc2fd31752280147e823",
-    "semantic_hash": ""
-  },
-  "backend/app/schemas/wedata.py": {
-    "mtime": 1792936176.3775377,
-    "ast_hash": "11faa5c9da0ea22c1bb1dff34d39b900",
-    "semantic_hash": ""
-  },
-  "backend/app/services/wedata_service.py": {
-    "mtime": 1792936272.5185516,
-    "ast_hash": "0a27649ff1053c5e652b8e262275723e",
-    "semantic_hash": ""
-  },
-  "backend/tests/test_wedata.py": {
-    "mtime": 1792936394.976363,
-    "ast_hash": "2ec5cebba5980640b2ccb92266b5c346",
-    "semantic_hash": ""
-  },
-  "frontend/src/pages/connections/WeDataConnectionForm.jsx": {
-    "mtime": 1792936627.7825742,
-    "ast_hash": "358658bf38c8d5d4ea1d1355692c0ee6",
-    "semantic_hash": ""
-  },
-  "frontend/src/pages/connections/WeDataTaskPanel.jsx": {
-    "mtime": 1792936670.4489758,
-    "ast_hash": "8b26d35888503c42c4bdb4f71833a785",
     "semantic_hash": ""
   }
 }

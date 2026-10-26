@@ -33,12 +33,7 @@ from app.orchestration.airflow.base import (
     ConnectionTestResult,
 )
 from app.orchestration.airflow.factory import run_async
-from app.services import (
-    airflow_service,
-    audit_service,
-    database_connection_service,
-    wedata_service,
-)
+from app.services import airflow_service, audit_service, database_connection_service
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +65,6 @@ class CycleSummary:
     skipped: int = 0
     databases_healthy: int = 0
     databases_failing: int = 0
-    wedata_healthy: int = 0
-    wedata_failing: int = 0
     transitions: list[dict[str, str]] = field(default_factory=list)
     errors: list[dict[str, str]] = field(default_factory=list)
 
@@ -213,16 +206,4 @@ def run_cycle(db: Session, *, trigger: str = "schedule", actor: User | None = No
         summary.databases_healthy = databases.healthy
         summary.databases_failing = databases.failing
         summary.transitions.extend(databases.transitions)
-
-    try:
-        wedata = wedata_service.check_all(db, actor=actor)
-    except SQLAlchemyError as exc:
-        db.rollback()
-        logger.warning("Could not record WeData connection status: %s", exc)
-        summary.errors.append({"connection": "wedata", "error": str(exc)[:500]})
-    else:
-        summary.wedata_healthy = wedata.healthy
-        summary.wedata_failing = wedata.failing
-        summary.transitions.extend(wedata.transitions)
-
     return summary
