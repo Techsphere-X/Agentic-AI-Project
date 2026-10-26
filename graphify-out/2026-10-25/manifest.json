@@ -150,8 +150,8 @@
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "backend/app/core/config.py": {
-    "mtime": 1791988336.0536158,
-    "ast_hash": "66ca6b11aa56eb53df35f342109e5ee0",
+    "mtime": 1792907131.5802598,
+    "ast_hash": "6f155e4ed05c78e770cf69209dbfaba8",
     "semantic_hash": ""
   },
   "backend/app/core/crypto.py": {
@@ -350,8 +350,8 @@
     "semantic_hash": "32a1d1641dc3d764aece7ce0f5546ff5"
   },
   "backend/app/schemas/incident.py": {
-    "mtime": 1792292559.4307106,
-    "ast_hash": "970a60b3bea730cdde0e8464eb122ab8",
+    "mtime": 1792907059.8246465,
+    "ast_hash": "4c11a3ee449bbe0f246f6194043bd9a4",
     "semantic_hash": ""
   },
   "backend/app/schemas/user.py": {
@@ -435,9 +435,9 @@
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "backend/tests/conftest.py": {
-    "mtime": 1790272919.407148,
-    "ast_hash": "aa27ff90730cf8fc5cd1b7f0daaf5784",
-    "semantic_hash": "aa27ff90730cf8fc5cd1b7f0daaf5784"
+    "mtime": 1792907402.0308137,
+    "ast_hash": "c1670c3594edb68d6580b4b30452cae4",
+    "semantic_hash": ""
   },
   "backend/tests/fake_airflow.py": {
     "mtime": 1790260219.2770348,
@@ -780,8 +780,8 @@
     "semantic_hash": ""
   },
   "frontend/src/services/endpoints.js": {
-    "mtime": 1792292559.644272,
-    "ast_hash": "2af857f6d7f016b8d37970731011590f",
+    "mtime": 1792907162.361666,
+    "ast_hash": "db50627d22a8da78ede94bc78fca196b",
     "semantic_hash": ""
   },
   "frontend/src/types/index.js": {
@@ -880,8 +880,8 @@
     "semantic_hash": ""
   },
   "backend/app/api/v1/diagnosis.py": {
-    "mtime": 1790833124.6748843,
-    "ast_hash": "9f249c6bed8201895adab2498bd524e0",
+    "mtime": 1792907087.4031544,
+    "ast_hash": "a56e2c5b22ea08191f2e67af19e09fc6",
     "semantic_hash": ""
   },
   "backend/app/automation/remediation.py": {
@@ -935,8 +935,8 @@
     "semantic_hash": ""
   },
   "frontend/src/pages/diagnosis/LogAnalyzer.jsx": {
-    "mtime": 1790833953.01206,
-    "ast_hash": "494d7de80ac532ba0f25b13a64ec5a39",
+    "mtime": 1792907236.1002944,
+    "ast_hash": "d0adc8704b7842d0d29228f0ac6b97da",
     "semantic_hash": ""
   },
   "ml_service/app/__init__.py": {
@@ -1347,6 +1347,16 @@
   "presentation.md": {
     "mtime": 1792023196.8179572,
     "ast_hash": "9ce703d57a3902c82c5059ea9130a9e5",
+    "semantic_hash": ""
+  },
+  "backend/app/connectors/diagnostic_llm.py": {
+    "mtime": 1792907748.7026114,
+    "ast_hash": "ce92284bd497c1dffc8573b7f04a1968",
+    "semantic_hash": ""
+  },
+  "backend/tests/test_diagnostic_llm.py": {
+    "mtime": 1792907767.6073258,
+    "ast_hash": "71b327e5b58a4943e660fc5f8e43ac38",
     "semantic_hash": ""
   }
 }

@@ -94,3 +94,28 @@ export function channelState(conn) {
   }
   return { live: true, tone: 'neutral', label: 'Not tested', hint: 'Send a test message to check it.', message: null }
 }
+
+const WEDATA_FAILURES = {
+  UNAUTHORIZED: { label: 'Authentication failed', hint: 'Check Tencent Cloud SecretId and SecretKey.' },
+  FORBIDDEN: { label: 'Access denied', hint: 'CAM user lacks permission for WeData APIs.' },
+  TLS_ERROR: { label: 'TLS error', hint: 'Tencent Cloud certificate could not be verified.' },
+  INVALID_ENDPOINT: { label: 'Invalid endpoint or project', hint: 'Check Project ID and endpoint region.' },
+  WEDATA_ERROR: { label: 'WeData error', hint: 'Tencent Cloud WeData responded with an error.' },
+  UNREACHABLE: { label: 'Endpoint unreachable', hint: 'Could not reach Tencent Cloud API.' },
+}
+
+export function wedataState(conn) {
+  const message = conn.last_health_message ?? null
+  if (!conn.is_active) {
+    return { live: false, tone: 'neutral', label: 'Inactive', hint: 'This connection is switched off.', message: null }
+  }
+  if (conn.is_live) {
+    return { live: true, tone: 'success', label: 'Connected', hint: '', message: null }
+  }
+  const status = conn.last_health_status
+  if (status === 'UNKNOWN') {
+    return { live: false, tone: 'neutral', label: 'Checking connection…', hint: 'Waiting for the first health check.', message: null }
+  }
+  const failure = WEDATA_FAILURES[status] ?? { label: 'Not connected', hint: '' }
+  return { live: false, tone: 'danger', ...failure, message }
+}

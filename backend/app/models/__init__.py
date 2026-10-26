@@ -29,6 +29,7 @@ from app.models.incident import (
 )
 from app.models.notification_channel import ChannelKind, ChannelStatus, NotificationChannel
 from app.models.user import RefreshToken, User, UserRole
+from app.models.wedata import MonitoredWeDataTask, WeDataConnection
 
 __all__ = [
     "ActorType",
@@ -54,11 +55,13 @@ __all__ = [
     "IncidentStatus",
     "IncidentType",
     "MonitoredDag",
+    "MonitoredWeDataTask",
     "NotificationChannel",
     "Notification",
     "RefreshToken",
     "User",
     "UserRole",
+    "WeDataConnection",
     "Workflow",
     "WorkflowRun",
     "WorkflowStep",

@@ -16,6 +16,7 @@ const NAV = [
     title: 'Connections',
     items: [
       { to: '/connections/airflow', label: 'Airflow', icon: 'airflow' },
+      { to: '/connections/wedata', label: 'Tencent WeData', icon: 'wedata' },
       { to: '/connections/databases', label: 'Databases', icon: 'database' },
       { to: '/connections/channels', label: 'Channels', icon: 'channel' },
     ],

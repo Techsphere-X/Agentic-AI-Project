@@ -29,7 +29,7 @@ function ToConnections() {
   const [params] = useSearchParams()
   const id = params.get('connection') ?? params.get('open')
   const type = params.get('type')
-  const path = type === 'database' ? '/connections/databases' : type === 'channel' ? '/connections/channels' : '/connections/airflow'
+  const path = type === 'database' ? '/connections/databases' : type === 'channel' ? '/connections/channels' : type === 'wedata' ? '/connections/wedata' : '/connections/airflow'
   return <Navigate to={id ? `${path}?open=${id}` : path} replace />
 }
 
@@ -57,6 +57,7 @@ export default function App() {
           <Route path="/diagnosis/analyzer" element={<LogAnalyzer />} />
           <Route path="/connections" element={<ToConnections />} />
           <Route path="/connections/airflow" element={<Catalog type="airflow" />} />
+          <Route path="/connections/wedata" element={<Catalog type="wedata" />} />
           <Route path="/connections/databases" element={<Catalog type="database" />} />
           <Route path="/connections/channels" element={<Catalog type="channel" />} />
           <Route path="/settings/connections" element={<ToConnections />} />
