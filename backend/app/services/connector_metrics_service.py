@@ -33,6 +33,20 @@ def _rate(success: int, total: int) -> float:
 def get_connector_metrics(db: Session) -> ConnectorMetricsResponse:
     """Collect total runs, successes, failures, and rates for each connector."""
     connector_items: list[ConnectorRunMetrics] = []
+    execution_counts = {
+        status.value if hasattr(status, "value") else str(status): count
+        for status, count in db.execute(
+            select(WorkflowRun.status, func.count()).group_by(WorkflowRun.status)
+        ).all()
+    }
+    total_executions = sum(execution_counts.values())
+    successful_executions = execution_counts.get("COMPLETED", 0)
+    failed_executions = execution_counts.get("FAILED", 0)
+    execution_success_rate = (
+        round((successful_executions / total_executions) * 100.0, 1)
+        if total_executions
+        else 0.0
+    )
 
     # ------------------------------------------------------------------ Airflow Connections
     airflow_conns = list(
@@ -149,10 +163,10 @@ def get_connector_metrics(db: Session) -> ConnectorMetricsResponse:
     for d in db_conns:
         # Check workflow queries run against this DB
         conn_str = str(d.id)
-        # Baseline successful probe checks from connection monitor
-        is_healthy = str(d.last_health_status) in ("HEALTHY", "ConnectionStatus.HEALTHY")
-        success_runs = 28 if is_healthy else 0
-        failed_runs = 2 if not is_healthy else 0
+        # Database connection health is reported separately from workflow execution
+        # history because workflow steps do not carry a connection id.
+        success_runs = 0
+        failed_runs = 0
 
         total_runs = success_runs + failed_runs
         success_rate = _rate(success_runs, total_runs)
@@ -224,13 +238,9 @@ def get_connector_metrics(db: Session) -> ConnectorMetricsResponse:
         )
 
         total_runs = notify_completed + notify_failed
-        if total_runs == 0 and ch.is_active:
-            # Baseline test probe
-            total_runs = 1
-            notify_completed = 1
-
         success_rate = _rate(notify_completed, total_runs)
         kind_val = ch.kind.value if hasattr(ch.kind, "value") else str(ch.kind)
+        channel_status = ch.last_status.value if hasattr(ch.last_status, "value") else str(ch.last_status)
 
         connector_items.append(
             ConnectorRunMetrics(
@@ -239,8 +249,8 @@ def get_connector_metrics(db: Session) -> ConnectorMetricsResponse:
                 type="channel",
                 environment="DEV",
                 kind=kind_val,
-                status="HEALTHY" if ch.is_active else "UNKNOWN",
-                latency_ms=18,
+                status=channel_status if ch.is_active else "UNKNOWN",
+                latency_ms=None,
                 total_runs=total_runs,
                 success_runs=notify_completed,
                 failed_runs=notify_failed,
@@ -267,5 +277,9 @@ def get_connector_metrics(db: Session) -> ConnectorMetricsResponse:
         total_success=overall_success,
         total_failed=overall_failed,
         overall_success_rate=overall_rate,
+        total_executions=total_executions,
+        successful_executions=successful_executions,
+        failed_executions=failed_executions,
+        execution_success_rate=execution_success_rate,
         connectors=connector_items,
     )

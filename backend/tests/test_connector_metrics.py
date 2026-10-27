@@ -5,9 +5,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models.airflow import AirflowConnection, ConnectionKind, DeploymentEnvironment
+from app.models.automation import Workflow, WorkflowRun
 from app.models.database_connection import DatabaseConnection, DatabaseEngine
 from app.models.notification_channel import ChannelKind, NotificationChannel
 from app.models.user import User
+from app.automation.types import RunStatus
 from app.orchestration.airflow.base import AuthType, ConnectionStatus
 
 
@@ -45,6 +47,43 @@ def test_connector_metrics_endpoint_returns_metrics(
     )
     db.add_all([conn, db_conn, channel])
     db.commit()
+    workflow = Workflow(
+        name="Metrics workflow",
+        graph={"nodes": [], "edges": []},
+        version=1,
+        enabled=True,
+    )
+    db.add(workflow)
+    db.commit()
+    db.add_all(
+        [
+            WorkflowRun(
+                workflow_id=workflow.id,
+                workflow_version=1,
+                graph=workflow.graph,
+                trigger_event="manual",
+                dedup_key="metrics-completed",
+                status=RunStatus.COMPLETED,
+            ),
+            WorkflowRun(
+                workflow_id=workflow.id,
+                workflow_version=1,
+                graph=workflow.graph,
+                trigger_event="manual",
+                dedup_key="metrics-failed",
+                status=RunStatus.FAILED,
+            ),
+            WorkflowRun(
+                workflow_id=workflow.id,
+                workflow_version=1,
+                graph=workflow.graph,
+                trigger_event="manual",
+                dedup_key="metrics-running",
+                status=RunStatus.RUNNING,
+            ),
+        ]
+    )
+    db.commit()
 
     resp = client.get("/api/v1/health/connector-metrics", headers=viewer_headers)
     assert resp.status_code == 200
@@ -73,3 +112,7 @@ def test_connector_metrics_endpoint_returns_metrics(
     assert item["success_runs"] >= 0
     assert item["failed_runs"] >= 0
     assert 0.0 <= item["success_rate"] <= 100.0
+    assert data["total_executions"] == 3
+    assert data["successful_executions"] == 1
+    assert data["failed_executions"] == 1
+    assert data["execution_success_rate"] == 33.3

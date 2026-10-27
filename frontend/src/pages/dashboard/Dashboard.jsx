@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useOutletContext } from 'react-router'
 import { Badge, Button, Card, StatusPill } from '../../components/ui'
-import { connectionState, databaseState } from '../../connectionState'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { formatRelative } from '../../format'
@@ -37,21 +36,6 @@ const RUN_STATUS_TONE = {
   CANCELED: 'neutral',
 }
 
-const AI_RECIPES = [
-  {
-    title: 'Self-Healing DAG Retry',
-    desc: 'When an Airflow DAG fails with transient connection errors, analyze task logs, ask approval on PROD, and retry.',
-  },
-  {
-    title: 'Daily Data Quality Check',
-    desc: 'Every morning at 7 AM, run an SQL consistency check on the orders table and alert on Slack if rows fail.',
-  },
-  {
-    title: 'Incident Auto-Escalation',
-    desc: 'When an incident recurs more than 3 times within 24 hours, escalate severity and notify the on-call engineer.',
-  },
-]
-
 function Step({ done, children }) {
   return (
     <li className={`step ${done ? 'step-done' : ''}`}>
@@ -73,11 +57,9 @@ export default function Dashboard() {
   const [channels, setChannels] = useState(null)
   const [dagStats, setDagStats] = useState(null)
   const [detection, setDetection] = useState(null)
-  const [assistant, setAssistant] = useState(null)
   const [recentIncidents, setRecentIncidents] = useState(null)
   const [recentRuns, setRecentRuns] = useState(null)
   const [connectorMetrics, setConnectorMetrics] = useState(null)
-  const [loadingMetrics, setLoadingMetrics] = useState(false)
   const [runningDetection, setRunningDetection] = useState(false)
   const [error, setError] = useState(null)
 
@@ -86,11 +68,6 @@ export default function Dashboard() {
       detectionApi
         .status()
         .then((d) => setDetection(d))
-        .catch(() => {})
-
-      automationApi
-        .assistantStatus()
-        .then((a) => setAssistant(a))
         .catch(() => {})
 
       healthApi
@@ -154,8 +131,17 @@ export default function Dashboard() {
       }
     }
     load()
+    const metricsTimer = setInterval(async () => {
+      try {
+        const metrics = await healthApi.connectorMetrics()
+        if (!cancelled) setConnectorMetrics(metrics)
+      } catch (err) {
+        if (!cancelled) setError(err.message)
+      }
+    }, 15000)
     return () => {
       cancelled = true
+      clearInterval(metricsTimer)
     }
   }, [loadDashboardData])
 
@@ -171,19 +157,6 @@ export default function Dashboard() {
       toast.error(`Detection scan failed: ${err.message}`)
     } finally {
       setRunningDetection(false)
-    }
-  }
-
-  const refreshMetrics = async () => {
-    setLoadingMetrics(true)
-    try {
-      const m = await healthApi.connectorMetrics()
-      setConnectorMetrics(m)
-      toast.success('Connector performance metrics updated')
-    } catch (err) {
-      toast.error(`Failed to refresh metrics: ${err.message}`)
-    } finally {
-      setLoadingMetrics(false)
     }
   }
 
@@ -220,30 +193,10 @@ export default function Dashboard() {
           </h1>
           <div className="dashboard-hero-subtitle">
             <span>Autonomous Pipeline Operations & Self-Healing Engine</span>
-            <span>•</span>
-            {assistant?.enabled ? (
-              <Link
-                to="/automation/workflows/new"
-                className="copilot-chip"
-                title={`Model: ${assistant.model} via ${assistant.provider}. Click to open AI Workflow Canvas.`}
-              >
-                <span className="copilot-chip-dot" />
-                ✨ AI Copilot Active ({assistant.model})
-              </Link>
-            ) : (
-              <span className="muted small">AI Copilot Inactive</span>
-            )}
           </div>
         </div>
 
         <div className="dashboard-actions">
-          <Link
-            to="/presentation"
-            className="btn btn-secondary btn-sm"
-            title="View interactive architecture & system presentation"
-          >
-            🖥️ Presentation
-          </Link>
           <Button
             variant="secondary"
             size="sm"
@@ -253,9 +206,6 @@ export default function Dashboard() {
           >
             ▶ Run Detection Now
           </Button>
-          <Link to="/automation/workflows/new" className="btn btn-sm btn-ai">
-            ✨ New Workflow with AI
-          </Link>
         </div>
       </div>
 
@@ -265,8 +215,7 @@ export default function Dashboard() {
       {automationSummary?.pending_approvals > 0 && (
         <div className="banner-alert">
           <div className="banner-alert-content">
-            <span aria-hidden="true" style={{ fontSize: '1.2rem' }}>⚠️</span>
-            <span>
+              <span>
               <strong>{automationSummary.pending_approvals} action(s)</strong> waiting for human approval
               before executing on production pipelines.
             </span>
@@ -422,33 +371,8 @@ export default function Dashboard() {
       {/* ----------------- Connector Performance & Run KPIs (Graph + Leaderboard) ----------------- */}
       <ConnectorMetricsSection
         data={connectorMetrics}
-        loading={loadingMetrics}
-        onRefresh={refreshMetrics}
+        loading={connectorMetrics === null}
       />
-
-      {/* ----------------- AI Copilot Recipes Showcase ----------------- */}
-      <div className="copilot-launcher-card">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <strong style={{ fontSize: '0.95rem' }}>✨ Launch with AI Copilot ({assistant?.model ?? 'qwen3:4b'})</strong>
-            <p className="muted small" style={{ margin: '0.2rem 0 0' }}>
-              Describe any self-healing data pipeline or pick a pre-built recipe to generate with the model.
-            </p>
-          </div>
-          <Link to="/automation/workflows/new" className="btn btn-sm btn-primary">
-            Open Canvas Copilot →
-          </Link>
-        </div>
-
-        <div className="copilot-recipe-grid">
-          {AI_RECIPES.map((recipe, idx) => (
-            <Link key={idx} to="/automation/workflows/new" className="copilot-recipe-btn">
-              <span className="recipe-title">⚡ {recipe.title}</span>
-              <span className="recipe-desc">{recipe.desc}</span>
-            </Link>
-          ))}
-        </div>
-      </div>
 
       {/* ----------------- Dual Feeds: Incidents & Workflow Runs ----------------- */}
       <div className="activity-split">
@@ -531,40 +455,6 @@ export default function Dashboard() {
           )}
         </Card>
       </div>
-
-      {/* ----------------- System Connectivity Matrix ----------------- */}
-      <Card
-        title="Infrastructure Topology"
-        actions={
-          <Link to="/connections/airflow" className="small">
-            Manage connections
-          </Link>
-        }
-        style={{ marginTop: '1.25rem' }}
-      >
-        <div className="pill-row">
-          {[
-            ...(connections ?? []).map((c) => [c, connectionState(c), 'airflow']),
-            ...(databases ?? []).map((c) => [c, databaseState(c), 'database']),
-          ]
-            .filter(([c]) => c.is_active)
-            .map(([c, state, kind]) => (
-              <StatusPill
-                key={`${kind}-${c.id}`}
-                tone={state.tone}
-                label={`${c.name} (${kind === 'airflow' ? 'Airflow' : 'DB'}): ${state.label}`}
-                title={state.message ?? state.hint}
-              />
-            ))}
-          {(channels ?? []).map((ch) => (
-            <StatusPill
-              key={`channel-${ch.id}`}
-              tone={ch.is_active ? 'success' : 'neutral'}
-              label={`${ch.name} (${ch.kind})`}
-            />
-          ))}
-        </div>
-      </Card>
 
       {/* ----------------- Guided Platform Maturity / Setup ----------------- */}
       <Card title="Platform Setup & Readiness" style={{ marginTop: '1.25rem' }}>

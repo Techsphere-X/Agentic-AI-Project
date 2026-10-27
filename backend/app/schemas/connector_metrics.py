@@ -31,4 +31,8 @@ class ConnectorMetricsResponse(BaseModel):
     total_success: int = Field(description="Aggregated successful runs")
     total_failed: int = Field(description="Aggregated failed runs")
     overall_success_rate: float = Field(description="Overall fleet success rate percentage (0.0 - 100.0)")
+    total_executions: int = Field(description="Total workflow executions")
+    successful_executions: int = Field(description="Successfully completed workflow executions")
+    failed_executions: int = Field(description="Failed workflow executions")
+    execution_success_rate: float = Field(description="Workflow execution success rate percentage")
     connectors: list[ConnectorRunMetrics] = Field(default_factory=list, description="Ranked / listed connector metrics")
