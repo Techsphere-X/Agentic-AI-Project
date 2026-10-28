@@ -23,7 +23,7 @@ MAX_LOG_BYTES = 256 * 1024
 
 @router.post("/classify", response_model=ClassifyLogResponse)
 def classify_log(body: ClassifyLogRequest, _: ViewerUser) -> ClassifyLogResponse:
-    """Log Analyzer: regex, model, hybrid decision, and Qwen LLM analysis for a pasted log."""
+    """Log Analyzer: regex, model, hybrid decision, and deep AI analysis for a pasted log."""
     if len(body.log.encode("utf-8")) > MAX_LOG_BYTES:
         raise AppError(
             f"Log is larger than {MAX_LOG_BYTES // 1024}KB",
