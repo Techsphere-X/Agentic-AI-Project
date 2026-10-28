@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.automation import policy
-from app.automation.graph import GraphError, catalog, to_raw, validate_graph
+from app.automation.graph import GraphError, catalog, graph_warnings, to_raw, validate_graph
 from app.automation.render import render
 from app.automation.templates import ALL_TEMPLATES, TEMPLATES
 from app.models.automation import Workflow
@@ -86,7 +86,7 @@ def mutate(fn) -> dict[str, Any]:  # noqa: ANN001
         (mutate(lambda g: g["nodes"].append({"id": "bad id!", "type": "notify"})), "invalid id"),
         (
             mutate(lambda g: g["nodes"][2].update(config={"min_severity": "HUGE"})),
-            "min_severity",
+            "At least this severe",
         ),
         (mutate(lambda g: g["nodes"][3].update(config={"url": "ftp://x"})), "url"),
         (mutate(lambda g: g["nodes"][2].update(config={"bogus": 1})), "bogus"),
@@ -184,3 +184,59 @@ def test_seed_templates_is_idempotent_and_disabled(db: Session) -> None:
     assert all(not w.enabled for w in created)
     assert automation_service.seed_templates(db) == []
     assert db.query(Workflow).count() == len(TEMPLATES)
+
+
+# ---------------------------------------------------------------------- editor metadata
+
+
+def test_catalog_describes_every_port_and_setting() -> None:
+    for entry in catalog():
+        assert entry["stage"] in {"when", "check", "diagnose", "decide", "act", "verify", "notify"}
+        assert set(entry["port_tones"]) == set(entry["ports"]), entry["type"]
+        assert len(entry["summary"]) <= 60, entry["type"]  # one line in the editor
+        assert set(entry["port_labels"]) == set(entry["ports"]), entry["type"]
+        assert all(t in {"good", "bad", "neutral"} for t in entry["port_tones"].values())
+        for name, prop in entry["config_schema"].get("properties", {}).items():
+            assert prop.get("x-hidden") or "x-label" in prop, f"{entry['type']}.{name}"
+    by_type = {e["type"]: e for e in catalog()}
+    assert by_type["database.check"]["port_tones"] == {"pass": "good", "fail": "bad"}
+    assert by_type["pipeline.run_dag"]["is_action"] is True
+    assert "diagnosis.label" in by_type["diagnose.classify_log"]["outputs"]
+
+
+def test_validation_reports_every_problem_at_once() -> None:
+    raw = simple()
+    raw["nodes"][2]["config"] = {"min_severity": "HUGE"}  # a settings error on 'f'
+    raw["nodes"].append({"id": "x", "type": "notify", "config": {"title": ""}})  # and on 'x'
+    problems = _problems(raw)
+    assert {p.get("node") for p in problems} >= {"f", "x"}
+    severity = next(p for p in problems if p.get("node") == "f")
+    assert severity["message"].startswith("At least this severe:")
+    assert severity["field"] == "min_severity"
+
+
+def test_loop_and_trigger_mismatch_are_reported_together() -> None:
+    raw = simple()
+    raw["nodes"][0] = {"id": "t", "type": "trigger.manual", "config": {}}
+    raw["edges"].append({"from": "f", "port": "false", "to": "c"})
+    messages = " | ".join(p["message"] for p in _problems(raw))
+    assert "loop" in messages
+    assert "needs an incident trigger" in messages
+
+
+def test_unknown_placeholders_are_warned_about() -> None:
+    raw = simple()
+    raw["nodes"][3]["config"] = {
+        "message": "{{diagnosis.label}} {{incident.title}} {{results.f.value}} {{nope.x}}"
+    }
+    warnings = graph_warnings(validate_graph(raw))
+    text = " | ".join(w["message"] for w in warnings)
+    assert "{{nope.x}}" in text
+    assert "{{results.f.value}}" not in text  # 'f' runs before the notification
+    assert "{{diagnosis.label}}" not in text  # provided by "Classify the failure"
+    assert "{{incident.title}}" not in text
+    raw["nodes"][3]["config"] = {"message": "{{results.later.value}}"}
+    raw["nodes"].append({"id": "later", "type": "flow.wait", "config": {}})
+    raw["edges"].append({"from": "n", "port": "next", "to": "later"})
+    (warning,) = graph_warnings(validate_graph(raw))
+    assert "does not run before this one" in warning["message"]

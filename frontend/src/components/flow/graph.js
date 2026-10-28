@@ -9,28 +9,54 @@ export function isTrigger(type) {
   return type.startsWith('trigger.')
 }
 
-// Output ports taken when something went wrong or the answer was "no".
-export const BAD_PORTS = new Set(['failed', 'fail', 'rejected', 'false', 'timeout', 'paused', 'busy'])
+// Output ports taken when something went wrong or the answer was "no". The catalog's
+// `port_tones` is the source of truth; this is the fallback for pages without a catalog.
+export const BAD_PORTS = new Set([
+  'failed',
+  'fail',
+  'rejected',
+  'false',
+  'timeout',
+  'mismatched',
+  'no_logs',
+  'uncertain',
+  'exceeded',
+  'needs_fix',
+  'escalate',
+  'paused',
+  'busy',
+])
+
+/** "good" | "bad" | "neutral" for an output port, from its block's catalog entry. */
+export function portTone(def, port) {
+  return def?.port_tones?.[port] ?? (BAD_PORTS.has(port) ? 'bad' : 'good')
+}
+
+/** What a link from this port is labelled on the canvas (nothing for a plain "then"). */
+export function portLabel(def, port) {
+  if (port === 'next' && (def?.ports?.length ?? 1) === 1) return undefined
+  return def?.port_labels?.[port] ?? port
+}
+
+const EDGE_CLASS = { good: 'edge-ok', bad: 'edge-bad', neutral: 'edge-neutral' }
 
 export function edgeId(from, port, to) {
   return `${from}:${port}->${to}`
 }
 
-function toEdge(from, port, to, extra = {}) {
+function toEdge(from, port, to, def) {
   return {
     id: edgeId(from, port, to),
     source: from,
     sourceHandle: port,
     target: to,
-    label: port === 'next' ? undefined : port,
-    className: BAD_PORTS.has(port) ? 'edge-bad' : 'edge-ok',
-    ...extra,
+    label: portLabel(def, port),
+    className: EDGE_CLASS[portTone(def, port)],
   }
 }
 
 /** Backend graph -> React Flow. Nodes without a saved position are auto-laid out. */
 export function toFlow(graph, extraData = () => ({})) {
-  const edges = (graph?.edges ?? []).map((e) => toEdge(e.from, e.port, e.to))
   const needsLayout = (graph?.nodes ?? []).some((n) => !n.position)
   const auto = needsLayout ? layeredLayout(graph.nodes, graph.edges) : {}
   const nodes = (graph?.nodes ?? []).map((n) => ({
@@ -40,6 +66,8 @@ export function toFlow(graph, extraData = () => ({})) {
     deletable: true,
     data: { nodeType: n.type, name: n.name ?? '', config: n.config ?? {}, ...extraData(n) },
   }))
+  const defOf = Object.fromEntries(nodes.map((n) => [n.id, n.data.def]))
+  const edges = (graph?.edges ?? []).map((e) => toEdge(e.from, e.port, e.to, defOf[e.from]))
   return { nodes, edges }
 }
 
@@ -57,8 +85,9 @@ export function fromFlow(nodes, edges) {
   }
 }
 
-export function newEdge(connection) {
-  return toEdge(connection.source, connection.sourceHandle, connection.target)
+/** `sourceDef` is the catalog entry of the block the link starts from (labels and colour). */
+export function newEdge(connection, sourceDef) {
+  return toEdge(connection.source, connection.sourceHandle, connection.target, sourceDef)
 }
 
 function reaches(start, goal, edges) {
@@ -95,8 +124,8 @@ export function connectionProblem(connection, nodes, edges) {
 }
 
 /** Add an edge (an exact duplicate is ignored). */
-export function connect(connection, edges) {
-  const edge = newEdge(connection)
+export function connect(connection, edges, sourceDef) {
+  const edge = newEdge(connection, sourceDef)
   return edges.some((e) => e.id === edge.id) ? edges : [...edges, edge]
 }
 

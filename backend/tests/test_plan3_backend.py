@@ -71,8 +71,17 @@ def test_validate_endpoint_never_saves(
     ok = client.post(f"{API}/workflows/validate", json={"graph": graph()}, headers=viewer_headers)
     assert ok.status_code == 200
     body = ok.json()
-    assert body["valid"] and body["problems"] == []
+    assert body["valid"] and body["problems"] == [] and body["warnings"] == []
     assert body["graph"]["nodes"][0]["config"] == {"events": ["opened"], "incident_types": []}
+
+    unknown = graph()
+    unknown["nodes"][1]["config"] = {"message": "{{diagnosis.label}}"}  # nothing classifies first
+    warned = client.post(
+        f"{API}/workflows/validate", json={"graph": unknown}, headers=viewer_headers
+    ).json()
+    assert warned["valid"]  # warnings never block saving
+    assert warned["warnings"][0]["node"] == "n"
+    assert "{{diagnosis.label}}" in warned["warnings"][0]["message"]
 
     broken = graph()
     broken["edges"] = []

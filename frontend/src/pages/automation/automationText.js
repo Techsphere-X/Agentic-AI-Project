@@ -1,55 +1,80 @@
 // Labels and formatting helpers shared by the automation pages.
 
+// Fallback block names for pages that do not load the catalog (run history, workflow list).
+// Keep in step with the labels in backend/app/automation/graph.py (NODE_TYPES).
 export const NODE_LABELS = {
-  'trigger.incident': 'When an incident opens or recurs',
+  'trigger.incident': 'When an incident opens',
   'trigger.incident_stale': 'When an incident is ignored',
   'trigger.dag_run': 'When a DAG run finishes',
-  'trigger.manual': 'Run on demand',
+  'trigger.manual': 'When run manually',
   'trigger.schedule': 'On a schedule',
-  'pipeline.run_dag': 'Run a DAG',
-  'pipeline.wait_for_dag': 'Wait for a DAG',
-  'database.run_sql': 'Run SQL',
-  'database.check': 'Check data',
-  'database.reconcile': 'Reconcile databases',
+  'condition.filter': 'Filter incidents',
+  'check.dag_state': 'Check DAG state',
+  'check.sla': 'Check SLA',
+  'database.check': 'Check data (SQL)',
+  'database.reconcile': 'Compare two databases',
+  'analyze.task_logs': 'Fetch task logs',
+  'diagnose.classify_log': 'Classify the failure',
+  'ai.generate_fix': 'Suggest a fix (AI)',
+  'decide.choose_fix': 'Choose a fix automatically',
+  'approval.request': 'Ask for approval',
   'flow.wait': 'Wait',
-  'condition.filter': 'Only if…',
-  'analyze.task_logs': 'Analyze logs',
-  'diagnose.classify_log': 'Diagnose failure',
-  'check.dag_state': 'Check the DAG',
-  'ai.generate_fix': 'AI solution',
-  'decide.choose_fix': 'Choose the fix',
-  'approval.request': 'Ask a human',
+  'pipeline.wait_for_dag': 'Wait for a DAG run',
+  'pipeline.run_dag': 'Run a DAG',
+  'action.trigger_dag_run': "Re-run the incident's DAG",
   'action.clear_failed_tasks': 'Retry failed tasks',
-  'action.trigger_dag_run': 'Start a new run',
-  'action.set_dag_paused': 'Pause / unpause DAG',
-  'verify.run_success': 'Check it worked',
+  'action.set_dag_paused': 'Pause or resume a DAG',
+  'database.run_sql': 'Run SQL',
+  'verify.run_success': 'Verify the run succeeded',
+  notify: 'Send a notification',
   'incident.update': 'Update the incident',
-  'check.record': "Record the run's status",
-  'check.sla': 'Estimate & check SLA',
-  notify: 'Tell someone',
+  'check.record': 'Record the run result',
 }
 
-// The canvas groups the backend's block categories into four stages, one colour each.
+// A run reads left to right through these stages; each block's `stage` comes from the catalog.
+// `categories` orders the sub-groups inside a stage in the palette.
 export const STAGES = [
-  { id: 'start', label: 'Start', title: 'Start when…', categories: ['trigger'] },
-  { id: 'do', label: 'Do', title: 'Do something', categories: ['pipeline', 'database', 'action'] },
-  { id: 'decide', label: 'Decide', title: 'Decide & check', categories: ['logic', 'approval', 'verify', 'diagnosis'] },
-  { id: 'tell', label: 'Tell', title: 'Record & tell', categories: ['output'] },
+  { id: 'when', label: 'When', title: 'Start when…', categories: ['trigger'] },
+  { id: 'check', label: 'Check', title: 'Check conditions & data', categories: ['logic', 'database'] },
+  { id: 'diagnose', label: 'Diagnose', title: 'Diagnose the failure', categories: ['diagnosis'] },
+  { id: 'decide', label: 'Decide', title: 'Decide & wait', categories: ['logic', 'approval', 'pipeline'] },
+  { id: 'act', label: 'Act', title: 'Change something', categories: ['pipeline', 'database', 'action'] },
+  { id: 'verify', label: 'Verify', title: 'Verify it worked', categories: ['verify'] },
+  { id: 'notify', label: 'Notify', title: 'Record & notify', categories: ['output'] },
 ]
 
-const STAGE_BY_CATEGORY = Object.fromEntries(STAGES.flatMap((s) => s.categories.map((c) => [c, s])))
-
-export function stageOf(category) {
-  return STAGE_BY_CATEGORY[category] ?? STAGES[1]
+const STAGE_BY_ID = Object.fromEntries(STAGES.map((s) => [s.id, s]))
+// For callers that only know a block's category (e.g. palette presets).
+const STAGE_BY_CATEGORY = {
+  trigger: 'when',
+  logic: 'check',
+  database: 'act',
+  pipeline: 'act',
+  diagnosis: 'diagnose',
+  approval: 'decide',
+  action: 'act',
+  verify: 'verify',
+  output: 'notify',
 }
 
+/** The stage of a catalog entry, or of a stage id / category name. */
+export function stageOf(defOrName) {
+  const id = typeof defOrName === 'object' && defOrName ? (defOrName.stage ?? STAGE_BY_CATEGORY[defOrName.category]) : defOrName
+  return STAGE_BY_ID[id] ?? STAGE_BY_ID[STAGE_BY_CATEGORY[id]] ?? STAGE_BY_ID.act
+}
+
+// By full type first, then by the type's prefix.
 export const NODE_ICONS = {
+  'check.sla': '⏱',
+  'check.record': '✎',
+  'ai.generate_fix': '🤖',
+  'pipeline.wait_for_dag': '⏳',
+  'database.reconcile': '⇄',
   trigger: '⚡',
   condition: '⋔',
   analyze: '📄',
   diagnose: '🔎',
   check: '⋔',
-  sla: '⏱',
   ai: '🤖',
   decide: '⚖',
   approval: '✋',
@@ -59,7 +84,7 @@ export const NODE_ICONS = {
   notify: '✉',
   pipeline: '▶',
   database: '🗄',
-  flow: '⏱',
+  flow: '⏳',
 }
 
 const DAG_RUN_STATE_LABELS = {
@@ -85,7 +110,7 @@ function shortSql(sql = '') {
 }
 
 export function nodeIcon(type) {
-  return NODE_ICONS[type.split('.')[0]] ?? '•'
+  return NODE_ICONS[type] ?? NODE_ICONS[type.split('.')[0]] ?? '•'
 }
 
 export const CATEGORY_LABELS = {

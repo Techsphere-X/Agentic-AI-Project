@@ -1,11 +1,13 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { airflowApi, channelsApi, databaseApi } from '../../services/endpoints'
 import { Toggle } from '../ui'
 
 // Renders a settings form from a Pydantic JSON schema (the node-type catalog's config_schema).
 // Supports the shapes our node configs use: booleans, integers, strings, enums ($ref or inline,
 // optionally nullable), arrays of enums (checkbox groups) and arrays of strings (comma lists).
-// Fields may carry UI hints: `x-label`, `x-hint`, and `x-widget` (see WIDGETS below).
+// Fields may carry UI hints: `x-label`, `x-hint`, `x-options` (enum value -> label) and
+// `x-widget` (see WIDGETS below). `template` fields get an "Insert variable" menu fed by the
+// `variables` prop: [{ group, key }].
 
 const LONG_TEXT = new Set(['message', 'note', 'description'])
 
@@ -27,8 +29,10 @@ function normalize(schema, root) {
     const options = resolved.anyOf.map((s) => resolve(s, root))
     const nonNull = options.filter((s) => s.type !== 'null')
     if (nonNull.length === 1) {
+      // Keep the field's own UI hints (x-label, x-options, …), which sit next to `anyOf`.
+      const hints = Object.fromEntries(Object.entries(resolved).filter(([key]) => key.startsWith('x-')))
       return normalize(
-        { ...nonNull[0], nullable: options.length > 1, title: resolved.title, default: resolved.default },
+        { ...nonNull[0], ...hints, nullable: options.length > 1, title: resolved.title, default: resolved.default },
         root,
       )
     }
@@ -101,11 +105,23 @@ function ConnectionSelect({ id, value, onChange, disabled, kind }) {
   )
 }
 
-/** DAG id: free text with suggestions from the chosen connection's synced DAGs. */
-function DagInput({ id, value, onChange, disabled, connectionId }) {
+/** Synced DAG ids of every active Airflow connection (for blocks without a connection field). */
+async function allDagIds() {
+  const { items } = await airflowApi.listConnections()
+  const lists = await Promise.allSettled(items.filter((c) => c.is_active).map((c) => airflowApi.listAllDags(c.id)))
+  const ids = lists.flatMap((r) => (r.status === 'fulfilled' ? r.value.map((d) => d.dag_id) : []))
+  return [...new Set(ids)].sort()
+}
+
+/**
+ * DAG id: free text with suggestions from the chosen connection's synced DAGs. A block (or
+ * template) with no connection field of its own suggests the DAGs of every connection.
+ */
+function DagInput({ id, value, onChange, disabled, connectionId, anyConnection }) {
   const listId = `${id}-dags`
-  const dags = useList(connectionId ? `dags:${connectionId}` : null, () =>
-    airflowApi.listAllDags(connectionId).then((dags) => dags.map((d) => d.dag_id)),
+  const key = connectionId ? `dags:${connectionId}` : anyConnection ? 'dags:all' : null
+  const dags = useList(key, () =>
+    connectionId ? airflowApi.listAllDags(connectionId).then((dags) => dags.map((d) => d.dag_id)) : allDagIds(),
   )
   return (
     <>
@@ -115,7 +131,7 @@ function DagInput({ id, value, onChange, disabled, connectionId }) {
         list={listId}
         value={value ?? ''}
         disabled={disabled}
-        placeholder={connectionId ? 'Type or pick a DAG id' : 'Choose a connection first'}
+        placeholder={connectionId || anyConnection ? 'Type or pick a DAG id' : 'Choose a connection first'}
         onChange={(e) => onChange(e.target.value.trim())}
       />
       <datalist id={listId}>
@@ -144,11 +160,70 @@ function ChannelSelect({ id, value, onChange, disabled }) {
   )
 }
 
+/**
+ * Text with {{placeholders}}: an "Insert variable" menu adds one at the cursor. Only values
+ * the trigger and earlier blocks provide are listed.
+ */
+function TemplateInput({ id, name, value, onChange, disabled, schema, variables = [] }) {
+  const ref = useRef(null)
+  const text = value ?? ''
+  const groups = [...new Set(variables.map((v) => v.group))]
+  function insert(key) {
+    const el = ref.current
+    const start = el?.selectionStart ?? text.length
+    const end = el?.selectionEnd ?? text.length
+    const placeholder = `{{${key}}}`
+    onChange(text.slice(0, start) + placeholder + text.slice(end))
+    requestAnimationFrame(() => {
+      el?.focus()
+      el?.setSelectionRange(start + placeholder.length, start + placeholder.length)
+    })
+  }
+  const Input = LONG_TEXT.has(name) ? 'textarea' : 'input'
+  return (
+    <div className="template-input">
+      <Input
+        id={id}
+        ref={ref}
+        {...(Input === 'textarea' ? { rows: 3 } : { type: 'text' })}
+        value={text}
+        maxLength={schema.maxLength}
+        disabled={disabled}
+        onChange={(e) => onChange(schema.nullable && e.target.value === '' ? null : e.target.value)}
+      />
+      {!disabled && variables.length > 0 && (
+        <select
+          className="template-insert"
+          aria-label="Insert variable"
+          value=""
+          onChange={(e) => e.target.value && insert(e.target.value)}
+        >
+          <option value="">+ Insert variable…</option>
+          {groups.map((group) => (
+            <optgroup key={group} label={group}>
+              {variables
+                .filter((v) => v.group === group)
+                .map((v) => (
+                  <option key={v.key} value={v.key}>
+                    {v.key}
+                  </option>
+                ))}
+            </optgroup>
+          ))}
+        </select>
+      )}
+    </div>
+  )
+}
+
 const WIDGETS = {
+  template: TemplateInput,
   notification_channel: ChannelSelect,
   airflow_connection: (props) => <ConnectionSelect {...props} kind="airflow" />,
   database_connection: (props) => <ConnectionSelect {...props} kind="database" />,
-  dag: (props) => <DagInput {...props} connectionId={props.values?.connection_id} />,
+  dag: (props) => (
+    <DagInput {...props} connectionId={props.values?.connection_id} anyConnection={props.schema['x-any-connection']} />
+  ),
   sql: ({ id, value, onChange, disabled, schema }) => (
     <textarea
       id={id}
@@ -176,9 +251,22 @@ const WIDGETS = {
   ),
 }
 
-function FieldControl({ name, schema, value, values, onChange, disabled, id }) {
+function FieldControl({ name, schema, value, values, onChange, disabled, id, variables }) {
   const Widget = WIDGETS[schema['x-widget']]
-  if (Widget) return <Widget id={id} schema={schema} value={value} values={values} onChange={onChange} disabled={disabled} />
+  if (Widget) {
+    return (
+      <Widget
+        id={id}
+        name={name}
+        schema={schema}
+        value={value}
+        values={values}
+        onChange={onChange}
+        disabled={disabled}
+        variables={variables}
+      />
+    )
+  }
   if (schema.type === 'boolean') {
     return <Toggle checked={Boolean(value)} disabled={disabled} onChange={onChange} label={schema['x-label'] ?? humanize(name)} />
   }
@@ -193,7 +281,7 @@ function FieldControl({ name, schema, value, values, onChange, disabled, id }) {
         )}
         {schema.enum.map((option) => (
           <option key={option} value={option}>
-            {option}
+            {schema['x-options']?.[option] ?? option}
           </option>
         ))}
       </select>
@@ -218,7 +306,7 @@ function FieldControl({ name, schema, value, values, onChange, disabled, id }) {
         type="text"
         value={(value ?? []).join(', ')}
         disabled={disabled}
-        placeholder="comma, separated"
+        placeholder="Any (comma separated)"
         onChange={(e) =>
           onChange(
             e.target.value
@@ -272,46 +360,54 @@ function FieldControl({ name, schema, value, values, onChange, disabled, id }) {
   )
 }
 
-function SchemaField({ name, schema, value, values, onChange, disabled, required }) {
+function SchemaField({ name, schema, value, values, onChange, disabled, required, variables }) {
   const id = useId()
-  const hint = [
-    schema['x-hint'],
-    !schema['x-hint'] && schema.minimum !== undefined && schema.maximum !== undefined && `${schema.minimum}–${schema.maximum}`,
-    schema.type === 'array' && !schema.items?.enum && 'Empty = any',
-    schema.type === 'array' && schema.items?.enum && 'None selected = any',
-  ]
-    .filter(Boolean)
-    .join(' · ')
+  // Only hints a block defines; the input's placeholder covers "empty = any".
+  const hint = schema['x-hint']
   return (
     <div className="field">
       <label htmlFor={id}>
         {schema['x-label'] ?? humanize(name)}
         {required && ' *'}
       </label>
-      <FieldControl id={id} name={name} schema={schema} value={value} values={values} onChange={onChange} disabled={disabled} />
+      <FieldControl
+        id={id}
+        name={name}
+        schema={schema}
+        value={value}
+        values={values}
+        onChange={onChange}
+        disabled={disabled}
+        variables={variables}
+      />
       {hint && <small className="field-hint">{hint}</small>}
     </div>
   )
 }
 
-export default function SchemaForm({ schema, value, onChange, disabled }) {
+export default function SchemaForm({ schema, value, onChange, disabled, variables }) {
   // `x-hidden` fields (kept for old workflows) only show while they hold a non-default value.
   const properties = Object.entries(schema?.properties ?? {}).filter(
     ([name, prop]) => !prop['x-hidden'] || (value?.[name] ?? null) !== (prop.default ?? null),
   )
   if (!properties.length) return <p className="muted small">This block has no settings.</p>
   const required = new Set(schema.required ?? [])
+  // A DAG field with no connection field beside it suggests DAGs from every connection.
+  const anyConnection = !('connection_id' in (schema.properties ?? {}))
   return (
     <div className="form-grid">
-      {properties.map(([name, prop]) => (
+      {properties.map(([name, prop]) => {
+        const field = normalize(prop, schema)
+        return (
         <SchemaField
           key={name}
           name={name}
-          schema={normalize(prop, schema)}
+          schema={field['x-widget'] === 'dag' && anyConnection ? { ...field, 'x-any-connection': true } : field}
           value={value?.[name]}
           values={value}
           required={required.has(name)}
           disabled={disabled}
+          variables={variables}
           onChange={(next) => {
             const updated = { ...value }
             if (next === undefined) delete updated[name]
@@ -319,7 +415,8 @@ export default function SchemaForm({ schema, value, onChange, disabled }) {
             onChange(updated)
           }}
         />
-      ))}
+        )
+      })}
     </div>
   )
 }

@@ -30,15 +30,15 @@ def test_catalog_entries() -> None:
     cat = {e["type"]: e for e in catalog()}
 
     analyze_entry = cat["analyze.task_logs"]
-    assert analyze_entry["label"] == "Analyze logs"
+    assert analyze_entry["label"] == "Fetch task logs"
     assert analyze_entry["category"] == "diagnosis"
     assert analyze_entry["ports"] == ["analyzed", "no_logs"]
     assert analyze_entry["needs_incident"] is True
     assert "max_log_lines" in analyze_entry["config_schema"]["properties"]
 
     ai_entry = cat["ai.generate_fix"]
-    assert ai_entry["label"] == "AI solution"
-    assert ai_entry["category"] == "logic"
+    assert ai_entry["label"] == "Suggest a fix (AI)"
+    assert ai_entry["category"] == "diagnosis"
     assert ai_entry["ports"] == ["solution_ready", "uncertain"]
     assert ai_entry["needs_incident"] is True
     assert "min_confidence_pct" in ai_entry["config_schema"]["properties"]
@@ -196,6 +196,10 @@ def test_analyze_task_logs_executor_with_logs(db: Session) -> None:
     assert analysis is not None
     assert "Out of memory" in analysis["headline"]
     assert analysis["task_id"] == "heavy_job"
+    # Fetching logs does not classify them: that is "Classify the failure"'s job.
+    assert "diagnosis" not in run.context
+    db.refresh(inc)
+    assert inc.diagnosis is None
 
 
 def test_ai_generate_fix_executor(db: Session, monkeypatch: pytest.MonkeyPatch) -> None:

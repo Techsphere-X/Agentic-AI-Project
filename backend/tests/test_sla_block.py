@@ -19,7 +19,7 @@ from tests.test_plan2_engine import make_env
 def test_catalog_includes_sla_block():
     entry = next((e for e in catalog() if e["type"] == "check.sla"), None)
     assert entry is not None
-    assert entry["label"] == "Estimate & check SLA"
+    assert entry["label"] == "Check SLA"
     assert entry["category"] == "logic"
     assert "exceeded" in entry["ports"]
     assert "met" in entry["ports"]

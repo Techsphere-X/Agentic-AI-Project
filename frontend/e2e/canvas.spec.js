@@ -27,12 +27,12 @@ async function dragBetween(page, from, to) {
 
 const node = (page, id) => page.locator(`.react-flow__node[data-id="${id}"]`)
 
-/** New workflows react to incidents; switch the trigger to "Run on demand" for "Run now" flows. */
+/** New workflows react to incidents; switch the trigger to "When run manually" for "Run now" flows. */
 async function startByHand(page) {
   const palette = page.locator('.editor-palette')
   await palette.locator('.palette-sub-title', { hasText: 'Orchestration' }).click()
-  await palette.getByRole('button', { name: 'Run on demand' }).click()
-  await expect(node(page, 'trigger')).toContainText('Run on demand')
+  await palette.getByRole('button', { name: 'When run manually' }).click()
+  await expect(node(page, 'trigger')).toContainText('When run manually')
 }
 
 test.beforeEach(async ({ page }) => {
@@ -44,12 +44,12 @@ test('workflow editor: build, save, reload, validate', async ({ page }) => {
   await expect(node(page, 'trigger')).toBeVisible()
 
   // Monitoring first: a new workflow starts from an incident, so the incident blocks are usable.
-  await expect(node(page, 'trigger')).toContainText('When an incident opens or recurs')
+  await expect(node(page, 'trigger')).toContainText('When an incident opens')
   await expect(page.getByRole('button', { name: 'Retry failed tasks' })).toBeEnabled()
 
-  // Drag "Tell someone" from the palette onto the canvas.
+  // Drag "Send a notification" from the palette onto the canvas.
   const canvas = page.locator('.editor-canvas')
-  await page.getByRole('button', { name: 'Tell someone' }).dragTo(canvas, { targetPosition: { x: 470, y: 80 } })
+  await page.getByRole('button', { name: 'Send a notification' }).dragTo(canvas, { targetPosition: { x: 470, y: 80 } })
   await expect(node(page, 'notify_1')).toBeVisible()
 
   // Wire trigger.next -> notify_1.
@@ -61,7 +61,7 @@ test('workflow editor: build, save, reload, validate', async ({ page }) => {
   await expect(page.getByTestId('rf__edge-trigger:next->notify_1')).toBeAttached()
 
   // The same output can also lead to a second block; both run, top to bottom.
-  await page.getByRole('button', { name: 'Tell someone' }).click()
+  await page.getByRole('button', { name: 'Send a notification' }).click()
   await expect(node(page, 'notify_2')).toBeVisible()
   await dragBetween(
     page,
@@ -112,7 +112,7 @@ test('workflow editor opens a template read from the server', async ({ page }) =
     .getByRole('link', { name: 'Edit on canvas' })
     .click()
   await expect(node(page, 'retry')).toBeVisible()
-  await expect(node(page, 'approval')).toContainText('Ask a human')
+  await expect(node(page, 'approval')).toContainText('Ask for approval')
   await expect(page.locator('.react-flow__edge')).toHaveCount(10)
   await page.screenshot({ path: `${SHOTS}/workflow-template.png` })
 })
@@ -191,27 +191,29 @@ test('run replay shows the path a real run took', async ({ page }) => {
 })
 
 test('orchestration: drag a real DAG from the palette and run it now', async ({ page }) => {
+  // daily_customer_etl: the e2e server pins the mock clock just after a 5-minute slot starts, when
+  // orders_pipeline is mid-run and a trigger would (rightly) be skipped as a duplicate.
   await page.goto('/automation/workflows/new')
   await startByHand(page)
 
-  // The palette lists the actual DAGs of the live connection; the generic block is gone.
+  // The palette lists the actual DAGs of the live connection next to the generic "Run a DAG" block.
   const palette = page.locator('.editor-palette')
   const account = palette.locator('.palette-account', { hasText: 'mock-dev' })
   await expect(account.locator('.palette-account-head')).toContainText('DEV')
-  await expect(account.getByRole('button', { name: 'orders_pipeline', exact: true })).toBeVisible()
-  await expect(palette.getByRole('button', { name: 'Run a DAG' })).toHaveCount(0)
-  const dagItem = palette.getByRole('button', { name: 'orders_pipeline', exact: true })
+  await expect(account.getByRole('button', { name: 'daily_customer_etl', exact: true })).toBeVisible()
+  await expect(palette.getByRole('button', { name: 'Run a DAG', exact: true })).toHaveCount(1)
+  const dagItem = palette.getByRole('button', { name: 'daily_customer_etl', exact: true })
   await dagItem.dragTo(page.locator('.editor-canvas'), { targetPosition: { x: 470, y: 80 } })
 
-  const block = node(page, 'orders_pipeline_1')
-  await expect(block).toContainText('orders_pipeline')
+  const block = node(page, 'daily_customer_etl_1')
+  await expect(block).toContainText('daily_customer_etl')
   await expect(block).toContainText('Run a DAG')
   await dragBetween(
     page,
     page.locator('.react-flow__handle[data-nodeid="trigger"][data-handleid="next"]'),
-    page.locator('.react-flow__handle.target[data-nodeid="orders_pipeline_1"]'),
+    page.locator('.react-flow__handle.target[data-nodeid="daily_customer_etl_1"]'),
   )
-  await expect(page.getByTestId('rf__edge-trigger:next->orders_pipeline_1')).toBeAttached()
+  await expect(page.getByTestId('rf__edge-trigger:next->daily_customer_etl_1')).toBeAttached()
 
   // Incident-only blocks are greyed out under a Run-on-demand trigger.
   await expect(page.getByRole('button', { name: 'Retry failed tasks' })).toBeDisabled()
@@ -219,16 +221,16 @@ test('orchestration: drag a real DAG from the palette and run it now', async ({ 
   // Connection and DAG are already filled in; the block can be switched to "wait for it".
   await block.click()
   await expect(page.getByLabel('Airflow connection')).toHaveValue(/[0-9a-f-]{36}/)
-  await expect(page.getByLabel('DAG', { exact: true })).toHaveValue('orders_pipeline')
+  await expect(page.getByLabel('DAG', { exact: true })).toHaveValue('daily_customer_etl')
   await page.getByRole('button', { name: 'Wait for it to succeed' }).click()
-  await expect(block).toContainText('Wait for a DAG')
-  await expect(block.locator('.block-port-label')).toContainText(['it succeeded', 'gave up'])
+  await expect(block).toContainText('Wait for a DAG run')
+  await expect(block.locator('.block-port-label')).toContainText(['succeeded', 'timed out'])
   await page.getByRole('button', { name: 'Run this DAG' }).click()
   await expect(block).toContainText('Run a DAG')
-  await expect(page.getByLabel('DAG', { exact: true })).toHaveValue('orders_pipeline')
+  await expect(page.getByLabel('DAG', { exact: true })).toHaveValue('daily_customer_etl')
 
   await page.getByLabel('Wait until the run finishes').click({ force: true })
-  await expect(block).toContainText("orders_pipeline · don't wait")
+  await expect(block).toContainText("daily_customer_etl · don't wait")
   await page.screenshot({ path: `${SHOTS}/orchestration-palette.png` })
 
   await page.getByLabel('Workflow name').fill('E2E orchestration')
@@ -237,7 +239,7 @@ test('orchestration: drag a real DAG from the palette and run it now', async ({ 
 
   await page.getByRole('button', { name: /Run now/ }).click()
   await expect(page).toHaveURL(/\/automation\/runs\/[0-9a-f-]{36}$/)
-  await expect(page.getByText('Done: run orders_pipeline')).toBeVisible()
+  await expect(page.getByText('Done: run daily_customer_etl')).toBeVisible()
   await expect(page.getByText('Run now', { exact: true })).toBeVisible()
   await page.screenshot({ path: `${SHOTS}/orchestration-run.png`, fullPage: true })
 })
@@ -272,7 +274,7 @@ test('notification channel: test message and a workflow that sends through it', 
     await expect(row).toContainText('Working')
     expect(received.at(-1).title).toBe('Test message from Agentic Ops')
 
-    // The channel is a palette component; dropping it gives a "Tell someone" that sends out.
+    // The channel is a palette component; dropping it gives a "Send a notification" that sends out.
     await page.goto('/automation/workflows/new')
     await startByHand(page)
     await page
@@ -294,7 +296,7 @@ test('notification channel: test message and a workflow that sends through it', 
     await page.getByRole('button', { name: 'Create workflow' }).click()
     await expect(page).toHaveURL(/\/automation\/workflows\/[0-9a-f-]{36}$/)
     await page.getByRole('button', { name: /Run now/ }).click()
-    await expect(page.getByText('Sent via E2E hook: Sent to E2E hook')).toBeVisible()
+    await expect(page.getByRole('list').getByText('Sent via E2E hook: Sent to E2E hook')).toBeVisible()
     await page.screenshot({ path: `${SHOTS}/notify-run.png`, fullPage: true })
 
     const message = received.at(-1)

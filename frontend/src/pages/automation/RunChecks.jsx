@@ -46,9 +46,6 @@ export default function RunChecks() {
       <div className="page-header">
         <div>
           <h1>Run checks</h1>
-          <p className="muted">
-            Each finished DAG run that a &ldquo;When a DAG run finishes&rdquo; workflow checked, and whether it passed.
-          </p>
         </div>
       </div>
       <Card>
@@ -88,8 +85,7 @@ export default function RunChecks() {
           <p className="muted">Loading…</p>
         ) : page.total === 0 ? (
           <EmptyState title="No run checks yet">
-            Create a workflow that starts with &ldquo;When a DAG run finishes&rdquo; (or use the &ldquo;Validate every
-            run&rdquo; template) and turn it on. Each finished run then shows up here.
+            Turn on a &ldquo;When a DAG run finishes&rdquo; workflow to see checks here.
           </EmptyState>
         ) : (
           <>

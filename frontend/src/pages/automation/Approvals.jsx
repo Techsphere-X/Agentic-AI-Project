@@ -99,9 +99,6 @@ export default function Approvals() {
       <div className="page-header">
         <div>
           <h1>Approvals</h1>
-          <p className="muted">
-            Fixes that automations want to make and that need a human decision first (always in PROD).
-          </p>
         </div>
       </div>
 
@@ -130,9 +127,7 @@ export default function Approvals() {
         {!page ? (
           <p className="muted">Loading…</p>
         ) : page.total === 0 ? (
-          <EmptyState title={tab === 'PENDING' ? 'Nothing waiting for approval' : 'No decisions yet'}>
-            {tab === 'PENDING' && 'Enable workflows under Automation → Workflows to start automating fixes.'}
-          </EmptyState>
+          <EmptyState title={tab === 'PENDING' ? 'Nothing waiting for approval' : 'No decisions yet'} />
         ) : tab === 'PENDING' ? (
           <div className="approval-list">
             {page.items.map((a) => (

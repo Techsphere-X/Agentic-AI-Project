@@ -28,7 +28,10 @@ from app.services.automation_nodes import compare
 
 class Clock:
     def __init__(self) -> None:
-        self.now = datetime.now(UTC).replace(microsecond=0)
+        # The mock shows a scheduled run as "running" for the first 2 minutes of each 5-minute
+        # slot; start 3 minutes into a slot so no test finds a run already active by chance.
+        now = datetime.now(UTC).replace(second=0, microsecond=0)
+        self.now = now - timedelta(minutes=now.minute % 5) - timedelta(minutes=2)
 
     def __call__(self) -> datetime:
         return self.now

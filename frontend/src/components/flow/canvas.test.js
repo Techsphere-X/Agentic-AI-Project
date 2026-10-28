@@ -17,12 +17,14 @@ import {
   linkOrder,
   nextNodeId,
   parseBlockPayload,
+  portLabel,
+  portTone,
   retypeNode,
   toFlow,
 } from './graph'
 import { layeredLayout } from './layout'
 import { connectionState } from '../../connectionState'
-import { NODE_LABELS, describeConfig } from '../../pages/automation/automationText'
+import { NODE_LABELS, describeConfig, nodeIcon, stageOf } from '../../pages/automation/automationText'
 
 const retryGraph = {
   nodes: [
@@ -105,7 +107,7 @@ test('ids and defaults', () => {
 })
 
 test('database reconciliation block exposes its result branches', () => {
-  assert.equal(NODE_LABELS['database.reconcile'], 'Reconcile databases')
+  assert.equal(NODE_LABELS['database.reconcile'], 'Compare two databases')
   assert.equal(
     describeConfig('database.reconcile', { comparison_mode: 'rows', key_columns: ['id'] }),
     'compare rows · by id',
@@ -356,4 +358,36 @@ test('switching the trigger keeps its id, position and link', () => {
   assert.equal(toSchedule.node.data.nodeType, 'trigger.schedule')
   assert.deepEqual(toSchedule.node.data.config, { every_minutes: 60 })
   assert.ok(toSchedule.edges.some((e) => e.source === 'trigger' && e.target === 'classify'))
+})
+
+test('ports are coloured and labelled from the catalog, with a fallback without one', () => {
+  const check = { ports: ['pass', 'fail'], port_labels: { pass: 'passed', fail: 'failed' }, port_tones: { pass: 'good', fail: 'bad' } }
+  assert.equal(portTone(check, 'fail'), 'bad')
+  assert.equal(portLabel(check, 'pass'), 'passed')
+  assert.equal(portTone({ port_tones: { wait: 'neutral' } }, 'wait'), 'neutral')
+  assert.equal(portTone(undefined, 'mismatched'), 'bad') // no catalog: the fallback list
+  assert.equal(portLabel({ ports: ['next'] }, 'next'), undefined) // a plain "then" link has no label
+  const diagnose = { ports: ['retryable', 'next'], port_labels: { next: 'always' } }
+  assert.equal(portLabel(diagnose, 'next'), 'always')
+
+  const graph = {
+    nodes: [
+      { id: 'c', type: 'database.check', config: {}, position: { x: 0, y: 0 } },
+      { id: 'n', type: 'notify', config: {}, position: { x: 1, y: 0 } },
+    ],
+    edges: [{ from: 'c', port: 'fail', to: 'n' }],
+  }
+  const { edges } = toFlow(graph, (n) => ({ def: n.type === 'database.check' ? check : undefined }))
+  assert.equal(edges[0].label, 'failed')
+  assert.equal(edges[0].className, 'edge-bad')
+  const linked = connect({ source: 'c', sourceHandle: 'pass', target: 'n' }, [], check)
+  assert.equal(linked[0].className, 'edge-ok')
+})
+
+test('blocks are grouped into stages in run order', () => {
+  assert.equal(stageOf({ stage: 'diagnose', category: 'diagnosis' }).label, 'Diagnose')
+  assert.equal(stageOf({ category: 'output' }).id, 'notify') // older catalog without `stage`
+  assert.equal(stageOf('pipeline').id, 'act')
+  assert.equal(nodeIcon('check.sla'), '⏱')
+  assert.equal(nodeIcon('check.dag_state'), '⋔')
 })

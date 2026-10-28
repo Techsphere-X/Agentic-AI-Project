@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { formatDateTime, formatRelative } from '../../format'
 import { automationApi } from '../../services/endpoints'
+import { BAD_PORTS } from '../../components/flow/graph'
 import { ApprovalCard } from './Approvals'
 import { NODE_LABELS, describeConfig, duration, nodeIcon, triggerText } from './automationText'
 import { ApprovalStatusBadge, RunStatusBadge } from './automationUi'
@@ -13,7 +14,6 @@ import { ApprovalStatusBadge, RunStatusBadge } from './automationUi'
 const RunCanvas = lazy(() => import('./RunCanvas'))
 
 const STEP_TONES = { COMPLETED: 'success', WAITING: 'warning', FAILED: 'danger', RUNNING: 'info', SKIPPED: 'neutral' }
-const BAD_PORTS = new Set(['failed', 'rejected', 'false'])
 
 function StepItem({ step, node }) {
   const [open, setOpen] = useState(false)

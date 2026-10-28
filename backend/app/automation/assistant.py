@@ -287,6 +287,8 @@ def _problems_text(problems: list[dict[str, str]]) -> str:
     lines = []
     for p in problems:
         where = p.get("node") or p.get("edge")
+        if where and p.get("field"):
+            where = f"{where}, config.{p['field']}"  # the message names the field by its label
         lines.append(f"- {p.get('message')}" + (f" (at {where})" if where else ""))
     return "\n".join(lines)
 

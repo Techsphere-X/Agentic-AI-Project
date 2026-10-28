@@ -10,10 +10,13 @@
   --cat-action: #c2410c;
   --cat-verify: #15803d;
   --cat-output: #4b5563;
-  --stage-start: #7c3aed;
-  --stage-do: #2563eb;
+  --stage-when: #7c3aed;
+  --stage-check: #b45309;
+  --stage-diagnose: #0e7490;
   --stage-decide: #be185d;
-  --stage-tell: #475569;
+  --stage-act: #2563eb;
+  --stage-verify: #15803d;
+  --stage-notify: #475569;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -27,10 +30,13 @@
     --cat-action: #fb923c;
     --cat-verify: #4ade80;
     --cat-output: #9ca3af;
-    --stage-start: #a78bfa;
-    --stage-do: #60a5fa;
+    --stage-when: #a78bfa;
+    --stage-check: #fbbf24;
+    --stage-diagnose: #22d3ee;
     --stage-decide: #f472b6;
-    --stage-tell: #94a3b8;
+    --stage-act: #60a5fa;
+    --stage-verify: #4ade80;
+    --stage-notify: #94a3b8;
   }
 }
 
@@ -55,10 +61,18 @@
   font-size: 1.3rem;
 }
 
+/* Live / Dry run switch next to the workflow name */
+.editor-toolbar .editor-mode {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.8rem;
+}
+
 .editor-name {
-  min-width: 220px;
+  min-width: 200px;
   max-width: 420px;
-  flex: 0 1 360px;
+  flex: 0 1 280px;
   font-size: 1.05rem;
   font-weight: 600;
 }
@@ -194,14 +208,19 @@
 }
 
 /* ------------------------------------------------------------------ workflow blocks */
-.stage-start,
-.palette-item.stage-start {
-  --cat: var(--stage-start);
+.stage-when,
+.palette-item.stage-when {
+  --cat: var(--stage-when);
 }
 
-.stage-do,
-.palette-item.stage-do {
-  --cat: var(--stage-do);
+.stage-check,
+.palette-item.stage-check {
+  --cat: var(--stage-check);
+}
+
+.stage-diagnose,
+.palette-item.stage-diagnose {
+  --cat: var(--stage-diagnose);
 }
 
 .stage-decide,
@@ -209,9 +228,19 @@
   --cat: var(--stage-decide);
 }
 
-.stage-tell,
-.palette-item.stage-tell {
-  --cat: var(--stage-tell);
+.stage-act,
+.palette-item.stage-act {
+  --cat: var(--stage-act);
+}
+
+.stage-verify,
+.palette-item.stage-verify {
+  --cat: var(--stage-verify);
+}
+
+.stage-notify,
+.palette-item.stage-notify {
+  --cat: var(--stage-notify);
 }
 
 .palette-stage {
@@ -366,6 +395,26 @@
   color: var(--warning);
 }
 
+.block-port-neutral .block-port-label {
+  color: var(--text-muted);
+}
+
+.block-warning {
+  color: var(--warning);
+}
+
+/* On the coloured band: white like the stage name, outlined so it reads as a tag. */
+.block-badge-action {
+  margin-left: auto;
+  padding: 0 0.35rem;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: inherit;
+  border: 1px solid rgb(255 255 255 / 0.75);
+  border-radius: 999px;
+}
+
 .block .react-flow__handle {
   width: 10px;
   height: 10px;
@@ -451,6 +500,15 @@
 
 .react-flow__edge.edge-ok .react-flow__edge-text {
   fill: var(--success);
+}
+
+.react-flow__edge.edge-neutral .react-flow__edge-path {
+  stroke: var(--text-muted);
+  stroke-width: 1.75;
+}
+
+.react-flow__edge.edge-neutral .react-flow__edge-text {
+  fill: var(--text-muted);
 }
 
 .react-flow__edge.selected .react-flow__edge-path {
@@ -675,6 +733,24 @@
   line-height: 1.45;
   white-space: pre;
   resize: vertical;
+}
+
+/* Text with {{placeholders}}: the field plus its "Insert variable" menu */
+.template-input {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.template-insert {
+  align-self: flex-start;
+  max-width: 100%;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.4rem;
+}
+
+.palette-empty {
+  margin: 0.25rem 0;
 }
 
 /* Palette: real DAGs and databases from the catalog */
@@ -1034,27 +1110,6 @@
   min-height: 0;
   padding: 0.75rem;
   overflow-y: auto;
-}
-
-.assistant-empty {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.assistant-starter {
-  padding: 0.45rem 0.55rem;
-  font-size: 0.82rem;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-
-.assistant-starter:hover:not(:disabled) {
-  border-color: var(--accent);
 }
 
 .assistant-msg {

@@ -225,11 +225,7 @@ export default function Workflows() {
       <div className="page-header">
         <div>
           <h1>Workflows</h1>
-          <p className="muted">
-            Orchestrate pipelines and databases on demand or on a schedule, or respond to incidents: figure out why, ask a
-            human if needed, fix it, and check it worked.
-            {!canEdit && ' Only admins can change workflows.'}
-          </p>
+          {!canEdit && <p className="muted">Only admins can change workflows.</p>}
         </div>
         {canEdit && (
           <Link className="btn btn-primary" to="/automation/workflows/new">
@@ -240,7 +236,7 @@ export default function Workflows() {
       {!workflows ? (
         <p className="muted">Loading…</p>
       ) : workflows.length === 0 ? (
-        <EmptyState title="No workflows">The built-in workflows are added when the server starts.</EmptyState>
+        <EmptyState title="No workflows" />
       ) : (
         <div className="workflow-list">
           {workflows.map((w) => (

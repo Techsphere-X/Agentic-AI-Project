@@ -139,7 +139,7 @@ def test_allowed_fixes_are_the_guard_rail() -> None:
 
 def test_catalog_entry() -> None:
     entry = {e["type"]: e for e in catalog()}["decide.choose_fix"]
-    assert entry["label"] == "Choose the fix"
+    assert entry["label"] == "Choose a fix automatically"
     assert entry["category"] == "logic"
     assert tuple(entry["ports"]) == FIXES
     assert entry["needs_incident"] is True

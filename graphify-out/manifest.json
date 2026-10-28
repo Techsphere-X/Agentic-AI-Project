@@ -730,8 +730,8 @@
     "semantic_hash": "6b959ddd7e238670d844b0e5d3f74948"
   },
   "frontend/src/pages/dashboard/Dashboard.jsx": {
-    "mtime": 1793012782.023518,
-    "ast_hash": "dc87eacc380256a6b4d851a2f3a2dd68",
+    "mtime": 1793160054.872131,
+    "ast_hash": "96045f7b9a0079f62c36651c8759983b",
     "semantic_hash": ""
   },
   "frontend/src/pages/incidents/IncidentDetail.jsx": {
@@ -1355,23 +1355,23 @@
     "semantic_hash": ""
   },
   "backend/app/schemas/connector_metrics.py": {
-    "mtime": 1793012275.3614976,
-    "ast_hash": "770aac390790962084572d5e64dadb10",
+    "mtime": 1793160054.7998226,
+    "ast_hash": "c8db0411a972b34e25414d91ab4a445a",
     "semantic_hash": ""
   },
   "backend/app/services/connector_metrics_service.py": {
-    "mtime": 1793012304.0517204,
-    "ast_hash": "051493f25051e02dc8b0b9c9c14bc3b3",
+    "mtime": 1793160054.803332,
+    "ast_hash": "868a03951edd2458a7cace7c3ec18224",
     "semantic_hash": ""
   },
   "backend/tests/test_connector_metrics.py": {
-    "mtime": 1793012455.6377773,
-    "ast_hash": "5a13877a96c7b6b47289de6049d7325d",
+    "mtime": 1793160054.815099,
+    "ast_hash": "b5f3d9fedbc493994507f163dcd0795c",
     "semantic_hash": ""
   },
   "frontend/src/pages/dashboard/ConnectorMetricsSection.jsx": {
-    "mtime": 1793012534.7575748,
-    "ast_hash": "6c30a93c3f9bb93523dce01a6d1215ae",
+    "mtime": 1793160054.8365295,
+    "ast_hash": "8cb6f869378f3f38f43765200600b0d2",
     "semantic_hash": ""
   }
 }

@@ -73,16 +73,6 @@ function Panel({
     return (
       <>
         <strong>Pipelines</strong>
-        <p className="muted small">
-          Each Airflow connection feeds its DAGs. Monitor blocks attached to a DAG open incidents, and incidents start
-          the automation workflows they are wired to.
-        </p>
-        {canEdit && (
-          <p className="muted small">
-            To add monitoring, drag a monitor block onto the canvas, then drag from a DAG&apos;s right edge to it. Select
-            a monitor and press Delete to remove it.
-          </p>
-        )}
         <div className="checkbox-inline">
           <Toggle checked={showUnmonitored} onChange={setShowUnmonitored} label="Show unmonitored DAGs" />
           <span className="small">Show unmonitored DAGs</span>
@@ -433,7 +423,6 @@ function Canvas() {
       <div className={`editor-shell ${canEdit ? '' : 'editor-readonly'}`}>
         {canEdit && (
           <aside className="editor-palette" aria-label="Monitor blocks">
-            <p className="muted small">Drag a monitor onto the canvas, then connect a DAG to it.</p>
             <div className="palette-group">
               <div className="palette-title">Monitors</div>
               {MONITORS.map((m) => (
@@ -532,7 +521,6 @@ export default function PipelineCanvas() {
         <div>
           <h1 className="editor-title">Pipelines</h1>
         </div>
-        <span className="muted small">Airflow connection → DAG → monitors → automations</span>
       </div>
       <ReactFlowProvider>
         <Canvas />

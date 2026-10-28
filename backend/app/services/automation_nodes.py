@@ -528,18 +528,6 @@ def _analyze_task_logs(ctx: NodeContext, node: Node) -> NodeResult:
     headline, stack_trace, snippet, extracted_task = _extract_log_error(raw_log, max_lines=max_lines)
     task_id = extracted_task or ""
 
-    # Classify the logs so {{diagnosis.label}}, {{diagnosis.category}} are also populated:
-    try:
-        from app.diagnosis.hybrid import decide
-        from app.services.diagnosis_service import model_client
-
-        diagnosis_payload, _ = decide(logs, model_client(), 0.85)
-        ctx.set_context("diagnosis", diagnosis_payload)
-        if incident and not incident.diagnosis:
-            incident.diagnosis = diagnosis_payload
-    except Exception as exc:
-        logger.info("Log classification in analyze_task_logs skipped: %s", exc)
-
     output = {
         "headline": headline,
         "stack_trace": stack_trace,

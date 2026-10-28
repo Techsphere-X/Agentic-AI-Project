@@ -20,10 +20,15 @@ class NodeTypeRead(BaseModel):
     label: str
     category: str
     description: str
+    summary: str  # one line for the editor; `description` has the details
     ports: list[str]
     port_labels: dict[str, str]
+    port_tones: dict[str, Literal["good", "bad", "neutral"]] = Field(default_factory=dict)
+    stage: str
     needs_incident: bool = False
     needs_dag_run: bool = False
+    is_action: bool = False
+    outputs: list[str] = Field(default_factory=list)
     config_schema: dict[str, Any]
 
 
@@ -90,6 +95,8 @@ class TemplatePreview(BaseModel):
 class GraphCheckResult(BaseModel):
     valid: bool
     problems: list[dict[str, str]]
+    # Non-blocking, e.g. a {{placeholder}} no earlier block provides.
+    warnings: list[dict[str, str]] = Field(default_factory=list)
     graph: dict[str, Any] | None
 
 

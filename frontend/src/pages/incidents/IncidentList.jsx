@@ -90,7 +90,6 @@ export default function IncidentList() {
       <div className="page-header">
         <div>
           <h1>Incidents</h1>
-          <p className="muted">Failed runs and SLA breaches detected on monitored DAGs.</p>
         </div>
         {canOperate && (
           <Button variant="primary" onClick={onRunDetection} loading={running}>
@@ -145,7 +144,7 @@ export default function IncidentList() {
           <p className="muted">Loading…</p>
         ) : page.total === 0 ? (
           <EmptyState title={filters.status === 'active' ? 'No open incidents' : 'No incidents match the filters'}>
-            {filters.status === 'active' && 'Monitored DAGs are healthy. Detection runs automatically.'}
+            {filters.status === 'active' && 'Monitored DAGs are healthy.'}
           </EmptyState>
         ) : (
           <>

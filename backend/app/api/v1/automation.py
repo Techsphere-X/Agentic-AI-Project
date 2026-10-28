@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Request
 
 from app.automation import assistant
-from app.automation.graph import catalog
+from app.automation.graph import catalog, graph_warnings, validate_graph
 from app.automation.templates import ALL_TEMPLATES
 from app.automation.types import ApprovalStatus, DagRunCheckStatus, RunStatus
 from app.connectors.assistant_llm import AssistantUnavailable, get_assistant_llm, model_name
@@ -124,7 +124,8 @@ def create_workflow(
 @router.post("/workflows/validate", response_model=GraphCheckResult)
 def validate_workflow_graph(body: GraphCheck, _: ViewerUser) -> GraphCheckResult:
     graph, problems = automation_service.check_graph(body.graph)
-    return GraphCheckResult(valid=not problems, problems=problems, graph=graph)
+    warnings = graph_warnings(validate_graph(graph)) if graph is not None else []
+    return GraphCheckResult(valid=not problems, problems=problems, warnings=warnings, graph=graph)
 
 
 # -------------------------------------------------------------------- assistant

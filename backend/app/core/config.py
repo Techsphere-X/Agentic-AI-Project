@@ -109,6 +109,8 @@ class Settings(BaseSettings):
     DIAGNOSTIC_LLM_URL: str = "http://127.0.0.1:11434"
     DIAGNOSTIC_LLM_MODEL: str = "qwen3:4b"
     DIAGNOSTIC_LLM_TIMEOUT_SECONDS: float = 60
+    DIAGNOSTIC_LLM_NUM_CTX: int = 4096  # Ollama context window; 4096 fits qwen3:4b in 4 GB VRAM
+    DIAGNOSTIC_LLM_MAX_TOKENS: int = 700  # answer length cap (bounds latency)
     DIAGNOSTIC_LLM_BREAKER_FAILURES: int = 3
     DIAGNOSTIC_LLM_BREAKER_COOLDOWN_SECONDS: int = 60
 

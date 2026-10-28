@@ -48,7 +48,6 @@ export default function Notifications() {
       <div className="page-header">
         <div>
           <h1>Notifications</h1>
-          <p className="muted">Messages sent by automation workflows: fixes made, approvals needed, and things that need a human.</p>
         </div>
         <Button onClick={markAllRead} loading={marking} disabled={!hasUnread}>
           Mark all read

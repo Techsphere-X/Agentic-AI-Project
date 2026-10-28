@@ -117,7 +117,6 @@ export default function RunList() {
       <div className="page-header">
         <div>
           <h1>Automation runs</h1>
-          <p className="muted">Every time a workflow ran, step by step.</p>
         </div>
         {hasRole('ADMIN', 'OPERATOR') && (
           <Button onClick={onTick} loading={ticking} title="Advance waiting runs now instead of on the next cycle">
@@ -160,7 +159,7 @@ export default function RunList() {
         ) : !page ? (
           <p className="muted">Loading…</p>
         ) : page.total === 0 ? (
-          <EmptyState title="No runs yet">Runs appear when you press Run now, on a schedule, or when an incident starts a workflow.</EmptyState>
+          <EmptyState title="No runs yet" />
         ) : (
           <>
             <RunTable runs={page.items} />

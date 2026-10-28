@@ -114,6 +114,9 @@ class DiagnosisOverride(BaseModel):
 
 
 class LLMAnalysis(BaseModel):
+    category: str = "UNKNOWN"
+    label: str = "Unknown"
+    evidence_line: str | None = None  # verbatim log line the diagnosis rests on
     summary: str
     root_cause: str
     failed_location: str | None = None
