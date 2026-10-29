@@ -1504,6 +1504,17 @@ def _incident_update(ctx: NodeContext, node: Node) -> NodeResult:
     if operation == "resolve":
         if incident.status == IncidentStatus.RESOLVED:
             return NodeResult("next", {"skipped": True}, "Incident was already resolved")
+        # A failure recorded after this run started is not fixed by it. (An SLA breach is seen
+        # again every detection cycle while it lasts, so for SLA incidents that is not new.)
+        started = ctx.run.started_at
+        if (
+            incident.type != IncidentType.SLA_MISSED
+            and started is not None
+            and incident.last_seen_at > started
+        ):
+            reason = "Not resolved: the DAG failed again after this workflow started"
+            ctx.event("automation_note", note=reason)
+            return NodeResult("next", {"skipped": True, "reason": "newer failure"}, reason)
         incident_service.mark_resolved(incident, IncidentResolution.AUTO_REMEDIATED, note=note)
         ctx.event("auto_remediated", note=note or "")
         ctx.audit("incident.auto_remediated", note=note)
@@ -1933,6 +1944,12 @@ def _reconcile(ctx: NodeContext, node: Node) -> NodeResult:
             "differences": differences,
         }
         ctx.record_result(node.id, output)
+        if not matched:
+            ctx.set_context(
+                "last_error",
+                f"Reconciliation '{_block_label(node)}' found {len(differences)} difference(s) "
+                "between source and destination.",
+            )
         return NodeResult(
             "matched" if matched else "mismatched",
             output,
@@ -1941,9 +1958,14 @@ def _reconcile(ctx: NodeContext, node: Node) -> NodeResult:
     except (ActionFailed, NodeError, ValueError) as exc:
         message = f"{phase.capitalize()} reconciliation query failed"
         output = {"matched": False, "phase": phase, "error": scrub(str(exc))[:500]}
-        ctx.set_context("last_error", message)
+        ctx.set_context("last_error", f"Reconciliation '{_block_label(node)}': {message.lower()}")
         ctx.record_result(node.id, output)
         return NodeResult("failed", output, message)
+
+
+def _block_label(node: Node) -> str:
+    """The block's name on the canvas, so an alert says which check failed."""
+    return node.name or node.id
 
 
 def _query(
@@ -2030,7 +2052,9 @@ def _check_data(ctx: NodeContext, node: Node) -> NodeResult:
     except ActionFailed as exc:
         if ctx.now < deadline:
             return _verify_wait(ctx, deadline, f"Query failed, retrying: {exc}")
-        ctx.set_context("last_error", f"Data check on {conn.name} could not run: {exc}")
+        ctx.set_context(
+            "last_error", f"Data check '{_block_label(node)}' on {conn.name} could not run: {exc}"
+        )
         ctx.record_result(node.id, {"value": None, "passed": False, "error": str(exc)})
         return NodeResult("fail", {"error": str(exc)}, f"Query failed: {exc}")
 
@@ -2044,7 +2068,10 @@ def _check_data(ctx: NodeContext, node: Node) -> NodeResult:
         return NodeResult("pass", output, f"Passed: {value} {op} {expected}")
     if ctx.now < deadline:
         return _verify_wait(ctx, deadline, f"Not yet: {value} is not {op} {expected}")
-    ctx.set_context("last_error", f"Data check failed: got {value}, expected {op} {expected}.")
+    ctx.set_context(
+        "last_error",
+        f"Data check '{_block_label(node)}' failed: got {value}, expected {op} {expected}.",
+    )
     return NodeResult("fail", output, f"Failed: {value} is not {op} {expected}")
 
 

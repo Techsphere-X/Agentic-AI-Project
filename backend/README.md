@@ -92,3 +92,47 @@ alembic upgrade head
 ```
 
 Register Airflow in the UI with base URL `http://localhost:8080`, user `admin` / `admin`.
+
+## Sandbox demo
+
+`scripts/seed_demo.py` sets up the demo: the "Sandbox environment" Airflow connection, the
+source and warehouse PostgreSQL connections, the Team Slack channel, the monitored `sandbox_*`
+DAGs, and four enabled workflows (retry network failures, fix with approval, validate every
+e-commerce run, compare source and warehouse orders). It matches records by name, so running it
+again repairs the demo instead of duplicating it. The `sandbox_*` DAGs must already be deployed
+to that Airflow.
+
+```powershell
+$env:DEMO_AIRFLOW_PASSWORD = "admin"       # needed only when the connection does not exist yet
+python scripts/seed_demo.py                # --mock-airflow uses the built-in mock instead
+```
+
+The `DEMO_*` settings are listed at the end of `.env.example`.
+
+### Workflow test set
+
+`scripts/seed_test_workflows.py` (run after `seed_demo.py`) adds eight workflows, turns the four
+demo workflows above off, and sets the ETL's freshness SLA to 1500 minutes:
+
+| Workflow | Starts when | Does |
+|---|---|---|
+| SLA 1 · Alert when a run takes longer than usual | ETL or failure-lab run succeeds | Alerts if it took over twice as long as usual (median of its last 10 runs) |
+| SLA 2 · Alert while a run is still going past its usual time | Every 5 minutes | Alerts if a failure-lab run is still running past that limit |
+| SLA 3 · Re-run the ETL when its data is late | ETL freshness SLA missed | Re-runs the ETL, verifies, resolves (escalates if the re-run fails) |
+| Data quality 1 · Check the warehouse after every ETL run | ETL run succeeds | 20 checks; marks the run passed, or failed with an incident and alert |
+| Data quality 2 · Check the warehouse now (manual) | Run now | The same 20 checks, reported to the team; changes nothing |
+| Fix 1 · Auto-retry temporary failures | Network, timeout, memory, missing-input failure | Retries, verifies, resolves; stops after 3 failures |
+| Fix 2 · Ask before retrying failures that need a code or data fix | Bad data, schema, login failure | AI suggests a fix; a person approves the retry |
+| Fix 3 · Flag failures with an unknown cause | Failure with no known cause | AI explains the error; asks the team to look |
+
+The 20 data quality checks cover volume, completeness (against the source database and the ETL
+log), uniqueness, missing values, validity, referential integrity, freshness, schema drift and
+distribution. The chain stops at the first failed check and the alert names it.
+
+To try them: trigger `sandbox_failure_lab` with run config `{"failure": "<mode>"}` (`network`,
+`timeout`, `oom`, `missing_input` for Fix 1; `bad_data`, `schema`, `auth` for Fix 2; `slow` with
+`"seconds": 90` for SLA 1, or `600` for SLA 2), trigger `sandbox_retry_demo` for Fix 3, and run the
+ETL for Data quality 1. To see a data quality failure, change a warehouse row, e.g.
+`UPDATE warehouse.fact_orders SET quantity = -1 WHERE order_id = (SELECT min(order_id) FROM warehouse.fact_orders);`,
+then press Run now on Data quality 2. The next ETL run reloads the data. Raise
+`AUTOMATION_MAX_ACTIONS_PER_DAG_PER_DAY` (default 3) when testing many retries in one day.

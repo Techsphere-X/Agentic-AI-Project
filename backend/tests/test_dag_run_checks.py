@@ -373,7 +373,7 @@ def test_data_check_records_status_and_drives_the_incident(
     _tick(db, T0)
     [check] = _checks(db)
     assert check.status == DagRunCheckStatus.FAILED
-    assert check.message == "Data check failed: got 0, expected > 0."
+    assert check.message == "Data check 'check' failed: got 0, expected > 0."
     [incident] = db.scalars(select(Incident)).all()
     assert incident.type == IncidentType.DATA_CHECK_FAILED
     assert incident.title == "etl: data check failed"

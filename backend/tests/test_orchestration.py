@@ -365,7 +365,7 @@ def test_check_gives_up_after_its_window(db: Session, admin: User, clock: Clock,
     tick(db, clock)
     run = db.get(WorkflowRun, run.id)
     assert steps(run)[-1] == ("ready", "fail")
-    assert run.context["last_error"] == "Data check failed: got 0, expected > 0."
+    assert run.context["last_error"] == "Data check 'ready' failed: got 0, expected > 0."
 
 
 def test_wait_for_dag_sees_a_recent_success(db: Session, admin: User, clock: Clock) -> None:
