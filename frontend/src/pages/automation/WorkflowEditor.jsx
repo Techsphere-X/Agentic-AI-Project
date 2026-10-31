@@ -548,7 +548,7 @@ function Problems({ problems, warnings = [], nameOf, onSelect, onAskAssistant })
         {problems.length > 0 && warnings.length > 0 && ' · '}
         {warnings.length > 0 && `${warnings.length} warning${warnings.length === 1 ? '' : 's'}`}
       </strong>
-      {onAskAssistant && problems.length > 0 && (
+      {onAskAssistant && (
         <button type="button" className="link-btn small problems-ask" onClick={onAskAssistant}>
           ✨ Ask AI to fix
         </button>
@@ -873,7 +873,7 @@ function Editor() {
     const ticket = ++validation.current
     const timer = setTimeout(async () => {
       try {
-        const result = await automationApi.validateGraph(JSON.parse(graphKey))
+        const result = await automationApi.validateGraph(JSON.parse(graphKey), workflow?.id)
         if (ticket === validation.current) applyProblems(result.problems, result.warnings ?? [])
       } catch {
         // Offline or a server error: keep the last known problems.
@@ -881,12 +881,12 @@ function Editor() {
     }, LIVE_VALIDATE_MS)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-validate only when the graph changes
-  }, [graphKey, catalog, canEdit])
+  }, [graphKey, catalog, canEdit, workflow?.id])
 
   async function validate() {
     setBusy('validate')
     try {
-      const result = await automationApi.validateGraph(fromFlow(nodes, edges))
+      const result = await automationApi.validateGraph(fromFlow(nodes, edges), workflow?.id)
       applyProblems(result.problems, result.warnings ?? [])
       if (result.valid) toast.success('Looks good: the workflow is valid')
       else toast.error(`${result.problems.length} problem(s) to fix`)
@@ -1315,6 +1315,7 @@ function Editor() {
             status={assistant}
             getGraph={() => fromFlow(nodes, edges)}
             problems={problems}
+            warnings={warnings}
             fixRequest={fixRequest}
             onApply={applyProposal}
             onUndo={undoApply}

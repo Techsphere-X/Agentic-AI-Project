@@ -26,23 +26,35 @@ function ChangeSummary({ changes }) {
   )
 }
 
+function ProposalNotes({ title, items }) {
+  if (!items?.length) return null
+  return (
+    <>
+      {title && <p className="muted small">{title}</p>}
+      <ul className="assistant-problems small">
+        {items.slice(0, 5).map((p, i) => (
+          <li key={i}>{p.node ? `${p.node}: ${p.message}` : p.message}</li>
+        ))}
+      </ul>
+    </>
+  )
+}
+
 function ProposalCard({ message, onApply, onDiscard }) {
-  const { proposal, valid, problems, status } = message
+  const { proposal, valid, problems, needsInput, warnings, status } = message
   return (
     <div className="assistant-proposal">
       <div className="assistant-proposal-head">
         <strong className="small">Proposed change</strong>
-        {valid ? <Badge tone="success">valid</Badge> : <Badge tone="danger">still invalid</Badge>}
+        {!valid && <Badge tone="danger">still invalid</Badge>}
+        {valid && needsInput?.length > 0 && <Badge tone="warning">needs your input</Badge>}
+        {valid && !needsInput?.length && <Badge tone="success">valid</Badge>}
         {status && <Badge>{status}</Badge>}
       </div>
       <ChangeSummary changes={proposal.changes} />
-      {!valid && problems?.length > 0 && (
-        <ul className="assistant-problems small">
-          {problems.slice(0, 5).map((p, i) => (
-            <li key={i}>{p.node ? `${p.node}: ${p.message}` : p.message}</li>
-          ))}
-        </ul>
-      )}
+      {!valid && <ProposalNotes items={problems} />}
+      <ProposalNotes title="You still need to fill in:" items={needsInput} />
+      <ProposalNotes title="Check before saving:" items={warnings} />
       {!status && (
         <div className="assistant-actions">
           <Button
@@ -68,20 +80,30 @@ function ProposalCard({ message, onApply, onDiscard }) {
  * it on the canvas (unsaved), so the usual Save and its checks still decide what is stored.
  * `fixRequest` changes (a counter) when the Problems panel asks for a fix.
  */
-export default function AssistantPanel({ status, getGraph, problems, fixRequest, onApply, onUndo, canUndo, onClose }) {
+export default function AssistantPanel({
+  status,
+  getGraph,
+  problems,
+  warnings,
+  fixRequest,
+  onApply,
+  onUndo,
+  canUndo,
+  onClose,
+}) {
   const [messages, setMessages] = useState([])
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const listRef = useRef(null)
-  const latest = useRef({ messages, problems, getGraph })
-  latest.current = { messages, problems, getGraph }
+  const latest = useRef({ messages, problems, warnings, getGraph })
+  latest.current = { messages, problems, warnings, getGraph }
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages, busy])
 
   async function send(mode, text) {
-    const { messages: history, problems: current, getGraph: graphOf } = latest.current
+    const { messages: history, problems: current, warnings: warned, getGraph: graphOf } = latest.current
     const userMessage = { role: 'user', content: text }
     const conversation = [...history, userMessage]
     setMessages(conversation)
@@ -93,10 +115,19 @@ export default function AssistantPanel({ status, getGraph, problems, fixRequest,
         messages: conversation.filter((m) => !m.error).map(({ role, content }) => ({ role, content })),
         graph: graphOf(),
         problems: mode === 'fix' ? current : [],
+        warnings: mode === 'fix' ? warned : [],
       })
       setMessages((list) => [
         ...list,
-        { role: 'assistant', content: result.reply, proposal: result.proposal, valid: result.valid, problems: result.problems },
+        {
+          role: 'assistant',
+          content: result.reply,
+          proposal: result.proposal,
+          valid: result.valid,
+          problems: result.problems,
+          needsInput: result.needs_input,
+          warnings: result.warnings,
+        },
       ])
     } catch (err) {
       setMessages((list) => [...list, { role: 'assistant', content: err.message, error: true }])

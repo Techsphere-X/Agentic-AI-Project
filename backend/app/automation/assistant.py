@@ -5,6 +5,9 @@ The model sees the node catalog, the graph-format rules and the current graph, a
 the problems are sent back for another try (at most `max_repairs` extra turns). The result is
 only a proposal: the editor shows the changes and the user decides whether to apply it.
 
+The model cannot know a user's connections or channels, so their ids are passed in as `Resources`.
+A proposal that only lacks a choice (see `INCOMPLETE`) needs no repair: the user fills it in.
+
 Block configs travel as JSON strings: structured-output schemas need closed objects, and every
 block type has its own config shape, which `validate_graph` checks anyway.
 
@@ -17,14 +20,20 @@ from typing import Any, Literal, Protocol
 
 from app.automation.graph import (
     INCIDENT_TRIGGER_TYPES,
+    INCOMPLETE,
     MAX_NODES,
     NODE_TYPES,
+    Graph,
     GraphError,
+    graph_warnings,
     to_raw,
     validate_graph,
 )
 
 Mode = Literal["chat", "fix"]
+
+# Ids listed per kind in the prompt: small models have little context. All ids are still checked.
+MAX_LISTED_RESOURCES = 30
 
 
 class AssistantLLM(Protocol):
@@ -43,22 +52,44 @@ FIX_REQUEST = "Explain these problems in plain words and fix them."
 GRAPH_RULES = f"""\
 A workflow graph is JSON: {{"nodes": [{{id, type, name, config}}], "edges": [{{from, port, to}}]}}.
 - Exactly one trigger node (a type starting with "trigger."). Nothing may link into a trigger.
-- A run starts at the trigger and follows, for each block, the edge leaving the output port the
-  block finished on. A port with no edge ends the run there; not every port needs an edge.
-- `port` must be one of the source block's ports listed below.
+- A run starts at the trigger and follows, for each block, the edges leaving the output port the
+  block finished on. One port may link to several blocks; all of them run. A port with no edge
+  ends the run there; not every port needs an edge.
+- `port` must be one of the source block's ports listed below. Link a port only to a block that
+  does what its label says: decide.choose_fix "retry" goes to action.clear_failed_tasks, "rerun"
+  to action.trigger_dag_run, "pause" to action.set_dag_paused, "escalate" to notify or
+  incident.update.
 - No loops, and every block must be reachable from the trigger.
 - Blocks marked [needs incident] only work under an incident trigger
   ({", ".join(sorted(INCIDENT_TRIGGER_TYPES))}). To react to a failed DAG run and FIX it
   (analyze, approve, retry, rerun, pause, update the incident), use "trigger.incident" with
   incident_types ["DAG_RUN_FAILED"]: detection opens an incident for every failed run.
+- analyze.task_logs only fetches the logs. To learn the cause, follow it with
+  diagnose.classify_log; decide.choose_fix uses that diagnosis. The usual chain is trigger.incident
+  -> analyze.task_logs -> diagnose.classify_log -> decide.choose_fix -> an action ->
+  verify.run_success -> incident.update.
+- Scope a workflow to the DAGs it is about: set "dag_ids" on the trigger (and "environments" or
+  "min_severity" when the request names them), instead of adding a Filter block. A request about
+  one DAG becomes one workflow for that DAG; do not make a catch-all workflow for every DAG.
 - Blocks marked [needs DAG run] only work under the "trigger.dag_run" trigger.
+- trigger.schedule only means "every N minutes", with no time of day. For "every morning" use
+  every_minutes 1440 and say in "reply" that it cannot start at a chosen hour.
+- To start a DAG use pipeline.run_dag, and read its "success" port to continue after it finishes.
+  check.dag_state is for incidents only.
+- connection ids and send_via must be ids from the "Available" lists in the request. Never make
+  one up: when no listed id fits, use "" and name that setting in "reply". An empty send_via means
+  in-app only. `to` only takes email addresses the user gave you; never put placeholders in it.
 - Node ids: short, letters, digits, "_" or "-" (for example "start", "logs", "notify"). Keep the
   ids of blocks you keep, so the user's layout survives. At most {MAX_NODES} blocks.
 - `config` is a JSON object written as a string, for example "{{\\"level\\": \\"WARNING\\"}}".
   Use "{{}}" for the defaults and only set fields that differ from them. Only use the fields
   listed for that block type.
-- Text fields may use placeholders such as {{{{workflow.name}}}}, {{{{incident.title}}}} or
-  {{{{dag_run.dag_id}}}}."""
+- Text fields (title, message, note) may use placeholders. Never invent one, and never use a port
+  name as one. Only these exist: the `outputs` of a block that runs earlier;
+  {{{{workflow.name}}}}, {{{{environment}}}}, {{{{last_error}}}}, {{{{links.run}}}} and
+  {{{{links.approvals}}}} anywhere; {{{{incident.title}}}}, {{{{incident.dag_id}}}},
+  {{{{incident.severity}}}} under an incident trigger; {{{{dag_run.dag_id}}}},
+  {{{{dag_run.run_id}}}}, {{{{dag_run.state}}}} under "trigger.dag_run"."""
 
 SYSTEM_TEMPLATE = """\
 You are the workflow assistant in the editor of a data-pipeline automation platform. People
@@ -72,7 +103,8 @@ Block types (type - label: description; ports; config fields):
 
 How to answer, as JSON:
 - "reply": at most 3 short sentences: what you built or changed (or why you could not), and
-  which settings the user still has to fill in (DAG ids, channels, connections, SQL).
+  which settings the user still has to fill in (DAG ids, channels, connections, SQL). Only
+  describe blocks that are in the graph.
 - "change_graph": true when you propose a graph, false when you only answer a question.
 - "graph": the COMPLETE new graph when change_graph is true (every block and edge, not only
   the changed ones); {{"nodes": [], "edges": []}} otherwise.
@@ -157,6 +189,9 @@ def catalog_prompt() -> str:
         lines = [head, f"  ports: {ports}"]
         fields = _fields_text(nt.config_model.model_json_schema())
         lines.append("  config: " + ("; ".join(fields) if fields else "none"))
+        if nt.outputs:
+            outputs = ", ".join("{{" + o.replace("{id}", "<block id>") + "}}" for o in nt.outputs)
+            lines.append(f"  outputs: {outputs}")
         blocks.append("\n".join(lines))
     return "\n".join(blocks)
 
@@ -254,9 +289,43 @@ class Proposal:
 class AssistantResult:
     reply: str
     proposal: Proposal | None = None
-    valid: bool = True
+    valid: bool = True  # False only for mistakes; `needs_input` does not stop an Apply
     problems: list[dict[str, str]] = field(default_factory=list)
+    needs_input: list[dict[str, str]] = field(default_factory=list)
+    warnings: list[dict[str, str]] = field(default_factory=list)
     attempts: int = 1
+
+
+@dataclass(frozen=True)
+class Resources:
+    """What exists on this platform: id -> a name the model can match against the request."""
+
+    airflow: dict[str, str] = field(default_factory=dict)
+    databases: dict[str, str] = field(default_factory=dict)
+    channels: dict[str, str] = field(default_factory=dict)
+
+    def known(self, widget: str) -> dict[str, str] | None:
+        """The ids a settings field of this widget may hold; None when it holds no such id."""
+        return {
+            "airflow_connection": self.airflow,
+            "database_connection": self.databases,
+            "notification_channel": self.channels,
+        }.get(widget)
+
+    def text(self) -> str:
+        def listed(label: str, items: dict[str, str]) -> str:
+            shown = list(items.items())[:MAX_LISTED_RESOURCES]
+            names = ", ".join(f"{key} ({name})" for key, name in shown)
+            return f"- {label}: {names or 'none set up'}"
+
+        return "\n".join(
+            [
+                "Available ids:",
+                listed("Airflow connections", self.airflow),
+                listed("Database connections", self.databases),
+                listed("Notification channels", self.channels),
+            ]
+        )
 
 
 def _strip_positions(graph: dict[str, Any] | None) -> dict[str, Any]:
@@ -270,7 +339,12 @@ def _strip_positions(graph: dict[str, Any] | None) -> dict[str, Any]:
     return {"nodes": nodes, "edges": list(graph.get("edges") or [])}
 
 
-def _context_message(current: dict[str, Any] | None, problems: list[dict[str, str]]) -> str:
+def _context_message(
+    current: dict[str, Any] | None,
+    problems: list[dict[str, str]],
+    warnings: list[dict[str, str]],
+    resources: Resources | None,
+) -> str:
     graph = _strip_positions(current)
     text = "Current graph in the editor"
     text += (
@@ -278,8 +352,12 @@ def _context_message(current: dict[str, Any] | None, problems: list[dict[str, st
         if graph["nodes"]
         else " is empty (no blocks yet)."
     )
+    if resources is not None:
+        text += f"\n\n{resources.text()}"
     if problems:
         text += "\n\nThe editor reports these problems:\n" + _problems_text(problems)
+    if warnings:
+        text += "\n\nThe editor reports these warnings:\n" + _problems_text(warnings)
     return text
 
 
@@ -333,17 +411,64 @@ def _decode(
     return {"nodes": nodes, "edges": edges}, problems
 
 
-def _check(
-    graph: dict[str, Any], decode_problems: list[dict[str, str]]
-) -> tuple[dict[str, Any] | None, list[dict[str, str]]]:
-    """Validate; returns (normalized graph or None, problems)."""
+def _unknown_ids(graph: dict[str, Any], resources: Resources) -> list[dict[str, str]]:
+    """Settings naming a connection or channel that does not exist.
+
+    Validation cannot see these: such an id only fails when the workflow runs, and a channel
+    that fails to deliver does not even fail the run.
+    """
+    problems: list[dict[str, str]] = []
+    for node in graph["nodes"]:
+        node_type = NODE_TYPES.get(str(node.get("type")))
+        if node_type is None:
+            continue
+        properties = node_type.config_model.model_json_schema().get("properties", {})
+        for name, prop in properties.items():
+            known = resources.known(prop.get("x-widget", ""))
+            value = node["config"].get(name)
+            if known is not None and isinstance(value, str) and value and value not in known:
+                problems.append(
+                    {
+                        "message": f"'{value}' does not exist: use an id from the Available "
+                        'lists, or "" for the user to choose',
+                        "node": node["id"],
+                        "field": name,
+                    }
+                )
+    return problems
+
+
+@dataclass
+class _Review:
+    graph: dict[str, Any]
+    problems: list[dict[str, str]]  # mistakes: the model must fix them
+    needs_input: list[dict[str, str]]  # choices: the user makes them after applying
+    warnings: list[dict[str, str]]
+
+    @property
+    def clean(self) -> bool:
+        return not self.problems and not self.warnings
+
+
+def _review(
+    graph: dict[str, Any], decode_problems: list[dict[str, str]], resources: Resources | None
+) -> _Review:
+    """Validate; a graph with nothing wrong and nothing missing comes back normalized."""
+    validated: Graph | None
     try:
-        validated = validate_graph(graph)
+        validated, found = validate_graph(graph), []
     except GraphError as exc:
-        return None, decode_problems + exc.problems
-    if decode_problems:
-        return None, decode_problems
-    return to_raw(validated), []
+        validated, found = exc.graph, exc.problems
+    problems = decode_problems + [p for p in found if p.get("kind") != INCOMPLETE]
+    if resources is not None:
+        problems += _unknown_ids(graph, resources)
+    needs_input = [p for p in found if p.get("kind") == INCOMPLETE]
+    return _Review(
+        graph=to_raw(validated) if validated is not None and not found and not problems else graph,
+        problems=problems,
+        needs_input=needs_input,
+        warnings=graph_warnings(validated) if validated is not None else [],
+    )
 
 
 def propose(
@@ -353,10 +478,16 @@ def propose(
     messages: list[dict[str, str]],
     current_graph: dict[str, Any] | None,
     problems: list[dict[str, str]] | None = None,
+    warnings: list[dict[str, str]] | None = None,
+    resources: Resources | None = None,
     max_repairs: int = 2,
 ) -> AssistantResult:
-    """Ask the model, validate what it proposes and let it repair invalid graphs."""
+    """Ask the model, validate what it proposes and let it repair invalid graphs.
+
+    `resources` are the ids that exist; None skips the check that a graph only uses those.
+    """
     problems = problems if mode == "fix" else []
+    warnings = warnings if mode == "fix" else []
     history = [m for m in messages if m.get("role") in ("user", "assistant") and m.get("content")]
     if mode == "fix" and (not history or history[-1]["role"] != "user"):
         history.append({"role": "user", "content": FIX_REQUEST})
@@ -365,13 +496,10 @@ def propose(
 
     # The editor state goes right before the latest request, so earlier turns stay a stable
     # prefix and the model always reads the graph as it is now.
+    context = _context_message(current_graph, problems or [], warnings or [], resources)
     turns = [
         *history[:-1],
-        {
-            "role": "user",
-            "content": f"{_context_message(current_graph, problems or [])}\n\n"
-            f"Request: {history[-1]['content']}",
-        },
+        {"role": "user", "content": f"{context}\n\nRequest: {history[-1]['content']}"},
     ]
     system, schema = system_prompt(), answer_schema()
 
@@ -385,19 +513,15 @@ def propose(
             return AssistantResult(reply=reply or "(no answer)", attempts=attempts)
 
         proposed, decode_problems = _decode(graph_answer, current_graph)
-        normalized, graph_problems = _check(proposed, decode_problems)
-        if normalized is not None:
+        review = _review(proposed, decode_problems, resources)
+        if review.clean or attempts > max_repairs:
             return AssistantResult(
                 reply=reply,
-                proposal=Proposal(normalized, diff_graphs(current_graph, normalized)),
-                attempts=attempts,
-            )
-        if attempts > max_repairs:
-            return AssistantResult(
-                reply=reply,
-                proposal=Proposal(proposed, diff_graphs(current_graph, proposed)),
-                valid=False,
-                problems=graph_problems,
+                proposal=Proposal(review.graph, diff_graphs(current_graph, review.graph)),
+                valid=not review.problems,
+                problems=review.problems,
+                needs_input=review.needs_input,
+                warnings=review.warnings,
                 attempts=attempts,
             )
         turns += [
@@ -405,7 +529,7 @@ def propose(
             {
                 "role": "user",
                 "content": "That graph fails validation:\n"
-                f"{_problems_text(graph_problems)}\n"
+                f"{_problems_text(review.problems + review.warnings)}\n"
                 "Return the corrected COMPLETE graph, and keep the reply about the user's request.",
             },
         ]

@@ -46,7 +46,12 @@ from app.schemas.automation import (
     WorkflowUpdate,
 )
 from app.schemas.common import Page
-from app.services import automation_service
+from app.services import (
+    airflow_service,
+    automation_service,
+    database_connection_service,
+    notification_channel_service,
+)
 
 router = APIRouter(prefix="/automation", tags=["automation"])
 
@@ -122,15 +127,38 @@ def create_workflow(
 
 
 @router.post("/workflows/validate", response_model=GraphCheckResult)
-def validate_workflow_graph(body: GraphCheck, _: ViewerUser) -> GraphCheckResult:
+def validate_workflow_graph(body: GraphCheck, db: DbSession, _: ViewerUser) -> GraphCheckResult:
     graph, problems = automation_service.check_graph(body.graph)
-    warnings = graph_warnings(validate_graph(graph)) if graph is not None else []
+    warnings = []
+    if graph is not None:
+        validated = validate_graph(graph)
+        warnings = graph_warnings(validated) + automation_service.trigger_warnings(
+            db, validated, body.workflow_id
+        )
     return GraphCheckResult(valid=not problems, problems=problems, warnings=warnings, graph=graph)
 
 
 # -------------------------------------------------------------------- assistant
 
 ASSISTANT_HISTORY = 12  # latest chat messages sent to the model
+ASSISTANT_CONNECTIONS = 200  # same cap as the editor's connection pickers
+
+
+def _assistant_resources(db: DbSession) -> assistant.Resources:
+    """Ids and names only: everything here is sent to the model."""
+    airflow, _ = airflow_service.list_connections(db, limit=ASSISTANT_CONNECTIONS, offset=0)
+    databases, _ = database_connection_service.list_connections(
+        db, limit=ASSISTANT_CONNECTIONS, offset=0
+    )
+    return assistant.Resources(
+        airflow={str(c.id): c.name for c in airflow},
+        databases={str(c.id): c.name for c in databases},
+        channels={
+            str(c.id): f"{c.name}, {c.kind}"
+            for c in notification_channel_service.list_channels(db)
+            if c.is_active
+        },
+    )
 
 
 @router.get("/assistant/status", response_model=AssistantStatus)
@@ -144,7 +172,7 @@ def assistant_status(_: ViewerUser) -> AssistantStatus:
 
 
 @router.post("/assistant", response_model=AssistantReply)
-def ask_assistant(body: AssistantRequest, _: ViewerUser) -> AssistantReply:
+def ask_assistant(body: AssistantRequest, db: DbSession, _: ViewerUser) -> AssistantReply:
     """Propose a graph from a chat. Nothing is saved: the editor applies it, the user saves."""
     settings = get_settings()
     if not settings.ASSISTANT_ENABLED:
@@ -160,6 +188,8 @@ def ask_assistant(body: AssistantRequest, _: ViewerUser) -> AssistantReply:
             messages=[m.model_dump() for m in body.messages[-ASSISTANT_HISTORY:]],
             current_graph=body.graph,
             problems=body.problems,
+            warnings=body.warnings,
+            resources=_assistant_resources(db),
             max_repairs=settings.ASSISTANT_MAX_REPAIRS,
         )
     except AssistantUnavailable as exc:
@@ -173,6 +203,8 @@ def ask_assistant(body: AssistantRequest, _: ViewerUser) -> AssistantReply:
         else None,
         valid=result.valid,
         problems=result.problems,
+        needs_input=result.needs_input,
+        warnings=result.warnings,
     )
 
 

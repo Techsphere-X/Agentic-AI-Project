@@ -15,6 +15,7 @@ from app.connectors.assistant_llm import (
     OllamaAssistant,
 )
 from app.core.config import get_settings
+from app.models.notification_channel import ChannelKind, NotificationChannel
 
 API = "/api/v1/automation"
 
@@ -191,6 +192,104 @@ def test_fix_mode_sends_the_problems_and_a_default_request() -> None:
     assert last.endswith(assistant.FIX_REQUEST)
 
 
+AIRFLOW_ID = "11111111-1111-1111-1111-111111111111"
+CHANNEL_ID = "22222222-2222-2222-2222-222222222222"
+RESOURCES = assistant.Resources(
+    airflow={AIRFLOW_ID: "prod airflow"}, channels={CHANNEL_ID: "ops, SLACK"}
+)
+
+
+def run_dag_graph(config: dict[str, Any] | None = None) -> dict[str, Any]:
+    return answer_graph(
+        [node("t", "trigger.schedule"), node("r", "pipeline.run_dag", config)],
+        [("t", "next", "r")],
+    )
+
+
+def notify_graph(config: dict[str, Any]) -> dict[str, Any]:
+    return answer_graph(
+        [node("t", "trigger.manual"), node("n", "notify", config)], [("t", "next", "n")]
+    )
+
+
+def test_prompt_lists_block_outputs_and_placeholders_rules() -> None:
+    prompt = assistant.system_prompt()
+    assert "outputs: {{analysis.headline}}" in prompt
+    assert "{{results.<block id>.value}}" in prompt
+    assert "{id}" not in prompt
+    assert "{{links.run}}" in prompt  # single braces once the prompt is formatted
+
+
+def test_available_ids_are_sent_with_the_request() -> None:
+    llm = FakeLLM(proposal(VALID))
+    ask(llm, resources=RESOURCES)
+    last = llm.calls[0]["messages"][-1]["content"]
+    assert f"{AIRFLOW_ID} (prod airflow)" in last
+    assert "Database connections: none set up" in last
+
+
+def test_a_missing_choice_is_left_to_the_user_without_a_repair_turn() -> None:
+    llm = FakeLLM(proposal(run_dag_graph(), "Pick the connection"))
+    result = ask(llm, resources=RESOURCES)
+
+    assert len(llm.calls) == 1 and result.valid and result.problems == []
+    assert result.needs_input == [
+        {"message": "Choose an Airflow connection", "node": "r", "kind": "incomplete"}
+    ]
+    assert result.proposal is not None
+
+
+def test_a_graph_missing_a_choice_still_gets_its_links_checked() -> None:
+    graph = run_dag_graph()
+    graph["edges"].append({"from": "r", "port": "nope", "to": "r"})
+    result = ask(FakeLLM(proposal(graph)), max_repairs=0)
+    assert not result.valid
+    assert any("no output port 'nope'" in p["message"] for p in result.problems)
+
+
+def test_an_invented_id_is_sent_back_for_repair() -> None:
+    real = {"connection_id": AIRFLOW_ID, "dag_id": "orders"}
+    llm = FakeLLM(
+        proposal(run_dag_graph({"connection_id": "my-airflow", "dag_id": "orders"})),
+        proposal(run_dag_graph(real)),
+    )
+    result = ask(llm, resources=RESOURCES)
+
+    assert result.valid and result.attempts == 2 and result.needs_input == []
+    assert "'my-airflow' does not exist" in llm.calls[1]["messages"][-1]["content"]
+
+
+def test_an_invented_channel_cannot_be_applied() -> None:
+    result = ask(
+        FakeLLM(proposal(notify_graph({"send_via": "slack"}))), resources=RESOURCES, max_repairs=0
+    )
+    assert not result.valid
+    assert result.problems[0]["node"] == "n" and result.problems[0]["field"] == "send_via"
+
+
+def test_a_bad_placeholder_is_repaired_and_kept_as_a_warning_if_it_stays() -> None:
+    bad = notify_graph({"message": "{{nope.x}}"})
+    good = notify_graph({"message": "{{workflow.name}}"})
+
+    llm = FakeLLM(proposal(bad), proposal(good))
+    result = ask(llm)
+    assert result.attempts == 2 and result.warnings == []
+    assert "{{nope.x}}" in llm.calls[1]["messages"][-1]["content"]
+
+    result = ask(FakeLLM(proposal(bad)), max_repairs=0)
+    assert result.valid and result.proposal is not None
+    assert "{{nope.x}}" in result.warnings[0]["message"]
+
+
+def test_fix_mode_sends_warnings_but_chat_mode_does_not() -> None:
+    warning = [{"message": "{{nope.x}} will be empty", "node": "n"}]
+    llm = FakeLLM(proposal(VALID), proposal(VALID))
+    assistant.propose(llm, mode="fix", messages=[], current_graph=None, warnings=warning)
+    assert "{{nope.x}} will be empty" in llm.calls[0]["messages"][-1]["content"]
+    ask(llm, warnings=warning)
+    assert "will be empty" not in llm.calls[1]["messages"][-1]["content"]
+
+
 def test_conversation_must_end_with_the_user() -> None:
     with pytest.raises(ValueError):
         assistant.propose(
@@ -280,6 +379,30 @@ def test_api_returns_a_proposal(
     data = response.json()
     assert data["valid"] and data["reply"] == "Here you go"
     assert {n["id"] for n in data["proposal"]["graph"]["nodes"]} == {"t", "n"}
+
+
+def test_api_gives_the_model_names_and_ids_but_no_secrets(
+    client: TestClient, viewer_headers, db, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db.add_all(
+        [
+            NotificationChannel(
+                name="ops", kind=ChannelKind.SLACK, encrypted_secret="top-secret-value"
+            ),
+            NotificationChannel(name="old", kind=ChannelKind.EMAIL, is_active=False),
+        ]
+    )
+    db.commit()
+    monkeypatch.setattr(get_settings(), "ASSISTANT_ENABLED", True)
+    llm = FakeLLM(proposal(VALID))
+    monkeypatch.setattr(automation_api, "get_assistant_llm", lambda: llm)
+
+    body = {"messages": [{"role": "user", "content": "notify"}]}
+    assert client.post(f"{API}/assistant", json=body, headers=viewer_headers).status_code == 200
+    last = llm.calls[0]["messages"][-1]["content"]
+    assert "(ops, SLACK)" in last
+    assert "(old," not in last  # switched off
+    assert "top-secret-value" not in last
 
 
 def test_api_maps_provider_failures_to_503(

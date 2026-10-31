@@ -18,7 +18,12 @@ from sqlalchemy.orm import Session, selectinload
 from app.automation.graph import (
     ACTION_TYPES,
     INCIDENT_TRIGGER_TYPES,
+    DagWatch,
+    Graph,
     GraphError,
+    Node,
+    monitoring_warnings,
+    overlap_warnings,
     to_raw,
     validate_graph,
 )
@@ -35,7 +40,7 @@ from app.automation.types import (
 from app.core.config import get_settings
 from app.core.exceptions import BadRequestError, ConflictError, NotFoundError
 from app.db.base import utcnow
-from app.detection.types import IncidentStatus
+from app.detection.types import IncidentSeverity, IncidentStatus
 from app.models.airflow import AirflowConnection, AirflowTriggerReservation, MonitoredDag
 from app.models.automation import (
     Approval,
@@ -258,6 +263,43 @@ def check_graph(raw: Any) -> tuple[dict[str, Any] | None, list[dict[str, str]]]:
         return None, exc.problems
 
 
+def trigger_warnings(
+    db: Session, graph: Graph, workflow_id: uuid.UUID | None = None
+) -> list[dict[str, str]]:
+    """Where the trigger disagrees with the rest of the platform: DAGs that detection will
+    not report, and other enabled workflows starting on the same event."""
+    watched: dict[str, DagWatch] = {}
+    dag_ids = graph.trigger.config.get("dag_ids") or []
+    if dag_ids:
+        dags = db.scalars(
+            select(MonitoredDag)
+            .join(AirflowConnection, MonitoredDag.connection_id == AirflowConnection.id)
+            .where(
+                MonitoredDag.dag_id.in_(dag_ids),
+                MonitoredDag.is_monitored.is_(True),
+                MonitoredDag.is_present.is_(True),
+                AirflowConnection.is_active.is_(True),
+            )
+        ).all()
+        for dag in dags:  # the same DAG id can exist on several connections
+            seen = watched.get(dag.dag_id, DagWatch(detect_failures=False, has_sla=False))
+            watched[dag.dag_id] = DagWatch(
+                detect_failures=seen.detect_failures or dag.detect_failures,
+                has_sla=seen.has_sla or dag.sla_minutes is not None,
+            )
+
+    query = select(Workflow).where(Workflow.enabled.is_(True))
+    if workflow_id is not None:
+        query = query.where(Workflow.id != workflow_id)
+    others: list[tuple[str, Node]] = []
+    for workflow in db.scalars(query).all():
+        try:
+            others.append((workflow.name, validate_graph(workflow.graph).trigger))
+        except GraphError:
+            continue
+    return monitoring_warnings(graph, watched) + overlap_warnings(graph, others)
+
+
 def delete_workflow(
     db: Session, workflow_id: uuid.UUID, *, actor: User, ip_address: str | None = None
 ) -> None:
@@ -285,8 +327,23 @@ def delete_workflow(
 # ---------------------------------------------------------------------- enqueue
 
 
+def _in_scope(config: dict[str, Any], incident: Incident, environment: str) -> bool:
+    """The DAG, environment and severity limits of an incident trigger (empty = any)."""
+    if config["dag_ids"] and incident.dag_id not in config["dag_ids"]:
+        return False
+    if config["environments"] and environment not in config["environments"]:
+        return False
+    return not config["min_severity"] or (
+        incident.severity.rank >= IncidentSeverity(config["min_severity"]).rank
+    )
+
+
 def _trigger_matches(
-    workflow: Workflow, incident: Incident, event: TriggerEvent, now: datetime
+    workflow: Workflow,
+    incident: Incident,
+    event: TriggerEvent,
+    now: datetime,
+    environment: str,
 ) -> bool:
     try:
         trigger = validate_graph(workflow.graph).trigger
@@ -295,9 +352,16 @@ def _trigger_matches(
         return False
     if trigger.type == "trigger.incident":
         types = trigger.config["incident_types"]
-        return event.value in trigger.config["events"] and (not types or incident.type in types)
+        return (
+            event.value in trigger.config["events"]
+            and (not types or incident.type in types)
+            and _in_scope(trigger.config, incident, environment)
+        )
     if trigger.type == "trigger.incident_stale" and event == TriggerEvent.STALE:
-        return incident.first_seen_at <= now - timedelta(minutes=trigger.config["minutes"])
+        return (
+            incident.first_seen_at <= now - timedelta(minutes=trigger.config["minutes"])
+            and _in_scope(trigger.config, incident, environment)
+        )
     return False
 
 
@@ -319,9 +383,11 @@ def enqueue_for_incident(
         return []
     now = now or utcnow()
     runs = []
+    connection = db.get(AirflowConnection, incident.connection_id)
+    environment = str(connection.environment) if connection is not None else ""
     workflows = db.scalars(select(Workflow).where(Workflow.enabled.is_(True))).all()
     for workflow in workflows:
-        if not _trigger_matches(workflow, incident, event, now):
+        if not _trigger_matches(workflow, incident, event, now, environment):
             continue
         busy = db.scalar(
             select(WorkflowRun.id).where(

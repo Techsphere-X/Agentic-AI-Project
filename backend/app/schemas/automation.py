@@ -86,6 +86,8 @@ class WorkflowUpdate(BaseModel):
 
 class GraphCheck(BaseModel):
     graph: dict[str, Any]
+    # The workflow being edited, so it is not compared with its own saved copy.
+    workflow_id: uuid.UUID | None = None
 
 
 class TemplatePreview(BaseModel):
@@ -110,6 +112,7 @@ class AssistantRequest(BaseModel):
     messages: list[AssistantMessage] = Field(default_factory=list, max_length=40)
     graph: dict[str, Any] | None = None
     problems: list[dict[str, str]] = Field(default_factory=list, max_length=100)
+    warnings: list[dict[str, str]] = Field(default_factory=list, max_length=100)
 
 
 class AssistantProposal(BaseModel):
@@ -122,6 +125,9 @@ class AssistantReply(BaseModel):
     proposal: AssistantProposal | None
     valid: bool
     problems: list[dict[str, str]]
+    # Choices left to the user (a connection, the SQL): they do not stop an Apply, only a Save.
+    needs_input: list[dict[str, str]] = Field(default_factory=list)
+    warnings: list[dict[str, str]] = Field(default_factory=list)
 
 
 class AssistantStatus(BaseModel):

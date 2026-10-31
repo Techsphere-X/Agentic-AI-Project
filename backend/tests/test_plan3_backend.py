@@ -65,6 +65,39 @@ def test_layout_only_changes_keep_the_version(db: Session, admin: User) -> None:
 # ---------------------------------------------------------------------- validate & delete
 
 
+def test_validate_warns_about_unmonitored_dags_and_overlapping_workflows(
+    client: TestClient, viewer_headers: dict, db: Session
+) -> None:
+    conn, dags = make_env(db, DeploymentEnvironment.DEV, "orders_pipeline")
+    dag = dags["orders_pipeline"]
+    dag.is_monitored = False
+    db.commit()
+    scoped = graph()
+    scoped["nodes"][0]["config"] = {"dag_ids": ["orders_pipeline"]}
+    not_monitored = "'orders_pipeline' is not monitored, so this workflow will not start for it"
+
+    def warnings(workflow_id: str | None = None) -> list[str]:
+        body = {"graph": scoped, "workflow_id": workflow_id}
+        response = client.post(f"{API}/workflows/validate", json=body, headers=viewer_headers)
+        return [w["message"] for w in response.json()["warnings"]]
+
+    assert warnings() == [not_monitored]
+    dag.is_monitored = True
+    db.commit()
+    assert warnings() == []  # turning monitoring on clears it
+
+    conn.is_active = False
+    db.commit()
+    assert warnings() == [not_monitored]  # detection skips inactive connections
+    conn.is_active = True
+
+    workflow = Workflow(name="Catch-all", enabled=True, graph=graph())
+    db.add(workflow)
+    db.commit()
+    assert warnings() == ["'Catch-all' can start on the same event, so both workflows would run"]
+    assert warnings(str(workflow.id)) == []  # never compared with itself
+
+
 def test_validate_endpoint_never_saves(
     client: TestClient, viewer_headers: dict, db: Session
 ) -> None:
@@ -72,7 +105,13 @@ def test_validate_endpoint_never_saves(
     assert ok.status_code == 200
     body = ok.json()
     assert body["valid"] and body["problems"] == [] and body["warnings"] == []
-    assert body["graph"]["nodes"][0]["config"] == {"events": ["opened"], "incident_types": []}
+    assert body["graph"]["nodes"][0]["config"] == {
+        "events": ["opened"],
+        "incident_types": [],
+        "dag_ids": [],
+        "environments": [],
+        "min_severity": None,
+    }
 
     unknown = graph()
     unknown["nodes"][1]["config"] = {"message": "{{diagnosis.label}}"}  # nothing classifies first

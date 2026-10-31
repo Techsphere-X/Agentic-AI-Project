@@ -103,7 +103,8 @@ export const automationApi = {
   runWorkflow: (id, data = {}) => api.post(`/automation/workflows/${id}/run`, data),
   updateWorkflow: (id, data) => api.patch(`/automation/workflows/${id}`, data),
   deleteWorkflow: (id) => api.delete(`/automation/workflows/${id}`),
-  validateGraph: (graph) => api.post('/automation/workflows/validate', { graph }),
+  validateGraph: (graph, workflowId) =>
+    api.post('/automation/workflows/validate', { graph, workflow_id: workflowId }),
   assistantStatus: () => api.get('/automation/assistant/status'),
   askAssistant: (data) => api.post('/automation/assistant', data),
   listRuns: (query) => api.get('/automation/runs', query),

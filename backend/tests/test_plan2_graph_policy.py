@@ -7,7 +7,17 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.automation import policy
-from app.automation.graph import GraphError, catalog, graph_warnings, to_raw, validate_graph
+from app.automation.graph import (
+    DagWatch,
+    Graph,
+    GraphError,
+    catalog,
+    graph_warnings,
+    monitoring_warnings,
+    overlap_warnings,
+    to_raw,
+    validate_graph,
+)
 from app.automation.render import render
 from app.automation.templates import ALL_TEMPLATES, TEMPLATES
 from app.models.automation import Workflow
@@ -55,7 +65,13 @@ def test_parameterized_template_rejects_missing_parameters() -> None:
 
 def test_defaults_are_applied() -> None:
     graph = validate_graph(simple())
-    assert graph.nodes["t"].config == {"events": ["opened"], "incident_types": []}
+    assert graph.nodes["t"].config == {
+        "events": ["opened"],
+        "incident_types": [],
+        "dag_ids": [],
+        "environments": [],
+        "min_severity": None,
+    }
     assert graph.nodes["n"].config["channel"] == "in_app"
     assert graph.next_nodes("f", "true") == ["n"]
     assert graph.next_nodes("f", "false") == []
@@ -240,3 +256,115 @@ def test_unknown_placeholders_are_warned_about() -> None:
     raw["edges"].append({"from": "n", "port": "next", "to": "later"})
     (warning,) = graph_warnings(validate_graph(raw))
     assert "does not run before this one" in warning["message"]
+
+
+def test_result_keys_a_block_does_not_record_are_warned_about() -> None:
+    raw = {
+        "nodes": [
+            {"id": "t", "type": "trigger.incident", "config": {}},
+            {"id": "logs", "type": "analyze.task_logs", "config": {}},
+            {"id": "n", "type": "notify", "config": {}},
+        ],
+        "edges": [
+            {"from": "t", "port": "next", "to": "logs"},
+            {"from": "logs", "port": "analyzed", "to": "n"},
+        ],
+    }
+    raw["nodes"][2]["config"] = {"message": "{{results.logs.headline}} {{results.logs.analyzed}}"}
+    (warning,) = graph_warnings(validate_graph(raw))
+    assert "{{results.logs.analyzed}}" in warning["message"]
+    assert "does not record 'analyzed'" in warning["message"]
+
+
+def trigger_graph(node_type: str = "trigger.incident", **config: Any) -> Graph:
+    return validate_graph({"nodes": [{"id": "t", "type": node_type, "config": config}]})
+
+
+WATCHED = DagWatch(detect_failures=True, has_sla=True)
+
+
+def test_an_unscoped_trigger_has_no_monitoring_warnings() -> None:
+    assert monitoring_warnings(trigger_graph(), {}) == []
+    assert monitoring_warnings(trigger_graph("trigger.manual"), {}) == []
+
+
+def test_a_dag_detection_will_not_report_is_warned_about() -> None:
+    graph = trigger_graph(dag_ids=["orders"])
+    (warning,) = monitoring_warnings(graph, {})
+    assert warning == {
+        "message": "'orders' is not monitored, so this workflow will not start for it",
+        "node": "t",
+    }
+    assert monitoring_warnings(graph, {"orders": WATCHED}) == []
+    dag_run = trigger_graph("trigger.dag_run", dag_ids=["orders"])
+    assert "not monitored" in monitoring_warnings(dag_run, {})[0]["message"]
+
+
+def test_detection_settings_are_checked_against_the_incident_types() -> None:
+    no_failures = {"orders": DagWatch(detect_failures=False, has_sla=True)}
+    no_sla = {"orders": DagWatch(detect_failures=True, has_sla=False)}
+
+    failures = trigger_graph(dag_ids=["orders"], incident_types=["DAG_RUN_FAILED"])
+    assert "Failure detection is off" in monitoring_warnings(failures, no_failures)[0]["message"]
+    assert monitoring_warnings(failures, no_sla) == []
+
+    sla = trigger_graph(dag_ids=["orders"], incident_types=["SLA_MISSED"])
+    assert monitoring_warnings(sla, no_failures) == []
+    assert "has no SLA" in monitoring_warnings(sla, no_sla)[0]["message"]
+
+    assert monitoring_warnings(trigger_graph(dag_ids=["orders"]), no_sla) == []  # any type
+
+
+@pytest.mark.parametrize(
+    ("ours", "theirs", "overlap"),
+    [
+        ({}, {}, True),  # two catch-alls
+        ({"dag_ids": ["a"]}, {}, True),  # a dedicated workflow and a catch-all
+        ({"dag_ids": ["a"]}, {"dag_ids": ["a", "b"]}, True),
+        ({"dag_ids": ["a"]}, {"dag_ids": ["b"]}, False),
+        ({"events": ["opened"]}, {"events": ["recurred"]}, False),
+        ({"incident_types": ["SLA_MISSED"]}, {"incident_types": ["DAG_RUN_FAILED"]}, False),
+        ({"environments": ["DEV"]}, {"environments": ["PROD"]}, False),
+    ],
+)
+def test_overlapping_triggers_are_warned_about(ours: dict, theirs: dict, overlap: bool) -> None:
+    other = trigger_graph(**theirs).trigger
+    warnings = overlap_warnings(trigger_graph(**ours), [("Other", other)])
+    assert bool(warnings) is overlap
+
+
+def test_different_trigger_types_do_not_overlap() -> None:
+    other = trigger_graph("trigger.dag_run").trigger
+    assert overlap_warnings(trigger_graph(), [("Other", other)]) == []
+    manual = trigger_graph("trigger.manual")
+    assert overlap_warnings(manual, [("Other", manual.trigger)]) == []
+
+
+def test_dag_failure_template_is_scoped_to_one_dag() -> None:
+    template = next(t for t in ALL_TEMPLATES if t.key == "dag-failure-handler")
+    graph = validate_graph(template.build({"dag_id": "orders", "send_via": "channel"}))
+
+    assert graph.trigger.config["dag_ids"] == ["orders"]
+    assert graph.trigger.config["incident_types"] == ["DAG_RUN_FAILED"]
+    assert graph.next_nodes("trigger", "next") == ["logs"]
+    assert graph.next_nodes("logs", "analyzed") == ["diagnose"]
+    assert graph.next_nodes("logs", "no_logs") == ["diagnose"]
+    assert graph.nodes["notify_fail"].config["send_via"] == "channel"
+    assert graph_warnings(graph) == []
+    with pytest.raises(ValueError):
+        template.build({})
+
+
+def test_a_missing_choice_is_marked_and_keeps_the_other_checks() -> None:
+    raw = {
+        "nodes": [
+            {"id": "t", "type": "trigger.manual", "config": {}},
+            {"id": "r", "type": "pipeline.run_dag", "config": {}},
+            {"id": "lost", "type": "notify", "config": {}},
+        ],
+        "edges": [{"from": "t", "port": "next", "to": "r"}],
+    }
+    problems = _problems(raw)
+    missing = {"message": "Choose an Airflow connection", "node": "r", "kind": "incomplete"}
+    assert missing in problems
+    assert any(p.get("node") == "lost" and "not connected" in p["message"] for p in problems)

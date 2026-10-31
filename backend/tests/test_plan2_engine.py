@@ -7,6 +7,7 @@ import json
 import uuid
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from typing import Any
 
 import anyio
 import httpx
@@ -14,6 +15,8 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.automation.graph import to_raw, validate_graph
+from app.automation.templates import TEMPLATES_BY_KEY
 from app.automation.types import ApprovalStatus, RunStatus, TriggerEvent, WorkflowMode
 from app.core.config import get_settings
 from app.core.exceptions import ConflictError
@@ -686,6 +689,55 @@ def test_stale_escalation(db: Session, orders_clock: Clock) -> None:
 
 
 # ---------------------------------------------------------------------- mechanics
+
+
+def test_incident_trigger_scope_limits_which_incidents_start_a_run(
+    db: Session, orders_clock: Clock
+) -> None:
+    conn, dags = make_env(db, DeploymentEnvironment.DEV, "orders_pipeline")
+    workflow = enable(db, "retry-transient")
+    original = workflow.graph
+    trigger_node = original["nodes"][0]
+    assert trigger_node["type"] == "trigger.incident"
+    def starts_run(index: int, **scope: Any) -> bool:
+        # A fresh incident per case: a run already queued for an incident blocks the next one.
+        incident = make_incident(
+            db, conn, dags["orders_pipeline"], orders_clock(), key=f"-case{index}"
+        )
+        incident.severity = IncidentSeverity.MEDIUM
+        config = {"events": ["opened"], "incident_types": [], **scope}
+        workflow.graph = {
+            **original,
+            "nodes": [{**trigger_node, "config": config}, *original["nodes"][1:]],
+        }
+        db.commit()
+        return bool(automation_service.enqueue_for_incident(db, incident, TriggerEvent.OPENED))
+
+    assert starts_run(0)  # empty scope = any incident
+    assert starts_run(1, dag_ids=["orders_pipeline"])
+    assert not starts_run(2, dag_ids=["other_dag"])
+    assert starts_run(3, environments=["DEV"])
+    assert not starts_run(4, environments=["PROD"])
+    assert starts_run(5, min_severity="MEDIUM")
+    assert not starts_run(6, min_severity="HIGH")
+
+
+def test_dag_failure_template_runs_only_for_its_dag(db: Session, orders_clock: Clock) -> None:
+    conn, dags = make_env(db, DeploymentEnvironment.DEV, "orders_pipeline", "quality_checks")
+    graph = TEMPLATES_BY_KEY["dag-failure-handler"].build({"dag_id": "orders_pipeline"})
+    db.add(Workflow(name="Orders failures", enabled=True, graph=to_raw(validate_graph(graph))))
+    other = make_incident(db, conn, dags["quality_checks"], orders_clock())
+    incident = make_incident(db, conn, dags["orders_pipeline"], orders_clock())
+
+    assert automation_service.enqueue_for_incident(db, other, TriggerEvent.OPENED) == []
+    assert len(automation_service.enqueue_for_incident(db, incident, TriggerEvent.OPENED)) == 1
+    db.commit()
+    tick(db, orders_clock)
+
+    run = only(db, WorkflowRun)
+    assert run.incident_id == incident.id
+    assert [s.node_id for s in run.steps[:4]] == ["trigger", "logs", "diagnose", "decide"]
+    assert run.status != RunStatus.FAILED, ports(run)
 
 
 def test_enqueue_is_deduplicated_and_claims_are_exclusive(db: Session, orders_clock: Clock) -> None:

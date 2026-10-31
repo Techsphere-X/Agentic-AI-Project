@@ -207,6 +207,45 @@ def _run_verify_dag_graph(parameters: RunVerifyDagParameters) -> dict[str, Any]:
     }
 
 
+class DagFailureParameters(BaseModel):
+    dag_id: str = Field(
+        min_length=1,
+        max_length=250,
+        json_schema_extra={"x-label": "DAG", "x-widget": "dag"},
+    )
+    send_via: str = Field(
+        default="",
+        json_schema_extra={
+            "x-label": "Send messages via",
+            "x-widget": "notification_channel",
+            "x-hint": "Empty = in-app only",
+        },
+    )
+
+
+def _dag_failure_graph(parameters: DagFailureParameters) -> dict[str, Any]:
+    """One DAG's failures only: fetch the logs, then the whole choose-the-fix process."""
+    graph = _choose_fix_graph()
+    nodes = {n["id"]: n for n in graph["nodes"]}
+    nodes["trigger"]["config"].update(
+        incident_types=["DAG_RUN_FAILED"], dag_ids=[parameters.dag_id]
+    )
+    nodes["notify_ok"]["config"]["send_via"] = parameters.send_via
+    nodes["notify_fail"]["config"].update(
+        send_via=parameters.send_via,
+        message="{{analysis.headline}}\n{{diagnosis.label}} on {{incident.dag_id}}. {{last_error}}",
+    )
+    return {
+        "nodes": [nodes["trigger"], _n("logs", "analyze.task_logs"), *graph["nodes"][1:]],
+        "edges": [
+            _e("trigger", "next", "logs"),
+            _e("logs", "analyzed", "diagnose"),
+            _e("logs", "no_logs", "diagnose"),
+            *graph["edges"][1:],
+        ],
+    }
+
+
 def _retry_graph(categories: list[str], approval_envs: list[str]) -> dict[str, Any]:
     """failed run -> classify -> filter -> approval -> clear -> verify -> resolve / escalate."""
     return {
@@ -674,6 +713,19 @@ AIRFLOW_RECONCILE_TEMPLATE = Template(
     supported_trigger_types=("trigger.dag_run",),
 )
 
+DAG_FAILURE_TEMPLATE = Template(
+    key="dag-failure-handler",
+    name="Handle failures of a DAG",
+    description=(
+        "When the selected DAG fails: fetch the logs, find the cause, choose a fix, apply it, "
+        "check it worked, then resolve the incident or hand it to a person."
+    ),
+    graph=_dag_failure_graph(DagFailureParameters(dag_id="template-dag")),
+    parameter_model=DagFailureParameters,
+    builder=_dag_failure_graph,
+    supported_trigger_types=("trigger.incident",),
+)
+
 RUN_VERIFY_TEMPLATE = Template(
     key="run-verify-dag",
     name="Run and verify a DAG",
@@ -765,6 +817,7 @@ IN_FLIGHT_SLA_TEMPLATE = Template(
 
 ALL_TEMPLATES: tuple[Template, ...] = (
     *TEMPLATES,
+    DAG_FAILURE_TEMPLATE,
     RUN_VERIFY_TEMPLATE,
     VALIDATE_RUN_TEMPLATE,
     RECONCILE_TEMPLATE,

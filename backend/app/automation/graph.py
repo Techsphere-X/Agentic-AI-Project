@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic_core import PydanticCustomError
 
 from app.detection.types import IncidentSeverity, IncidentType
 from app.diagnosis.log_classifier import CATEGORY_LABELS, FailureCategory
@@ -21,6 +22,8 @@ from app.diagnosis.log_classifier import CATEGORY_LABELS, FailureCategory
 MAX_NODES = 100
 MAX_COORDINATE = 100_000
 NODE_ID_PATTERN = r"^[A-Za-z0-9_-]{1,100}$"
+# Problem `kind`: a choice only the user can make (a connection, a DAG, the SQL), not a mistake.
+INCOMPLETE = "incomplete"
 
 
 class _Config(BaseModel):
@@ -31,7 +34,37 @@ class NoConfig(_Config):
     pass
 
 
-class IncidentTriggerConfig(_Config):
+class _IncidentScope(_Config):
+    """Which incidents start the workflow. Empty / unset = any, so a workflow with no scope
+    set reacts to every incident, as before."""
+
+    dag_ids: list[str] = Field(
+        default_factory=list,
+        json_schema_extra={"x-label": "DAGs", "x-hint": "Empty = every monitored DAG"},
+    )
+    environments: list[Literal["DEV", "STAGING", "PROD"]] = Field(
+        default_factory=list,
+        json_schema_extra={
+            "x-label": "Environments",
+            "x-hint": "Empty = every environment",
+            "x-options": {"DEV": "Dev", "STAGING": "Staging", "PROD": "Production"},
+        },
+    )
+    min_severity: IncidentSeverity | None = Field(
+        default=None,
+        json_schema_extra={
+            "x-label": "At least this severe",
+            "x-options": {"LOW": "Low", "MEDIUM": "Medium", "HIGH": "High", "CRITICAL": "Critical"},
+        },
+    )
+
+    @field_validator("dag_ids")
+    @classmethod
+    def _clean(cls, value: list[str]) -> list[str]:
+        return [v.strip() for v in value if v.strip()]
+
+
+class IncidentTriggerConfig(_IncidentScope):
     events: list[Literal["opened", "recurred"]] = Field(
         default=["opened"],
         min_length=1,
@@ -53,7 +86,7 @@ class IncidentTriggerConfig(_Config):
     )  # empty = any
 
 
-class StaleTriggerConfig(_Config):
+class StaleTriggerConfig(_IncidentScope):
     minutes: int = Field(
         default=30,
         ge=5,
@@ -482,6 +515,10 @@ class ScheduleTriggerConfig(_Config):
     every_minutes: int = Field(default=60, ge=5, le=10080, json_schema_extra=_ui("Every (minutes)"))
 
 
+def _incomplete(message: str) -> PydanticCustomError:
+    return PydanticCustomError(INCOMPLETE, message)
+
+
 class _AirflowTarget(_Config):
     connection_id: str = Field(
         default="", json_schema_extra=_ui("Airflow connection", "airflow_connection")
@@ -491,9 +528,9 @@ class _AirflowTarget(_Config):
     @model_validator(mode="after")
     def _chosen(self) -> "_AirflowTarget":
         if not self.connection_id:
-            raise ValueError("Choose an Airflow connection")
+            raise _incomplete("Choose an Airflow connection")
         if not self.dag_id:
-            raise ValueError("Choose a DAG")
+            raise _incomplete("Choose a DAG")
         return self
 
 
@@ -543,9 +580,9 @@ class _DatabaseTarget(_Config):
     @model_validator(mode="after")
     def _chosen(self) -> "_DatabaseTarget":
         if not self.connection_id:
-            raise ValueError("Choose a database connection")
+            raise _incomplete("Choose a database connection")
         if not self.sql.strip():
-            raise ValueError("Enter the SQL to run")
+            raise _incomplete("Enter the SQL to run")
         return self
 
 
@@ -605,9 +642,9 @@ class ReconcileConfig(_Config):
     @model_validator(mode="after")
     def _chosen(self) -> "ReconcileConfig":
         if not self.source_connection_id or not self.destination_connection_id:
-            raise ValueError("Choose both source and destination database connections")
+            raise _incomplete("Choose both source and destination database connections")
         if not self.source_sql.strip() or not self.destination_sql.strip():
-            raise ValueError("Enter both source and destination SQL queries")
+            raise _incomplete("Enter both source and destination SQL queries")
         if self.comparison_mode == "row_count" and self.key_columns:
             raise ValueError("Key columns are only used when comparing rows")
         return self
@@ -1079,15 +1116,75 @@ _SUMMARIES: dict[str, str] = {
     "notify": "Sends a message in the app or through a channel.",
 }
 
+# Every key a block records under {{results.<block id>.<key>}} (see `record_result` callers).
+# `outputs` is only what the editor offers; a block not listed here is not checked.
+_RESULT_KEYS: dict[str, frozenset[str]] = {
+    "check.sla": frozenset(
+        {
+            "dag_id",
+            "run_id",
+            "metric",
+            "actual_minutes",
+            "estimated_baseline_minutes",
+            "threshold_minutes",
+            "margin_pct",
+            "sample_count",
+            "calculation_method",
+            "exceeded",
+            "is_in_flight",
+            "summary",
+        }
+    ),
+    "pipeline.run_dag": frozenset({"dag_id", "run_id", "state"}),
+    "pipeline.wait_for_dag": frozenset({"dag_id", "succeeded", "run_id", "finished_at"}),
+    "database.run_sql": frozenset(
+        {"columns", "rows", "row_count", "truncated", "value", "rows_affected"}
+    ),
+    "database.check": frozenset({"value", "passed", "rule", "error"}),
+    "database.reconcile": frozenset(
+        {
+            "source_row_count",
+            "destination_row_count",
+            "source_truncated",
+            "destination_truncated",
+            "comparison_mode",
+            "matched",
+            "difference_count",
+            "differences",
+            "phase",
+            "error",
+        }
+    ),
+    "analyze.task_logs": frozenset(
+        {"headline", "stack_trace", "log_snippet", "task_id", "dag_id", "run_id", "incident_id"}
+    ),
+    "ai.generate_fix": frozenset(
+        {
+            "headline",
+            "explanation",
+            "recommended_action",
+            "confidence",
+            "model",
+            "reasoning",
+            "instruction",
+        }
+    ),
+    "decide.choose_fix": frozenset(
+        {"fix", "chosen", "label", "rule", "rules_fix", "reason", "allowed", "ai", "facts"}
+    ),
+}
+
 TRIGGER_TYPES = frozenset(t for t, nt in NODE_TYPES.items() if nt.category == "trigger")
 INCIDENT_TRIGGER_TYPES = frozenset(t for t in TRIGGER_TYPES if NODE_TYPES[t].needs_incident)
 ACTION_TYPES = frozenset(t for t, nt in NODE_TYPES.items() if nt.is_action)
 
 
 class GraphError(ValueError):
-    def __init__(self, problems: list[dict[str, str]]) -> None:
+    def __init__(self, problems: list[dict[str, str]], graph: "Graph | None" = None) -> None:
         super().__init__("; ".join(p["message"] for p in problems))
         self.problems = problems
+        # Set when only user choices are missing: the structure is sound, the settings are not.
+        self.graph = graph
 
 
 @dataclass(frozen=True)
@@ -1156,15 +1253,18 @@ def validate_graph(raw: Any) -> Graph:
         if node_type is None:
             problems.append(_problem(f"Unknown node type '{item.get('type')}'", node=node_id))
             continue
+        config: dict[str, Any]
         try:
-            config = node_type.config_model.model_validate(item.get("config") or {})
+            config = node_type.config_model.model_validate(item.get("config") or {}).model_dump(
+                mode="json"
+            )
         except ValidationError as exc:
-            for err in exc.errors():
-                field_name = ".".join(str(p) for p in err["loc"]) or "config"
-                problems.append(
-                    _problem(_config_message(node_type, err), node=node_id, field=field_name)
-                )
-            continue
+            errors = exc.errors()
+            problems.extend(_config_problem(node_type, node_id, err) for err in errors)
+            if any(err["type"] != INCOMPLETE for err in errors):
+                continue
+            # The block is only waiting for a choice, so its links can still be checked.
+            config = dict(item.get("config") or {})
         position, problem = _position(item.get("position"))
         if problem:
             problems.append(_problem(problem, node=node_id))
@@ -1174,7 +1274,7 @@ def validate_graph(raw: Any) -> Graph:
             id=node_id,
             type=node_type.type,
             name=str(name)[:200] if name else None,
-            config=config.model_dump(mode="json"),
+            config=config,
             position=position,
         )
 
@@ -1207,7 +1307,8 @@ def validate_graph(raw: Any) -> Graph:
         edges.setdefault((src, port), []).append(dst)
 
     triggers = [n.id for n in nodes.values() if n.type in TRIGGER_TYPES]
-    blocks_ok = not problems  # every block and link is valid, so reachability is meaningful
+    # Every block and link is valid, so reachability is meaningful.
+    blocks_ok = all(p.get("kind") == INCOMPLETE for p in problems)
     if len(triggers) != 1:
         problems.append(_problem(f"A workflow needs exactly one trigger (found {len(triggers)})"))
         raise GraphError(problems)
@@ -1236,8 +1337,18 @@ def validate_graph(raw: Any) -> Graph:
             if NODE_TYPES[n.type].needs_dag_run
         )
     if problems:
-        raise GraphError(problems)
+        only_choices = all(p.get("kind") == INCOMPLETE for p in problems)
+        raise GraphError(problems, graph if only_choices else None)
     return graph
+
+
+def _config_problem(node_type: NodeType, node_id: str, err: Any) -> dict[str, str]:
+    where = {"node": node_id}
+    if err["loc"]:
+        where["field"] = ".".join(str(p) for p in err["loc"])
+    if err["type"] == INCOMPLETE:
+        where["kind"] = INCOMPLETE
+    return _problem(_config_message(node_type, err), **where)
 
 
 def _config_message(node_type: NodeType, err: Any) -> str:
@@ -1357,7 +1468,80 @@ def graph_warnings(graph: Graph) -> list[dict[str, str]]:
                             node=node.id,
                         )
                     )
+                elif parts[0] == "results" and len(parts) > 2:
+                    known = _RESULT_KEYS.get(graph.nodes[parts[1]].type)
+                    if known is not None and parts[2] not in known:
+                        warnings.append(
+                            _problem(
+                                f"{label}: {{{{{key}}}}} will be empty; block '{parts[1]}' does "
+                                f"not record '{parts[2]}'",
+                                node=node.id,
+                            )
+                        )
     return warnings
+
+
+@dataclass(frozen=True)
+class DagWatch:
+    """What detection does for a DAG it polls."""
+
+    detect_failures: bool
+    has_sla: bool
+
+
+def monitoring_warnings(graph: Graph, watched: dict[str, DagWatch]) -> list[dict[str, str]]:
+    """DAGs named on the trigger that detection will never report, so it would never start.
+
+    `watched` holds the DAGs detection polls. An unscoped trigger names none, so it is fine.
+    """
+    trigger = graph.trigger
+    warnings: list[dict[str, str]] = []
+    if trigger.type not in _OVERLAP_SETTINGS:
+        return warnings
+    types = trigger.config.get("incident_types") or []
+
+    def warn(message: str) -> None:
+        warnings.append(_problem(message, node=trigger.id))
+
+    for dag_id in trigger.config["dag_ids"]:
+        watch = watched.get(dag_id)
+        if watch is None:
+            warn(f"'{dag_id}' is not monitored, so this workflow will not start for it")
+        elif trigger.type != "trigger.dag_run":
+            if not watch.detect_failures and (not types or "DAG_RUN_FAILED" in types):
+                warn(f"Failure detection is off for '{dag_id}', so its failures are not reported")
+            # Most DAGs have no SLA, so this only matters when SLA misses were asked for.
+            if not watch.has_sla and "SLA_MISSED" in types:
+                warn(f"'{dag_id}' has no SLA, so it can never miss one")
+    return warnings
+
+
+# The settings two triggers must share to fire on one event; empty = any. `min_severity` is left
+# out: any two limits can meet, on a severe enough incident.
+_OVERLAP_SETTINGS: dict[str, tuple[str, ...]] = {
+    "trigger.incident": ("events", "incident_types", "dag_ids", "environments"),
+    "trigger.incident_stale": ("dag_ids", "environments"),
+    "trigger.dag_run": ("states", "dag_ids"),
+}
+
+
+def overlap_warnings(graph: Graph, others: list[tuple[str, Node]]) -> list[dict[str, str]]:
+    """Other workflows, given as (name, trigger), that would start on the same event."""
+    trigger = graph.trigger
+    settings = _OVERLAP_SETTINGS.get(trigger.type, ())
+
+    def meets(other: Node, name: str) -> bool:
+        ours, theirs = trigger.config[name], other.config[name]
+        return not ours or not theirs or bool(set(ours) & set(theirs))
+
+    return [
+        _problem(
+            f"'{name}' can start on the same event, so both workflows would run",
+            node=trigger.id,
+        )
+        for name, other in others
+        if settings and other.type == trigger.type and all(meets(other, s) for s in settings)
+    ]
 
 
 def to_raw(graph: Graph) -> dict[str, Any]:
