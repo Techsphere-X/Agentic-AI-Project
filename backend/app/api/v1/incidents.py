@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 
-from app.core.dependencies import ClientIp, DbSession, OperatorUser, PageParams, ViewerUser
+from app.core.dependencies import AdminUser, ClientIp, DbSession, OperatorUser, PageParams, ViewerUser
 from app.detection.types import IncidentSeverity, IncidentStatus, IncidentType
 from app.schemas.common import Page
 from app.schemas.incident import (
@@ -78,6 +78,13 @@ def open_counts(db: DbSession, _: ViewerUser) -> list[OpenCount]:
 @router.get("/{incident_id}", response_model=IncidentDetail)
 def get_incident(incident_id: uuid.UUID, db: DbSession, _: ViewerUser) -> IncidentDetail:
     return _detail(db, incident_id)
+
+
+@router.delete("/{incident_id}", status_code=204)
+def delete_incident(
+    incident_id: uuid.UUID, db: DbSession, admin: AdminUser, ip: ClientIp
+) -> None:
+    incident_service.delete_incident(db, incident_id, actor=admin, ip_address=ip)
 
 
 @router.get("/{incident_id}/occurrences", response_model=Page[IncidentOccurrenceRead])

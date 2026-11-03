@@ -1555,6 +1555,25 @@ def list_run_checks(
     return list(items), total
 
 
+def delete_run_check(
+    db: Session, check_id: uuid.UUID, *, actor: User, ip_address: str | None = None
+) -> None:
+    check = db.get(DagRunCheck, check_id)
+    if check is None:
+        raise NotFoundError("Run check not found")
+    audit_service.record(
+        db,
+        action="automation.run_check_deleted",
+        entity_type="dag_run_check",
+        entity_id=check.id,
+        actor=actor,
+        details={"dag_id": check.dag_id, "run_id": check.run_id, "status": check.status.value},
+        ip_address=ip_address,
+    )
+    db.delete(check)
+    db.commit()
+
+
 def latest_checks(db: Session) -> dict[tuple[uuid.UUID, str], DagRunCheck]:
     """Newest check per (connection, DAG), for status badges on monitored DAGs."""
     newest = (
@@ -1612,6 +1631,28 @@ def get_approval(db: Session, approval_id: uuid.UUID) -> Approval:
     if approval is None:
         raise NotFoundError("Approval not found")
     return approval
+
+
+def delete_approval(
+    db: Session, approval_id: uuid.UUID, *, actor: User, ip_address: str | None = None
+) -> None:
+    approval = get_approval(db, approval_id)
+    if approval.status == ApprovalStatus.PENDING:
+        raise ConflictError(
+            "Pending approvals cannot be deleted; reject them instead",
+            code="approval_pending",
+        )
+    audit_service.record(
+        db,
+        action="approval.deleted",
+        entity_type="approval",
+        entity_id=approval.id,
+        actor=actor,
+        details={"title": approval.title, "status": approval.status.value},
+        ip_address=ip_address,
+    )
+    db.delete(approval)
+    db.commit()
 
 
 def decide(
@@ -1689,6 +1730,25 @@ def list_notifications(
         query.order_by(Notification.created_at.desc(), Notification.id).limit(limit).offset(offset)
     ).all()
     return list(items), total
+
+
+def delete_notification(
+    db: Session, notification_id: uuid.UUID, *, actor: User, ip_address: str | None = None
+) -> None:
+    notification = db.get(Notification, notification_id)
+    if notification is None:
+        raise NotFoundError("Notification not found")
+    audit_service.record(
+        db,
+        action="automation.notification_deleted",
+        entity_type="notification",
+        entity_id=notification.id,
+        actor=actor,
+        details={"title": notification.title, "level": notification.level.value},
+        ip_address=ip_address,
+    )
+    db.delete(notification)
+    db.commit()
 
 
 def mark_all_read(db: Session) -> int:

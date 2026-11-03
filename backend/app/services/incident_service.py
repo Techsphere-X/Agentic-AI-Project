@@ -15,6 +15,7 @@ from app.detection.types import (
     IncidentType,
 )
 from app.diagnosis.log_classifier import Diagnosis, classify_logs
+from app.models.automation import WorkflowRun
 from app.models.incident import Incident, IncidentEvent, IncidentOccurrence
 from app.models.user import User
 from app.services import audit_service
@@ -148,6 +149,32 @@ def get_incident(db: Session, incident_id: uuid.UUID, *, with_details: bool = Fa
     if incident is None:
         raise NotFoundError("Incident not found")
     return incident
+
+
+def delete_incident(
+    db: Session, incident_id: uuid.UUID, *, actor: User, ip_address: str | None = None
+) -> None:
+    incident = get_incident(db, incident_id)
+    linked_runs = db.scalar(
+        select(func.count()).where(WorkflowRun.incident_id == incident.id)
+    ) or 0
+    if linked_runs:
+        raise ConflictError(
+            "Cannot delete an incident with linked workflow runs",
+            code="incident_has_runs",
+            details={"run_count": linked_runs},
+        )
+    audit_service.record(
+        db,
+        action="incident.deleted",
+        entity_type="incident",
+        entity_id=incident.id,
+        actor=actor,
+        details={"title": incident.title, "status": incident.status.value},
+        ip_address=ip_address,
+    )
+    db.delete(incident)
+    db.commit()
 
 
 def list_occurrences(
