@@ -734,6 +734,12 @@ a:focus-visible {
   border-bottom: 1px solid var(--border);
 }
 
+/* Row selection checkboxes (e.g. deleting runs). */
+.table .cell-check {
+  width: 32px;
+  padding-right: 0;
+}
+
 .table tr:last-child td {
   border-bottom: none;
 }
@@ -2979,4 +2985,4 @@ input.sla-input {
     margin-top: 1rem;
   }
 }
-
+

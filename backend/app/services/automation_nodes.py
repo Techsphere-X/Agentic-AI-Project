@@ -24,7 +24,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.automation import policy, remediation
-from app.automation.graph import ACTION_TYPES, Graph, Node
+from app.automation.graph import ACTION_TYPES, Graph, Node, watched_dag
 from app.automation.render import render
 from app.automation.types import (
     ApprovalStatus,
@@ -279,6 +279,16 @@ def _trigger(ctx: NodeContext, node: Node) -> NodeResult:
                 "airflow_state": dag_run.get("airflow_state", dag_run.get("state")),
             },
             f"Run {dag_run.get('run_id')} of {dag_run.get('dag_id')} {state}",
+        )
+    if node.type == "trigger.dag_watch":
+        incident = ctx.the_incident
+        watched = watched_dag(node.config, incident.connection_id, incident.dag_id)
+        if watched is None:
+            raise NodeError(f"DAG '{incident.dag_id}' is not watched by this trigger")
+        return NodeResult(
+            watched["key"],
+            {"dag_id": incident.dag_id, "connection_id": str(incident.connection_id)},
+            f"Incident on {incident.dag_id} ({event})",
         )
     return NodeResult("next", message=_TRIGGER_TEXT.get(event, f"Triggered by incident {event}"))
 
@@ -2203,6 +2213,7 @@ def _data_check_incident(
 EXECUTORS: dict[str, Callable[[NodeContext, Node], NodeResult]] = {
     "trigger.incident": _trigger,
     "trigger.incident_stale": _trigger,
+    "trigger.dag_watch": _trigger,
     "trigger.manual": _trigger,
     "trigger.schedule": _trigger,
     "trigger.dag_run": _trigger,

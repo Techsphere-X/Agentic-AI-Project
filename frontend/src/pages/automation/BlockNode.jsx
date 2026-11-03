@@ -1,6 +1,6 @@
 import { Handle, Position } from '@xyflow/react'
 import { memo } from 'react'
-import { portTone } from '../../components/flow/graph'
+import { portName, portTone, portsOf } from '../../components/flow/graph'
 import { NODE_LABELS, describeConfig, nodeIcon, stageOf } from './automationText'
 
 /**
@@ -9,11 +9,13 @@ import { NODE_LABELS, describeConfig, nodeIcon, stageOf } from './automationText
  * per port when the block branches.
  *
  * data: { nodeType, name, config, def (catalog entry), problems?: string[], warnings?: string[],
- *         run?: {tone, label}, dimmed? }
+ *         run?: {tone, label}, dimmed?, dropTarget? }
+ * "Watch selected DAGs" has one output per watched DAG (`portsOf`).
  */
 function BlockNode({ data, selected }) {
   const def = data.def
-  const ports = def?.ports ?? []
+  const ports = portsOf(def, data.config)
+  const dynamic = Boolean(def?.dynamic_ports)
   const category = def?.category ?? data.nodeType.split('.')[0]
   const stage = stageOf(def ?? category)
   const problems = data.problems ?? []
@@ -28,6 +30,7 @@ function BlockNode({ data, selected }) {
     problems.length > 0 && 'block-problem',
     data.run && `block-run-${data.run.tone}`,
     data.dimmed && 'block-dimmed',
+    data.dropTarget && 'block-drop-target',
   ]
     .filter(Boolean)
     .join(' ')
@@ -62,14 +65,15 @@ function BlockNode({ data, selected }) {
         </div>
       ))}
       {data.run?.label && <div className="block-run-label">{data.run.label}</div>}
-      {ports.length === 1 && (
+      {dynamic && ports.length === 0 && <div className="block-drop-hint">Drop DAGs here</div>}
+      {ports.length === 1 && !dynamic && (
         <Handle type="source" position={Position.Right} id={ports[0]} className="block-handle-out" />
       )}
-      {ports.length > 1 && (
+      {(ports.length > 1 || (dynamic && ports.length === 1)) && (
         <div className="block-ports">
           {ports.map((port) => (
             <div key={port} className={`block-port block-port-${{ good: 'ok', bad: 'bad', neutral: 'neutral' }[portTone(def, port)]}`}>
-              <span className="block-port-label">{def.port_labels?.[port] ?? port}</span>
+              <span className={`block-port-label ${dynamic ? 'mono' : ''}`}>{portName(def, port, data.config)}</span>
               <Handle type="source" position={Position.Right} id={port} className="block-handle-out" />
             </div>
           ))}

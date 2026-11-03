@@ -29,7 +29,16 @@ class NodeTypeRead(BaseModel):
     needs_dag_run: bool = False
     is_action: bool = False
     outputs: list[str] = Field(default_factory=list)
+    dynamic_ports: str | None = None  # "dags": one output per entry in config.dags
     config_schema: dict[str, Any]
+
+
+class DeleteRunsRequest(BaseModel):
+    run_ids: list[uuid.UUID] = Field(min_length=1, max_length=200)
+
+
+class DeleteRunsResult(BaseModel):
+    deleted: int
 
 
 class ManualRunRequest(BaseModel):

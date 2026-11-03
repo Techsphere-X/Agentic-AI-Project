@@ -3,7 +3,8 @@
 // Fallback block names for pages that do not load the catalog (run history, workflow list).
 // Keep in step with the labels in backend/app/automation/graph.py (NODE_TYPES).
 export const NODE_LABELS = {
-  'trigger.incident': 'When an incident opens',
+  'trigger.incident': 'When any DAG has an incident',
+  'trigger.dag_watch': 'Watch selected DAGs',
   'trigger.incident_stale': 'When an incident is ignored',
   'trigger.dag_run': 'When a DAG run finishes',
   'trigger.manual': 'When run manually',
@@ -134,6 +135,13 @@ export function describeConfig(type, config = {}) {
       parts.push(`on ${config.events?.join(' / ')}`)
       if (config.incident_types?.length) parts.push(config.incident_types.join(', '))
       break
+    case 'trigger.dag_watch': {
+      const dags = config.dags ?? []
+      parts.push(dags.length ? `watching ${dags.map((d) => d.dag_id).join(', ')}` : 'no DAGs yet: drop DAGs here')
+      parts.push(`on ${config.events?.join(' / ')}`)
+      if (config.incident_types?.length) parts.push(config.incident_types.join(', '))
+      break
+    }
     case 'trigger.incident_stale':
       parts.push(`open & unacknowledged for ${config.minutes} min`)
       break

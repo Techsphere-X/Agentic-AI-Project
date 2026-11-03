@@ -1200,3 +1200,64 @@
 .problems-ask {
   margin-left: 0.5rem;
 }
+
+/* "Watch selected DAGs": highlighted while a DAG is dragged over it; one output per DAG. */
+.block-drop-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+  background: var(--accent-soft);
+}
+
+.block-drop-hint {
+  margin: 6px 10px 10px;
+  padding: 8px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  text-align: center;
+  color: var(--text-muted, #6b7280);
+}
+
+.dag-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dag-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dag-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.dag-chip .muted {
+  margin-left: auto;
+}
+
+.dag-chip-remove {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  color: inherit;
+}
+
+.dag-list-add {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 6px;
+  align-items: center;
+}

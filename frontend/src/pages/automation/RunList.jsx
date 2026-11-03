@@ -17,12 +17,32 @@ const STATUS_FILTERS = {
   CANCELLED: ['CANCELLED'],
 }
 
-export function RunTable({ runs, showIncident = true }) {
+const isActive = (run) => STATUS_FILTERS.active.includes(run.status)
+
+/**
+ * Runs as a table. With `selected` (a Set of run ids) and `onSelect(ids, checked)`, finished
+ * runs get a checkbox (active runs must be cancelled before they can be deleted).
+ */
+export function RunTable({ runs, showIncident = true, selected, onSelect }) {
+  const selectable = Boolean(selected && onSelect)
+  const finished = runs.filter((r) => !isActive(r))
+  const allChecked = finished.length > 0 && finished.every((r) => selected?.has(r.id))
   return (
     <div className="table-wrap">
       <table className="table">
         <thead>
           <tr>
+            {selectable && (
+              <th className="cell-check">
+                <input
+                  type="checkbox"
+                  aria-label="Select all finished runs on this page"
+                  checked={allChecked}
+                  disabled={finished.length === 0}
+                  onChange={(e) => onSelect(finished.map((r) => r.id), e.target.checked)}
+                />
+              </th>
+            )}
             <th>Status</th>
             <th>Workflow</th>
             {showIncident && <th>Incident</th>}
@@ -34,6 +54,18 @@ export function RunTable({ runs, showIncident = true }) {
         <tbody>
           {runs.map((r) => (
             <tr key={r.id}>
+              {selectable && (
+                <td className="cell-check">
+                  <input
+                    type="checkbox"
+                    aria-label={`Select run of ${r.workflow_name}`}
+                    title={isActive(r) ? 'Cancel the run before deleting it' : undefined}
+                    disabled={isActive(r)}
+                    checked={selected.has(r.id)}
+                    onChange={(e) => onSelect([r.id], e.target.checked)}
+                  />
+                </td>
+              )}
               <td>
                 <RunStatusBadge run={r} />
               </td>
@@ -70,6 +102,9 @@ export default function RunList() {
   const [offset, setOffset] = useState(0)
   const [page, setPage] = useState(null)
   const [ticking, setTicking] = useState(false)
+  const [selected, setSelected] = useState(() => new Set())
+  const [deleting, setDeleting] = useState(false)
+  const canDelete = hasRole('ADMIN')
   const [error, setError] = useState(null)
   const [params, setParams] = useSearchParams()
   const workflowId = params.get('workflow_id')
@@ -77,6 +112,7 @@ export default function RunList() {
   const load = useCallback(async () => {
     setError(null)
     try {
+      setSelected(new Set())
       setPage(
         await automationApi.listRuns({
           status: STATUS_FILTERS[status],
@@ -96,6 +132,32 @@ export default function RunList() {
     // eslint-disable-next-line react/set-state-in-effect -- fetch on mount/filter change; state is set after await
     load()
   }, [load])
+
+  function onSelect(ids, checked) {
+    setSelected((current) => {
+      const next = new Set(current)
+      ids.forEach((runId) => (checked ? next.add(runId) : next.delete(runId)))
+      return next
+    })
+  }
+
+  async function onDelete() {
+    const count = selected.size
+    if (!window.confirm(`Delete ${count} run${count === 1 ? '' : 's'}? Their steps and approvals are deleted too. This cannot be undone.`)) return
+    setDeleting(true)
+    try {
+      const { deleted } = await automationApi.deleteRuns([...selected])
+      toast.success(`Deleted ${deleted} run${deleted === 1 ? '' : 's'}`)
+      // Stay on a page that still has rows.
+      const remaining = page.total - deleted
+      if (offset >= remaining && offset > 0) setOffset(Math.max(0, offset - PAGE_SIZE))
+      else await load()
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   async function onTick() {
     setTicking(true)
@@ -140,6 +202,11 @@ export default function RunList() {
             <option value="FAILED">Failed</option>
             <option value="CANCELLED">Cancelled</option>
           </select>
+          {canDelete && selected.size > 0 && (
+            <Button size="sm" variant="danger" loading={deleting} onClick={onDelete}>
+              Delete selected ({selected.size})
+            </Button>
+          )}
           {workflowId && (
             <span className="small">
               One workflow only ·{' '}
@@ -162,7 +229,7 @@ export default function RunList() {
           <EmptyState title="No runs yet" />
         ) : (
           <>
-            <RunTable runs={page.items} />
+            <RunTable runs={page.items} selected={canDelete ? selected : null} onSelect={onSelect} />
             <div className="pager">
               <span className="muted small">
                 {offset + 1}–{Math.min(offset + PAGE_SIZE, page.total)} of {page.total}

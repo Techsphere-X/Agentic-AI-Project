@@ -29,13 +29,60 @@ export const BAD_PORTS = new Set([
 
 /** "good" | "bad" | "neutral" for an output port, from its block's catalog entry. */
 export function portTone(def, port) {
+  if (def?.dynamic_ports) return 'neutral'
   return def?.port_tones?.[port] ?? (BAD_PORTS.has(port) ? 'bad' : 'good')
 }
 
-/** What a link from this port is labelled on the canvas (nothing for a plain "then"). */
-export function portLabel(def, port) {
-  if (port === 'next' && (def?.ports?.length ?? 1) === 1) return undefined
+/**
+ * Output ports of a block. Most are fixed by the catalog; "Watch selected DAGs"
+ * (`dynamic_ports: 'dags'`) has one output per watched DAG, keyed by the entry's `key`.
+ */
+export function portsOf(def, config) {
+  if (def?.dynamic_ports === 'dags') return (config?.dags ?? []).map((d) => d.key).filter(Boolean)
+  return def?.ports ?? []
+}
+
+/** The label shown next to an output port. */
+export function portName(def, port, config) {
+  if (def?.dynamic_ports === 'dags') {
+    const dags = config?.dags ?? []
+    const dag = dags.find((d) => d.key === port)
+    if (!dag) return port
+    const twins = dags.filter((d) => d.dag_id === dag.dag_id).length > 1
+    return twins ? `${dag.dag_id} (${dags.indexOf(dag) + 1})` : dag.dag_id
+  }
   return def?.port_labels?.[port] ?? port
+}
+
+/** What a link from this port is labelled on the canvas (nothing for a plain "then"). */
+export function portLabel(def, port, config) {
+  if (port === 'next' && portsOf(def, config).length <= 1 && !def?.dynamic_ports) return undefined
+  return portName(def, port, config)
+}
+
+/** Readable unique output id for a watched DAG, e.g. `orders_pipeline` or `orders_2`. */
+export function dagKey(dagId, taken) {
+  const base = (dagId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 90) || 'dag')
+  let key = base
+  for (let n = 2; taken.has(key); n += 1) key = `${base}_${n}`
+  return key
+}
+
+/**
+ * Add a DAG `{connection_id, dag_id}` to a "Watch selected DAGs" block. Returns the updated
+ * node, or null when that DAG is already watched.
+ */
+export function addWatchedDag(node, dag) {
+  const dags = node.data.config?.dags ?? []
+  if (dags.some((d) => d.dag_id === dag.dag_id && d.connection_id === dag.connection_id)) return null
+  const entry = { key: dagKey(dag.dag_id, new Set(dags.map((d) => d.key))), connection_id: dag.connection_id, dag_id: dag.dag_id }
+  return { ...node, data: { ...node.data, config: { ...node.data.config, dags: [...dags, entry] } } }
+}
+
+/** Links leaving outputs a block no longer has (e.g. after its config changed). */
+export function prunePortEdges(node, edges) {
+  const ports = new Set(portsOf(node.data.def, node.data.config))
+  return edges.filter((e) => e.source !== node.id || ports.has(e.sourceHandle))
 }
 
 const EDGE_CLASS = { good: 'edge-ok', bad: 'edge-bad', neutral: 'edge-neutral' }
@@ -44,13 +91,13 @@ export function edgeId(from, port, to) {
   return `${from}:${port}->${to}`
 }
 
-function toEdge(from, port, to, def) {
+function toEdge(from, port, to, def, config) {
   return {
     id: edgeId(from, port, to),
     source: from,
     sourceHandle: port,
     target: to,
-    label: portLabel(def, port),
+    label: portLabel(def, port, config),
     className: EDGE_CLASS[portTone(def, port)],
   }
 }
@@ -66,8 +113,8 @@ export function toFlow(graph, extraData = () => ({})) {
     deletable: true,
     data: { nodeType: n.type, name: n.name ?? '', config: n.config ?? {}, ...extraData(n) },
   }))
-  const defOf = Object.fromEntries(nodes.map((n) => [n.id, n.data.def]))
-  const edges = (graph?.edges ?? []).map((e) => toEdge(e.from, e.port, e.to, defOf[e.from]))
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n.data]))
+  const edges = (graph?.edges ?? []).map((e) => toEdge(e.from, e.port, e.to, byId[e.from]?.def, byId[e.from]?.config))
   return { nodes, edges }
 }
 
@@ -85,9 +132,12 @@ export function fromFlow(nodes, edges) {
   }
 }
 
-/** `sourceDef` is the catalog entry of the block the link starts from (labels and colour). */
-export function newEdge(connection, sourceDef) {
-  return toEdge(connection.source, connection.sourceHandle, connection.target, sourceDef)
+/**
+ * `sourceDef` is the catalog entry of the block the link starts from (labels and colour);
+ * `sourceConfig` its settings (for blocks whose outputs depend on them).
+ */
+export function newEdge(connection, sourceDef, sourceConfig) {
+  return toEdge(connection.source, connection.sourceHandle, connection.target, sourceDef, sourceConfig)
 }
 
 function reaches(start, goal, edges) {
@@ -124,8 +174,8 @@ export function connectionProblem(connection, nodes, edges) {
 }
 
 /** Add an edge (an exact duplicate is ignored). */
-export function connect(connection, edges, sourceDef) {
-  const edge = newEdge(connection, sourceDef)
+export function connect(connection, edges, sourceDef, sourceConfig) {
+  const edge = newEdge(connection, sourceDef, sourceConfig)
   return edges.some((e) => e.id === edge.id) ? edges : [...edges, edge]
 }
 
@@ -167,9 +217,10 @@ export function nextNodeId(type, nodes) {
 export function retypeNode(node, newDef, edges) {
   const defaults = defaultConfig(newDef.config_schema)
   const keep = Object.fromEntries(Object.entries(node.data.config ?? {}).filter(([key]) => key in defaults))
-  const ports = new Set(newDef.ports ?? [])
+  const config = { ...defaults, ...keep }
+  const ports = new Set(portsOf(newDef, config))
   return {
-    node: { ...node, data: { ...node.data, nodeType: newDef.type, def: newDef, config: { ...defaults, ...keep } } },
+    node: { ...node, data: { ...node.data, nodeType: newDef.type, def: newDef, config } },
     edges: edges.filter((e) => e.source !== node.id || ports.has(e.sourceHandle)),
   }
 }

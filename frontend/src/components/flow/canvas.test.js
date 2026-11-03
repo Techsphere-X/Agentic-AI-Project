@@ -10,15 +10,20 @@ import {
   workflowFeeds,
 } from '../../pages/pipelines/pipelineModel'
 import {
+  addWatchedDag,
   connect,
   connectionProblem,
+  dagKey,
   defaultConfig,
   fromFlow,
   linkOrder,
   nextNodeId,
   parseBlockPayload,
   portLabel,
+  portName,
   portTone,
+  portsOf,
+  prunePortEdges,
   retypeNode,
   toFlow,
 } from './graph'
@@ -390,4 +395,60 @@ test('blocks are grouped into stages in run order', () => {
   assert.equal(stageOf('pipeline').id, 'act')
   assert.equal(nodeIcon('check.sla'), '⏱')
   assert.equal(nodeIcon('check.dag_state'), '⋔')
+})
+
+// ---------------------------------------------------------------- "Watch selected DAGs"
+
+const watchDef = { type: 'trigger.dag_watch', category: 'trigger', ports: [], dynamic_ports: 'dags', port_labels: {} }
+const watchNode = (dags) => ({ id: 'start', data: { nodeType: 'trigger.dag_watch', def: watchDef, config: { dags } } })
+
+test('a watch block has one output per watched DAG', () => {
+  const dags = [
+    { key: 'orders', connection_id: 'c1', dag_id: 'orders' },
+    { key: 'orders_2', connection_id: 'c2', dag_id: 'orders' },
+    { key: 'billing', connection_id: 'c1', dag_id: 'billing' },
+  ]
+  assert.deepEqual(portsOf(watchDef, { dags }), ['orders', 'orders_2', 'billing'])
+  assert.equal(portName(watchDef, 'billing', { dags }), 'billing')
+  assert.equal(portName(watchDef, 'orders_2', { dags }), 'orders (2)') // same id on two connections
+  assert.equal(portLabel(watchDef, 'billing', { dags: [dags[2]] }), 'billing') // even a single output is labelled
+  assert.equal(portTone(watchDef, 'billing'), 'neutral')
+  assert.deepEqual(portsOf({ ports: ['true', 'false'] }, {}), ['true', 'false'])
+})
+
+test('dropping DAGs on a watch block adds outputs; removing one drops its links', () => {
+  assert.equal(dagKey('my.dag', new Set()), 'my_dag')
+  assert.equal(dagKey('my.dag', new Set(['my_dag'])), 'my_dag_2')
+
+  let node = addWatchedDag(watchNode([]), { connection_id: 'c1', dag_id: 'orders' })
+  node = addWatchedDag(node, { connection_id: 'c1', dag_id: 'billing' })
+  assert.deepEqual(node.data.config.dags.map((d) => d.key), ['orders', 'billing'])
+  assert.equal(addWatchedDag(node, { connection_id: 'c1', dag_id: 'orders' }), null) // already watched
+
+  const edges = [
+    { id: 'a', source: 'start', sourceHandle: 'orders', target: 'x' },
+    { id: 'b', source: 'start', sourceHandle: 'billing', target: 'y' },
+    { id: 'c', source: 'x', sourceHandle: 'next', target: 'y' },
+  ]
+  // Removing a DAG in the settings: the links from its output go too.
+  const without = { ...node, data: { ...node.data, config: { dags: node.data.config.dags.slice(1) } } }
+  assert.deepEqual(prunePortEdges(without, edges).map((e) => e.id), ['b', 'c'])
+})
+
+test('a watch workflow is fed only by its watched DAGs', () => {
+  const graph = {
+    nodes: [
+      {
+        id: 'start',
+        type: 'trigger.dag_watch',
+        config: { dags: [{ key: 'orders', connection_id: 'c1', dag_id: 'orders' }], incident_types: ['DAG_RUN_FAILED'] },
+      },
+    ],
+    edges: [],
+  }
+  const feeds = workflowFeeds({ graph })
+  assert.deepEqual([...feeds.dagIds], ['orders'])
+  assert.deepEqual([...feeds.types], ['DAG_RUN_FAILED'])
+  assert.equal(describeConfig('trigger.dag_watch', { dags: graph.nodes[0].config.dags, events: ['opened'] }), 'watching orders · on opened')
+  assert.equal(NODE_LABELS['trigger.dag_watch'], 'Watch selected DAGs')
 })

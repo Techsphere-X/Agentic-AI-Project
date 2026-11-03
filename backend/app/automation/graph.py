@@ -10,6 +10,7 @@ Pure: Pydantic only, no database or framework imports.
 import json
 import math
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -51,6 +52,92 @@ class IncidentTriggerConfig(_Config):
             },
         },
     )  # empty = any
+
+
+MAX_WATCHED_DAGS = 20
+
+
+def _port_key(dag_id: str, taken: set[str]) -> str:
+    """A readable, unique port id for a watched DAG, e.g. `orders_pipeline` or `orders_2`."""
+    base = re.sub(r"[^A-Za-z0-9_-]", "_", dag_id)[:90] or "dag"
+    key, n = base, 2
+    while key in taken:
+        key, n = f"{base}_{n}", n + 1
+    return key
+
+
+class WatchedDag(_Config):
+    key: str = Field(default="", max_length=100)  # output port id; filled from dag_id if empty
+    connection_id: str = Field(min_length=1, max_length=64)
+    dag_id: str = Field(min_length=1, max_length=250)
+
+    @field_validator("dag_id", "connection_id")
+    @classmethod
+    def _strip(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("must not be empty")
+        return value
+
+
+class DagWatchTriggerConfig(_Config):
+    dags: list[WatchedDag] = Field(
+        default_factory=list,
+        max_length=MAX_WATCHED_DAGS,
+        json_schema_extra={
+            "x-label": "Watched DAGs",
+            "x-widget": "dag_list",
+            "x-hint": "Drag DAGs onto the block; each DAG gets its own output",
+        },
+    )
+    events: list[Literal["opened", "recurred"]] = Field(
+        default=["opened"],
+        min_length=1,
+        json_schema_extra={
+            "x-label": "Start when the incident",
+            "x-options": {"opened": "Opens", "recurred": "Happens again"},
+        },
+    )
+    incident_types: list[IncidentType] = Field(
+        default_factory=list,
+        json_schema_extra={
+            "x-label": "Incident types",
+            "x-options": {
+                "DAG_RUN_FAILED": "DAG run failed",
+                "SLA_MISSED": "SLA missed",
+                "DATA_CHECK_FAILED": "Data check failed",
+            },
+        },
+    )  # empty = any
+
+    @model_validator(mode="after")
+    def _unique(self) -> "DagWatchTriggerConfig":
+        if not self.dags:
+            raise ValueError("Add at least one DAG to watch (drag a DAG onto the block)")
+        keys: set[str] = set()
+        seen: set[tuple[str, str]] = set()
+        for dag in self.dags:
+            if (dag.connection_id, dag.dag_id) in seen:
+                raise ValueError(f"DAG '{dag.dag_id}' is watched twice")
+            seen.add((dag.connection_id, dag.dag_id))
+            if not dag.key:
+                dag.key = _port_key(dag.dag_id, keys)
+            if not re.fullmatch(NODE_ID_PATTERN, dag.key):
+                raise ValueError(f"Invalid output id '{dag.key}'")
+            if dag.key in keys:
+                raise ValueError(f"Output id '{dag.key}' is used twice")
+            keys.add(dag.key)
+        return self
+
+
+def _watched_dag_ports(config: dict[str, Any]) -> list[tuple[str, str]]:
+    dags = config.get("dags") or []
+    ids = [d.get("dag_id", "") for d in dags]
+    return [
+        (d["key"], d["dag_id"] if ids.count(d["dag_id"]) == 1 else f"{d['dag_id']} ({i + 1})")
+        for i, d in enumerate(dags)
+        if d.get("key")
+    ]
 
 
 class StaleTriggerConfig(_Config):
@@ -647,6 +734,10 @@ class NodeType:
     stage: "Stage | None" = None
     # {{placeholders}} this block makes available to later blocks; "{id}" is the block's id.
     outputs: tuple[str, ...] = ()
+    # Ports that depend on the block's config (e.g. one output per watched DAG): config ->
+    # [(port, label)]. `ports` is then empty, and `dynamic_ports` names the rule for the editor.
+    port_rule: Callable[[dict[str, Any]], list[tuple[str, str]]] | None = None
+    dynamic_ports: str | None = None
 
     def catalog_entry(self) -> dict[str, Any]:
         return {
@@ -663,6 +754,7 @@ class NodeType:
             "needs_dag_run": self.needs_dag_run,
             "is_action": self.is_action,
             "outputs": list(self.outputs),
+            "dynamic_ports": self.dynamic_ports,
             "config_schema": self.config_model.model_json_schema(),
         }
 
@@ -738,12 +830,26 @@ NODE_TYPES: dict[str, NodeType] = {
         # ------------------------------------------------------------ triggers
         NodeType(
             "trigger.incident",
-            "When an incident opens",
+            "When any DAG has an incident",
             "trigger",
-            "Starts when detection opens an incident, or records it again (a recurrence).",
+            "Starts when detection opens an incident on any monitored DAG, or records it again "
+            "(a recurrence). To react to particular DAGs only, use 'Watch selected DAGs'.",
             ("next",),
             IncidentTriggerConfig,
             needs_incident=True,
+        ),
+        NodeType(
+            "trigger.dag_watch",
+            "Watch selected DAGs",
+            "trigger",
+            "Starts when an incident opens (or happens again) on one of the DAGs you drag onto "
+            "it. Each watched DAG has its own output, so every DAG can get its own steps. "
+            "Watched DAGs are switched to monitored when the workflow is on.",
+            (),
+            DagWatchTriggerConfig,
+            needs_incident=True,
+            port_rule=_watched_dag_ports,
+            dynamic_ports="dags",
         ),
         NodeType(
             "trigger.incident_stale",
@@ -1051,7 +1157,8 @@ NODE_TYPES: dict[str, NodeType] = {
 # One-line descriptions for the editor. The full `description` stays for the palette tooltip and
 # the workflow assistant's prompt, which needs the details (e.g. what "always" means).
 _SUMMARIES: dict[str, str] = {
-    "trigger.incident": "Starts when an incident opens or happens again.",
+    "trigger.incident": "Starts for an incident on any monitored DAG.",
+    "trigger.dag_watch": "Starts for an incident on one of the watched DAGs.",
     "trigger.incident_stale": "Starts when an incident stays unacknowledged too long.",
     "trigger.dag_run": "Starts when a monitored DAG run finishes.",
     "trigger.manual": "Starts when someone presses Run now.",
@@ -1123,6 +1230,31 @@ class Graph:
         return [t for _, t in sorted(enumerate(targets), key=key)]
 
 
+def watched_dag(
+    trigger_config: dict[str, Any], connection_id: Any, dag_id: str
+) -> dict[str, Any] | None:
+    """The 'Watch selected DAGs' entry for a DAG on a connection, or None."""
+    for dag in trigger_config.get("dags") or []:
+        if dag["dag_id"] == dag_id and dag["connection_id"] == str(connection_id):
+            return dag
+    return None
+
+
+def node_ports(node_type: str, config: dict[str, Any]) -> tuple[str, ...]:
+    """Output ports of a block: fixed, or (for e.g. 'Watch selected DAGs') from its config."""
+    nt = NODE_TYPES[node_type]
+    if nt.port_rule is not None:
+        return tuple(port for port, _ in nt.port_rule(config))
+    return nt.ports
+
+
+def node_port_labels(node_type: str, config: dict[str, Any]) -> dict[str, str]:
+    nt = NODE_TYPES[node_type]
+    if nt.port_rule is not None:
+        return dict(nt.port_rule(config))
+    return {p: nt.port_labels.get(p, _PORT_LABELS.get(p, p)) for p in nt.ports}
+
+
 def _problem(message: str, **where: str) -> dict[str, str]:
     return {"message": message, **where}
 
@@ -1191,7 +1323,7 @@ def validate_graph(raw: Any) -> Graph:
             if src not in raw_ids or dst not in raw_ids:  # else the node itself was reported
                 problems.append(_problem(f"{label} references an unknown node", edge=edge))
             continue
-        if port not in NODE_TYPES[nodes[src].type].ports:
+        if port not in node_ports(nodes[src].type, nodes[src].config):
             problems.append(
                 _problem(f"{label}: node '{src}' has no output port '{port}'", edge=edge)
             )

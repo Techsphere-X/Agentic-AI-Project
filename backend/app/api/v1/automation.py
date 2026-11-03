@@ -30,6 +30,8 @@ from app.schemas.automation import (
     AutomationSummary,
     DagRunCheckRead,
     DecisionRequest,
+    DeleteRunsRequest,
+    DeleteRunsResult,
     GraphCheck,
     GraphCheckResult,
     ManualRunRequest,
@@ -278,6 +280,21 @@ def cancel_run(
     automation_service.cancel_run(db, run_id, actor=operator, ip_address=ip)
     db.expire_all()
     return WorkflowRunDetail.model_validate(automation_service.get_run(db, run_id))
+
+
+@router.delete("/runs/{run_id}", status_code=204)
+def delete_run(run_id: uuid.UUID, db: DbSession, admin: AdminUser, ip: ClientIp) -> None:
+    """Delete a finished run (cancel an active one first)."""
+    automation_service.delete_runs(db, [run_id], actor=admin, ip_address=ip)
+
+
+@router.post("/runs/delete", response_model=DeleteRunsResult)
+def delete_runs(
+    body: DeleteRunsRequest, db: DbSession, admin: AdminUser, ip: ClientIp
+) -> DeleteRunsResult:
+    """Delete several finished runs at once (at most 200)."""
+    deleted = automation_service.delete_runs(db, body.run_ids, actor=admin, ip_address=ip)
+    return DeleteRunsResult(deleted=deleted)
 
 
 @router.get("/status", response_model=AutomationStatus)

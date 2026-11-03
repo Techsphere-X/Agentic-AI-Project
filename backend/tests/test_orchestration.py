@@ -9,15 +9,16 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select, text
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import Session
 
 from app.automation.graph import GraphError, validate_graph
 from app.automation.types import ApprovalStatus, RunStatus, WorkflowMode
 from app.connectors import database as db_connector
-from app.core.exceptions import ConflictError
+from app.core.exceptions import BadRequestError, ConflictError
 from app.models.airflow import AirflowConnection, ConnectionKind, DeploymentEnvironment
-from app.models.automation import Approval, Notification, Workflow, WorkflowRun
+from app.models.audit_log import AuditLog
+from app.models.automation import Approval, Notification, Workflow, WorkflowRun, WorkflowStep
 from app.models.database_connection import DatabaseConnection, DatabaseEngine
 from app.models.user import User
 from app.orchestration.airflow import mock as mock_module
@@ -478,8 +479,9 @@ def test_run_now_rules(
 ) -> None:
     automation_service.seed_templates(db)
     incident_wf = db.scalars(select(Workflow).where(Workflow.key == "retry-transient")).one()
-    manual_run = automation_service.start_manual_run(db, incident_wf.id, actor=admin)
-    assert manual_run is not None
+    # An incident workflow needs an open incident its trigger reacts to.
+    with pytest.raises(BadRequestError, match="No open incident matches"):
+        automation_service.start_manual_run(db, incident_wf.id, actor=admin)
 
     wf = workflow(db, chain({"id": "pause", "type": "flow.wait", "config": {"minutes": 5}}))
     run = run_now(db, wf, admin, clock)
@@ -716,3 +718,49 @@ def test_one_approval_covers_every_linked_block(
         ("rerun", "success"),
     ]
     assert count(warehouse, "orders") == 1
+
+
+def test_delete_runs(
+    db: Session,
+    admin: User,
+    clock: Clock,
+    client: TestClient,
+    admin_headers: dict,
+    operator_headers: dict,
+) -> None:
+    done = workflow(db, chain({"id": "note", "type": "flow.wait", "config": {"minutes": 1}}))
+    first = run_now(db, done, admin, clock)
+    clock.advance(minutes=1)
+    tick(db, clock)
+    second = run_now(db, done, admin, clock)
+    first_id, second_id = first.id, second.id
+    url = f"/api/v1/automation/runs/{first_id}"
+    assert db.get(WorkflowRun, second_id).status == RunStatus.WAITING
+    assert db.scalar(select(func.count()).select_from(WorkflowStep)) > 0
+
+    # Active runs must be cancelled first; nothing is deleted when one of them is active.
+    with pytest.raises(ConflictError, match="still active"):
+        automation_service.delete_runs(db, [first_id, second_id], actor=admin)
+    assert db.get(WorkflowRun, first_id) is not None
+
+    # Only admins delete runs.
+    assert client.delete(url, headers=operator_headers).status_code == 403
+
+    response = client.delete(url, headers=admin_headers)
+    assert response.status_code == 204, response.text
+    db.expire_all()
+    assert db.get(WorkflowRun, first_id) is None
+    assert client.get(url, headers=admin_headers).status_code == 404
+    assert db.scalar(select(AuditLog).where(AuditLog.action == "automation.run_deleted"))
+
+    automation_service.cancel_run(db, second_id, actor=admin)
+    response = client.post(
+        "/api/v1/automation/runs/delete", json={"run_ids": [str(second_id)]}, headers=admin_headers
+    )
+    assert response.json() == {"deleted": 1}
+    db.expire_all()
+    assert db.scalar(select(func.count()).select_from(WorkflowRun)) == 0
+    assert db.scalar(select(func.count()).select_from(WorkflowStep)) == 0  # steps go with the run
+
+    missing = client.delete(url, headers=admin_headers)
+    assert missing.status_code == 404

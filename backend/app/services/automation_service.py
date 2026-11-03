@@ -21,6 +21,7 @@ from app.automation.graph import (
     GraphError,
     to_raw,
     validate_graph,
+    watched_dag,
 )
 from app.automation.templates import TEMPLATES, TEMPLATES_BY_KEY
 from app.automation.types import (
@@ -229,6 +230,8 @@ def update_workflow(
                 workflow.version += 1  # behaviour changed; layout-only edits keep the version
                 changed["graph_version"] = workflow.version
             workflow.graph = graph
+    if workflow.enabled:
+        _monitor_watched_dags(db, workflow.graph, actor=actor, ip_address=ip_address)
     if changed:
         audit_service.record(
             db,
@@ -241,6 +244,54 @@ def update_workflow(
         )
     db.commit()
     return workflow
+
+
+def _watched_dags(graph: dict[str, Any]) -> list[dict[str, Any]]:
+    trigger = next(
+        (n for n in graph.get("nodes", []) if n.get("type") == "trigger.dag_watch"), None
+    )
+    return list((trigger or {}).get("config", {}).get("dags") or [])
+
+
+def _monitor_watched_dags(
+    db: Session, graph: dict[str, Any], *, actor: User, ip_address: str | None
+) -> None:
+    """'Watch selected DAGs': incidents only open for monitored DAGs, so switch them on."""
+    for watched in _watched_dags(graph):
+        try:
+            connection_id = uuid.UUID(watched["connection_id"])
+        except ValueError:
+            connection_id = None
+        dag = connection_id and db.scalar(
+            select(MonitoredDag).where(
+                MonitoredDag.connection_id == connection_id,
+                MonitoredDag.dag_id == watched["dag_id"],
+            )
+        )
+        if not dag:
+            raise BadRequestError(
+                f"DAG '{watched['dag_id']}' is not in the synced DAG list of its Airflow "
+                "connection; sync the connection or remove the DAG from the trigger"
+            )
+        if dag.is_monitored and dag.detect_failures:
+            continue
+        dag.is_monitored = True
+        dag.detect_failures = True
+        audit_service.record(
+            db,
+            action="monitored_dag.toggle",
+            entity_type="monitored_dag",
+            entity_id=dag.id,
+            actor=actor,
+            details={
+                "connection_id": str(dag.connection_id),
+                "dag_id": dag.dag_id,
+                "is_monitored": True,
+                "detect_failures": True,
+                "reason": "watched by an enabled workflow",
+            },
+            ip_address=ip_address,
+        )
 
 
 def _without_layout(graph: dict[str, Any]) -> dict[str, Any]:
@@ -285,6 +336,17 @@ def delete_workflow(
 # ---------------------------------------------------------------------- enqueue
 
 
+def _incident_matches(trigger: Any, incident: Incident) -> bool:
+    """Whether an incident (whatever the event) is one this incident trigger reacts to."""
+    if trigger.type in ("trigger.incident", "trigger.dag_watch"):
+        types = trigger.config["incident_types"]
+        if types and incident.type not in types:
+            return False
+    if trigger.type == "trigger.dag_watch":
+        return watched_dag(trigger.config, incident.connection_id, incident.dag_id) is not None
+    return True
+
+
 def _trigger_matches(
     workflow: Workflow, incident: Incident, event: TriggerEvent, now: datetime
 ) -> bool:
@@ -293,9 +355,8 @@ def _trigger_matches(
     except GraphError:
         logger.warning("Workflow %s has an invalid graph; skipped", workflow.id)
         return False
-    if trigger.type == "trigger.incident":
-        types = trigger.config["incident_types"]
-        return event.value in trigger.config["events"] and (not types or incident.type in types)
+    if trigger.type in ("trigger.incident", "trigger.dag_watch"):
+        return event.value in trigger.config["events"] and _incident_matches(trigger, incident)
     if trigger.type == "trigger.incident_stale" and event == TriggerEvent.STALE:
         return incident.first_seen_at <= now - timedelta(minutes=trigger.config["minutes"])
     return False
@@ -564,8 +625,17 @@ def start_manual_run(
         )
     incident_id = None
     if trigger.type in INCIDENT_TRIGGER_TYPES:
-        # Attach the run to the latest open/recent incident if available
-        incident_id = db.scalar(select(Incident.id).order_by(Incident.created_at.desc()))
+        # Run on the newest open incident this trigger would react to.
+        candidates = db.scalars(
+            select(Incident)
+            .where(Incident.status == IncidentStatus.OPEN)
+            .order_by(Incident.created_at.desc())
+            .limit(500)
+        )
+        incident = next((i for i in candidates if _incident_matches(trigger, i)), None)
+        if incident is None:
+            raise BadRequestError("No open incident matches this workflow's trigger")
+        incident_id = incident.id
     if _has_active_run(db, workflow.id):
         raise ConflictError("This workflow is already running; wait for it or cancel it first")
     run = _add_run(
@@ -990,6 +1060,57 @@ def cancel_run(
     )
     db.commit()
     return run
+
+
+MAX_DELETE_RUNS = 200
+
+
+def delete_runs(
+    db: Session, run_ids: list[uuid.UUID], *, actor: User, ip_address: str | None = None
+) -> int:
+    """Delete finished runs with their steps, approvals and DAG run checks.
+
+    Active runs (pending, running, waiting) must be cancelled first. Notifications a run sent
+    are kept and unlinked. Each deletion is audited.
+    """
+    ids = list(dict.fromkeys(run_ids))
+    if not ids:
+        raise BadRequestError("Choose at least one run to delete")
+    if len(ids) > MAX_DELETE_RUNS:
+        raise BadRequestError(f"Delete at most {MAX_DELETE_RUNS} runs at a time")
+    runs = db.scalars(
+        select(WorkflowRun)
+        .options(selectinload(WorkflowRun.workflow))
+        .where(WorkflowRun.id.in_(ids))
+    ).all()
+    missing = len(ids) - len(runs)
+    if missing:
+        raise NotFoundError(f"{missing} run(s) not found" if len(ids) > 1 else "Run not found")
+    active = [r for r in runs if not r.status.is_terminal]
+    if active:
+        raise ConflictError(
+            f"{len(active)} run(s) are still active; cancel them before deleting",
+            code="run_active",
+            details={"run_ids": [str(r.id) for r in active]},
+        )
+    for run in runs:
+        audit_service.record(
+            db,
+            action="automation.run_deleted",
+            entity_type="workflow_run",
+            entity_id=run.id,
+            actor=actor,
+            details={
+                "workflow": run.workflow_name,
+                "status": run.status.value,
+                "trigger": run.trigger_event,
+                "started_at": run.started_at.isoformat() if run.started_at else None,
+            },
+            ip_address=ip_address,
+        )
+        db.delete(run)
+    db.commit()
+    return len(runs)
 
 
 # ---------------------------------------------------------------------- DAG run checks

@@ -51,6 +51,9 @@ A workflow graph is JSON: {{"nodes": [{{id, type, name, config}}], "edges": [{{f
   ({", ".join(sorted(INCIDENT_TRIGGER_TYPES))}). To react to a failed DAG run and FIX it
   (analyze, approve, retry, rerun, pause, update the incident), use "trigger.incident" with
   incident_types ["DAG_RUN_FAILED"]: detection opens an incident for every failed run.
+  When the user names particular DAGs, use "trigger.dag_watch" with config.dags
+  [{{"key", "connection_id", "dag_id"}}]: each DAG's `key` is its own output port, so each DAG
+  can get its own steps. Keep existing dags entries (their connection_id) as they are.
 - Blocks marked [needs DAG run] only work under the "trigger.dag_run" trigger.
 - Node ids: short, letters, digits, "_" or "-" (for example "start", "logs", "notify"). Keep the
   ids of blocks you keep, so the user's layout survives. At most {MAX_NODES} blocks.
@@ -148,8 +151,9 @@ def catalog_prompt() -> str:
             )
             if flag
         ]
-        ports = ", ".join(
-            f"{p} ({nt.port_labels[p]})" if p in nt.port_labels else p for p in nt.ports
+        ports = (
+            ", ".join(f"{p} ({nt.port_labels[p]})" if p in nt.port_labels else p for p in nt.ports)
+            or "one per watched DAG: the DAG's `key` in config.dags"
         )
         head = f"* {nt.type} - {nt.label}: {nt.description}"
         if flags:

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { airflowApi, channelsApi, databaseApi } from '../../services/endpoints'
-import { Toggle } from '../ui'
+import { Button, Toggle } from '../ui'
+import { dagKey } from './graph'
 
 // Renders a settings form from a Pydantic JSON schema (the node-type catalog's config_schema).
 // Supports the shapes our node configs use: booleans, integers, strings, enums ($ref or inline,
@@ -143,6 +144,60 @@ function DagInput({ id, value, onChange, disabled, connectionId, anyConnection }
   )
 }
 
+/**
+ * Watched DAGs ("Watch selected DAGs"): one chip per DAG, each an output of the block.
+ * DAGs are usually dropped onto the block; this row adds one by name. Removing a chip also
+ * removes the links from its output (the editor prunes them).
+ */
+function DagListInput({ id, value, onChange, disabled }) {
+  const dags = value ?? []
+  const conns = useList('airflow', () => airflowApi.listConnections().then((r) => r.items))
+  const [connectionId, setConnectionId] = useState('')
+  const [dagId, setDagId] = useState('')
+  const connName = (cid) => {
+    const conn = conns?.find((c) => c.id === cid)
+    return conn ? `${conn.name} · ${conn.environment.toLowerCase()}` : 'unknown connection'
+  }
+  const duplicate = dags.some((d) => d.connection_id === connectionId && d.dag_id === dagId)
+  function add() {
+    const entry = { key: dagKey(dagId, new Set(dags.map((d) => d.key))), connection_id: connectionId, dag_id: dagId }
+    onChange([...dags, entry])
+    setDagId('')
+  }
+  return (
+    <div className="dag-list">
+      {dags.length === 0 && <p className="muted small">No DAGs yet. Drag DAGs from “DAGs to watch” onto the block.</p>}
+      <ul className="dag-chips">
+        {dags.map((d) => (
+          <li key={d.key} className="dag-chip" title={connName(d.connection_id)}>
+            <span className="mono">{d.dag_id}</span>
+            <span className="muted small">{connName(d.connection_id)}</span>
+            {!disabled && (
+              <button
+                type="button"
+                className="dag-chip-remove"
+                aria-label={`Stop watching ${d.dag_id}`}
+                onClick={() => onChange(dags.filter((x) => x.key !== d.key))}
+              >
+                ×
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {!disabled && (
+        <div className="dag-list-add">
+          <ConnectionSelect id={`${id}-conn`} kind="airflow" value={connectionId} onChange={setConnectionId} />
+          <DagInput id={`${id}-dag`} value={dagId} onChange={setDagId} connectionId={connectionId} />
+          <Button size="sm" disabled={!connectionId || !dagId || duplicate} onClick={add}>
+            Add DAG
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** A notification channel from the catalog, or none (in-app notification only). */
 function ChannelSelect({ id, value, onChange, disabled }) {
   const items = useList('channels', () => channelsApi.listConnections().then((r) => r.items))
@@ -221,6 +276,7 @@ const WIDGETS = {
   notification_channel: ChannelSelect,
   airflow_connection: (props) => <ConnectionSelect {...props} kind="airflow" />,
   database_connection: (props) => <ConnectionSelect {...props} kind="database" />,
+  dag_list: DagListInput,
   dag: (props) => (
     <DagInput {...props} connectionId={props.values?.connection_id} anyConnection={props.schema['x-any-connection']} />
   ),

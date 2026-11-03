@@ -18,3 +18,8 @@ dist/
 .vscode/
 .idea/
 .DS_Store
+
+# LAN sharing (local only)
+.lan-backup/
+.lan-run/
+backend/.env.friend

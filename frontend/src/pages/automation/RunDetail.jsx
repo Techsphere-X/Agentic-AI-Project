@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
-import { Link, useOutletContext, useParams } from 'react-router'
+import { Link, useNavigate, useOutletContext, useParams } from 'react-router'
 import { Alert, Badge, Button, Card, EmptyState } from '../../components/ui'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
@@ -51,7 +51,10 @@ export default function RunDetail() {
   const [run, setRun] = useState(null)
   const [error, setError] = useState(null)
   const [cancelling, setCancelling] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const navigate = useNavigate()
   const canOperate = hasRole('ADMIN', 'OPERATOR')
+  const canDelete = hasRole('ADMIN')
 
   const load = useCallback(async () => {
     try {
@@ -77,6 +80,19 @@ export default function RunDetail() {
       toast.error(err.message)
     } finally {
       setCancelling(false)
+    }
+  }
+
+  async function remove() {
+    if (!window.confirm(`Delete this run of “${run.workflow_name}”? Its steps and approvals are deleted too. This cannot be undone.`)) return
+    setDeleting(true)
+    try {
+      await automationApi.deleteRun(id)
+      toast.success('Run deleted')
+      navigate('/automation/runs')
+    } catch (err) {
+      toast.error(err.message)
+      setDeleting(false)
     }
   }
 
@@ -113,6 +129,11 @@ export default function RunDetail() {
         {canOperate && active && (
           <Button variant="danger" onClick={cancel} loading={cancelling}>
             Cancel run
+          </Button>
+        )}
+        {canDelete && !active && (
+          <Button variant="danger" onClick={remove} loading={deleting}>
+            Delete run
           </Button>
         )}
       </div>

@@ -20,6 +20,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import SchemaForm from '../../components/flow/SchemaForm'
 import {
   BLOCK,
+  addWatchedDag,
   connect,
   connectionProblem,
   defaultConfig,
@@ -27,7 +28,9 @@ import {
   isTrigger,
   linkOrder,
   nextNodeId,
+  newEdge,
   parseBlockPayload,
+  prunePortEdges,
   retypeNode,
   toFlow,
 } from '../../components/flow/graph'
@@ -47,6 +50,10 @@ const EDGE_OPTIONS = { markerEnd: { type: MarkerType.ArrowClosed, width: 18, hei
 // Never zoom past 100% when fitting: a small graph at 2x makes new blocks cover existing ports.
 const FIT_VIEW = { padding: 0.2, maxZoom: 1 }
 const DRAG_TYPE = 'application/x-workflow-block'
+// Also set when the dragged item is a real DAG, so a "Watch selected DAGs" block can light up
+// while it is dragged over (the drag data itself is only readable on drop).
+const DAG_DRAG_TYPE = 'application/x-workflow-dag'
+const WATCH = 'trigger.dag_watch'
 // Sub-headings inside a palette stage, per stage and block category.
 const SUB_TITLES = {
   check: { logic: 'Incident & DAG', database: 'Data' },
@@ -143,7 +150,14 @@ function dagPreset(conn, dag) {
     name: dag.dag_id,
     idBase: dag.dag_id,
     config: { connection_id: conn.id, dag_id: dag.dag_id },
+    // Dropped onto a "Watch selected DAGs" block, it is watched instead.
+    dag: { connection_id: conn.id, dag_id: dag.dag_id },
   }
+}
+
+/** "Start when…": a DAG to watch (a new or the current "Watch selected DAGs" trigger). */
+function watchPreset(conn, dag) {
+  return { type: WATCH, dag: { connection_id: conn.id, dag_id: dag.dag_id } }
 }
 
 function databasePreset(conn) {
@@ -187,6 +201,7 @@ function SourceItem({ category, preset, title, children, onAdd }) {
       title={title}
       onDragStart={(e) => {
         e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(preset))
+        if (preset.dag) e.dataTransfer.setData(DAG_DRAG_TYPE, '1')
         e.dataTransfer.effectAllowed = 'move'
       }}
       onClick={() => onAdd(preset)}
@@ -199,7 +214,7 @@ function SourceItem({ category, preset, title, children, onAdd }) {
   )
 }
 
-function PipelineSources({ sources, onAdd }) {
+function PipelineSources({ sources, onAdd, watch = false }) {
   const [query, setQuery] = useState('')
   if (!sources) return <p className="muted small">Loading DAGs…</p>
   if (!sources.airflow.length) {
@@ -244,13 +259,22 @@ function PipelineSources({ sources, onAdd }) {
               {shown.map((dag) => (
                 <SourceItem
                   key={dag.id}
-                  category="pipeline"
-                  preset={dagPreset(conn, dag)}
-                  title={`${dag.dag_id} (${conn.name})\n${dag.description ?? 'Run it (or wait for it) in a workflow'}`}
+                  category={watch ? 'trigger' : 'pipeline'}
+                  preset={watch ? watchPreset(conn, dag) : dagPreset(conn, dag)}
+                  title={
+                    watch
+                      ? `${dag.dag_id} (${conn.name})\nWatch this DAG: drag it onto the canvas or onto the "Watch selected DAGs" block. Each DAG gets its own output.`
+                      : `${dag.dag_id} (${conn.name})\n${dag.description ?? 'Run it (or wait for it) in a workflow'}`
+                  }
                   onAdd={onAdd}
                 >
                   <span className="palette-source-name mono">{dag.dag_id}</span>
                   {dag.is_paused && <span className="palette-tag">paused</span>}
+                  {watch && !dag.is_monitored && (
+                    <span className="palette-tag" title="Monitoring is switched on when the workflow is turned on">
+                      not monitored
+                    </span>
+                  )}
                 </SourceItem>
               ))}
             </div>
@@ -465,9 +489,17 @@ function Palette({ catalog, trigger, sources, onAdd }) {
               return (
                 <div key={category} className="palette-group">
                   {title && groups.length > 1 && <div className="palette-title">{title}</div>}
-                  {Sources && <Sources sources={sources} onAdd={onAdd} />}
+                  {Sources && category !== 'trigger' && <Sources sources={sources} onAdd={onAdd} />}
                   {category === 'trigger' ? (
-                    <TriggerItems items={items} current={trigger} stageId={stage.id} onAdd={onAdd} />
+                    <>
+                      <TriggerItems items={items} current={trigger} stageId={stage.id} onAdd={onAdd} />
+                      {Sources && (
+                        <details className="palette-sub" open={trigger?.type === WATCH}>
+                          <summary className="palette-sub-title">DAGs to watch</summary>
+                          <Sources sources={sources} onAdd={onAdd} watch />
+                        </details>
+                      )}
+                    </>
                   ) : (
                     items.map((def) => (
                       <PaletteItem key={def.type} def={def} stageId={stage.id} trigger={trigger} onAdd={onAdd} />
@@ -485,6 +517,7 @@ function Palette({ catalog, trigger, sources, onAdd }) {
 
 /** The live DAGs / databases / channels shown as ready-made blocks in a palette group. */
 function sourcesFor(stageId, category) {
+  if (stageId === 'when' && category === 'trigger') return PipelineSources
   if (stageId === 'act' && category === 'pipeline') return PipelineSources
   if (stageId === 'act' && category === 'database') return DatabaseSources
   if (stageId === 'notify' && category === 'output') return ChannelSources
@@ -588,6 +621,8 @@ function Editor() {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [selection, setSelection] = useState({ node: null, edge: null })
+  // The "Watch selected DAGs" block a DAG is being dragged over (highlighted).
+  const [dropTarget, setDropTarget] = useState(null)
   const [problems, setProblems] = useState([])
   const [warnings, setWarnings] = useState([])
   const validation = useRef(0)
@@ -606,6 +641,10 @@ function Editor() {
 
   const defs = useMemo(() => Object.fromEntries((catalog ?? []).map((d) => [d.type, d])), [catalog])
   const selectedTemplate = templates.find((template) => template.key === templateKey)
+  const shownNodes = useMemo(
+    () => (dropTarget ? nodes.map((n) => (n.id === dropTarget ? { ...n, data: { ...n.data, dropTarget: true } } : n)) : nodes),
+    [nodes, dropTarget],
+  )
   // An output linked to several blocks shows their run order on each link ("failed · 2").
   const shownEdges = useMemo(() => {
     const order = linkOrder(nodes, edges)
@@ -709,7 +748,7 @@ function Editor() {
       const problem = connectionProblem(connection, nodes, edges)
       if (problem) return toast.error(problem)
       const source = nodes.find((n) => n.id === connection.source)
-      setEdges((current) => connect(connection, current, source && defs[source.data.nodeType]))
+      setEdges((current) => connect(connection, current, source && defs[source.data.nodeType], source?.data.config))
       setDirty(true)
     },
     [nodes, edges, defs, setEdges, toast],
@@ -745,10 +784,10 @@ function Editor() {
     }
   }
 
-  /** `block` is a type, or a palette preset `{type, name, config, idBase}` (a real DAG/database). */
+  /** `block` is a type, or a palette preset `{type, name, config, idBase, dag}` (a real DAG/database). */
   function addBlock(block, position) {
-    const { type, name = '', config = {}, idBase } = typeof block === 'string' ? { type: block } : block
-    if (isTrigger(type) && triggerNode) return replaceTrigger(type)
+    const { type, name = '', config = {}, idBase, dag } = typeof block === 'string' ? { type: block } : block
+    if (isTrigger(type) && triggerNode) return replaceTrigger(type, dag)
     const def = defs[type]
     let at = position
     if (!at) {
@@ -769,14 +808,39 @@ function Editor() {
         data: { nodeType: type, name, config: { ...defaultConfig(def?.config_schema), ...config }, def },
       },
     ])
+    if (type === WATCH && dag) watchDag(nodeId, dag)
     setSelection({ node: nodeId, edge: null })
     setDirty(true)
   }
 
+  /** Add a DAG to a "Watch selected DAGs" block (a new output on it). */
+  function watchDag(nodeId, dag) {
+    const node = nodes.find((n) => n.id === nodeId)
+    if (node && !addWatchedDag(node, dag)) return toast.error(`${dag.dag_id} is already watched`)
+    setNodes((current) => current.map((n) => (n.id === nodeId ? (addWatchedDag(n, dag) ?? n) : n)))
+    setDirty(true)
+  }
+
+  /** The "Watch selected DAGs" block under the pointer, if any. */
+  function watchBlockAt(event) {
+    const el = document.elementFromPoint(event.clientX, event.clientY)?.closest('.react-flow__node')
+    const node = el && nodes.find((n) => n.id === el.dataset.id)
+    return node?.data.nodeType === WATCH ? node : null
+  }
+
+  function onDragOver(event) {
+    event.preventDefault()
+    const target = event.dataTransfer.types.includes(DAG_DRAG_TYPE) ? (watchBlockAt(event)?.id ?? null) : null
+    if (target !== dropTarget) setDropTarget(target)
+  }
+
   function onDrop(event) {
     event.preventDefault()
+    setDropTarget(null)
     const block = parseBlockPayload(event.dataTransfer.getData(DRAG_TYPE))
     if (!block || !canEdit) return
+    const watch = block.dag && watchBlockAt(event)
+    if (watch) return watchDag(watch.id, block.dag)
     addBlock(block, screenToFlowPosition({ x: event.clientX - 110, y: event.clientY - 30 }))
   }
 
@@ -787,11 +851,35 @@ function Editor() {
     setDirty(true)
   }
 
-  /** A workflow has exactly one trigger: switch it in place (same id, position and link). */
-  function replaceTrigger(type) {
+  /**
+   * A workflow has exactly one trigger: switch it in place (same id, position and link).
+   * With `dag` (from "DAGs to watch") the trigger becomes, or stays, "Watch selected DAGs" and
+   * watches that DAG; the old trigger's links move to the DAG's output.
+   */
+  function replaceTrigger(type, dag) {
     const def = defs[type]
-    if (!def || type === triggerNode.data.nodeType) return
-    changeType(triggerNode, type)
+    if (!def) return
+    if (type === triggerNode.data.nodeType) {
+      if (type === WATCH && dag) watchDag(triggerNode.id, dag)
+      return
+    }
+    if (type === WATCH && dag) {
+      const config = { ...defaultConfig(def.config_schema), dags: [] }
+      const watched = addWatchedDag({ ...triggerNode, data: { ...triggerNode.data, config } }, dag)
+      const port = watched.data.config.dags[0].key
+      setNodes((current) =>
+        current.map((n) => (n.id === triggerNode.id ? { ...n, data: { ...watched.data, nodeType: type, def } } : n)),
+      )
+      setEdges((current) => {
+        const moved = current.map((e) =>
+          e.source === triggerNode.id ? newEdge({ source: e.source, sourceHandle: port, target: e.target }, def, watched.data.config) : e,
+        )
+        return moved.filter((e, i) => moved.findIndex((o) => o.id === e.id) === i)
+      })
+      setDirty(true)
+    } else {
+      changeType(triggerNode, type)
+    }
     const blocked = nodes
       .filter((n) => !isTrigger(n.data.nodeType) && defs[n.data.nodeType])
       .map((n) => ({ node: n, why: triggerMismatch(defs[n.data.nodeType], def) }))
@@ -807,6 +895,11 @@ function Editor() {
 
   function updateNodeData(nodeId, patch) {
     setNodes((current) => current.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)))
+    // Blocks whose outputs follow their settings (watched DAGs): drop links from removed outputs.
+    const node = nodes.find((n) => n.id === nodeId)
+    if (patch.config && node?.data.def?.dynamic_ports) {
+      setEdges((current) => prunePortEdges({ ...node, data: { ...node.data, ...patch } }, current))
+    }
     setDirty(true)
   }
 
@@ -1134,9 +1227,15 @@ function Editor() {
             onAdd={(block) => addBlock(block)}
           />}
 
-        <div className="editor-canvas" ref={wrapper} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+        <div
+          className="editor-canvas"
+          ref={wrapper}
+          onDragOver={onDragOver}
+          onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget) && setDropTarget(null)}
+          onDrop={onDrop}
+        >
           <ReactFlow
-            nodes={nodes}
+            nodes={shownNodes}
             edges={shownEdges}
             nodeTypes={NODE_TYPES}
             onNodesChange={handleNodesChange}

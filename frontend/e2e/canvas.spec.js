@@ -44,7 +44,7 @@ test('workflow editor: build, save, reload, validate', async ({ page }) => {
   await expect(node(page, 'trigger')).toBeVisible()
 
   // Monitoring first: a new workflow starts from an incident, so the incident blocks are usable.
-  await expect(node(page, 'trigger')).toContainText('When an incident opens')
+  await expect(node(page, 'trigger')).toContainText('When any DAG has an incident')
   await expect(page.getByRole('button', { name: 'Retry failed tasks' })).toBeEnabled()
 
   // Drag "Send a notification" from the palette onto the canvas.
@@ -198,11 +198,11 @@ test('orchestration: drag a real DAG from the palette and run it now', async ({ 
 
   // The palette lists the actual DAGs of the live connection next to the generic "Run a DAG" block.
   const palette = page.locator('.editor-palette')
-  const account = palette.locator('.palette-account', { hasText: 'mock-dev' })
+  const account = palette.locator('.palette-stage.stage-act .palette-account', { hasText: 'mock-dev' })
   await expect(account.locator('.palette-account-head')).toContainText('DEV')
   await expect(account.getByRole('button', { name: 'daily_customer_etl', exact: true })).toBeVisible()
   await expect(palette.getByRole('button', { name: 'Run a DAG', exact: true })).toHaveCount(1)
-  const dagItem = palette.getByRole('button', { name: 'daily_customer_etl', exact: true })
+  const dagItem = account.getByRole('button', { name: 'daily_customer_etl', exact: true })
   await dagItem.dragTo(page.locator('.editor-canvas'), { targetPosition: { x: 470, y: 80 } })
 
   const block = node(page, 'daily_customer_etl_1')
@@ -355,4 +355,85 @@ test('workflow assistant: propose, apply and undo (model mocked)', async ({ page
   await panel.getByRole('button', { name: 'Undo apply' }).click()
   await expect(node(page, 'tell')).toHaveCount(0)
   await expect(node(page, 'trigger')).toBeVisible()
+})
+
+test('watch selected DAGs: drop DAGs on the trigger, one output each', async ({ page }) => {
+  await page.goto('/automation/workflows/new')
+  const palette = page.locator('.editor-palette')
+  const canvas = page.locator('.editor-canvas')
+  await palette.locator('.palette-sub-title', { hasText: 'DAGs to watch' }).click()
+  const watchList = palette.locator('.palette-stage.stage-when')
+
+  // A DAG dropped on the canvas turns the trigger into "Watch selected DAGs" with that DAG.
+  await watchList.getByRole('button', { name: 'orders_pipeline', exact: true }).dragTo(canvas, { targetPosition: { x: 600, y: 300 } })
+  const trigger = node(page, 'trigger')
+  await expect(trigger).toContainText('Watch selected DAGs')
+  await expect(trigger.locator('.block-port-label')).toHaveText(['orders_pipeline'])
+
+  // A second DAG dropped onto the block adds a second output (it is not monitored yet).
+  await watchList.getByRole('button', { name: /^daily_customer_etl/ }).dragTo(trigger)
+  await expect(trigger.locator('.block-port-label')).toHaveText(['orders_pipeline', 'daily_customer_etl'])
+
+  // Different steps per DAG.
+  await page.getByRole('button', { name: 'Send a notification' }).dragTo(canvas, { targetPosition: { x: 200, y: 120 } })
+  await page.getByRole('button', { name: 'Send a notification' }).dragTo(canvas, { targetPosition: { x: 200, y: 520 } })
+  await dragBetween(
+    page,
+    page.locator('.react-flow__handle[data-nodeid="trigger"][data-handleid="orders_pipeline"]'),
+    page.locator('.react-flow__handle.target[data-nodeid="notify_1"]'),
+  )
+  await dragBetween(
+    page,
+    page.locator('.react-flow__handle[data-nodeid="trigger"][data-handleid="daily_customer_etl"]'),
+    page.locator('.react-flow__handle.target[data-nodeid="notify_2"]'),
+  )
+  await expect(page.getByTestId('rf__edge-trigger:orders_pipeline->notify_1')).toBeAttached()
+  await expect(page.getByTestId('rf__edge-trigger:daily_customer_etl->notify_2')).toBeAttached()
+  await page.screenshot({ path: `${SHOTS}/watch-dags.png` })
+
+  await page.getByLabel('Workflow name').fill('E2E watch')
+  await page.getByRole('button', { name: 'Create workflow' }).click()
+  await expect(page).toHaveURL(/\/automation\/workflows\/[0-9a-f-]{36}$/)
+
+  // Turning it on switches monitoring on for the watched DAGs.
+  await page.goto('/automation/workflows')
+  await page.getByLabel('Enable E2E watch').click({ force: true })
+  await expect(page.getByText('“E2E watch” is on')).toBeVisible()
+})
+
+test('delete runs from the run page and from the list', async ({ page }) => {
+  // A "Run now" workflow with one notification; each run finishes at once.
+  await page.goto('/automation/workflows/new')
+  await startByHand(page)
+  await page.getByRole('button', { name: 'Send a notification' }).dragTo(page.locator('.editor-canvas'), {
+    targetPosition: { x: 470, y: 80 },
+  })
+  await dragBetween(
+    page,
+    page.locator('.react-flow__handle[data-nodeid="trigger"][data-handleid="next"]'),
+    page.locator('.react-flow__handle.target[data-nodeid="notify_1"]'),
+  )
+  await page.getByLabel('Workflow name').fill('E2E delete runs')
+  await page.getByRole('button', { name: 'Create workflow' }).click()
+  await expect(page).toHaveURL(/\/automation\/workflows\/[0-9a-f-]{36}$/)
+  const editorUrl = page.url()
+  for (let i = 0; i < 2; i += 1) {
+    await page.goto(editorUrl)
+    await page.getByRole('button', { name: /Run now/ }).click()
+    await expect(page).toHaveURL(/\/automation\/runs\/[0-9a-f-]{36}$/)
+  }
+
+  // From the run page.
+  page.once('dialog', (dialog) => dialog.accept())
+  await page.getByRole('button', { name: 'Delete run' }).click()
+  await expect(page).toHaveURL(/\/automation\/runs$/)
+  await expect(page.getByText('Run deleted')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'E2E delete runs' })).toHaveCount(1)
+
+  // From the list: tick the remaining run and delete it.
+  await page.getByRole('checkbox', { name: 'Select run of E2E delete runs' }).check()
+  page.once('dialog', (dialog) => dialog.accept())
+  await page.getByRole('button', { name: 'Delete selected (1)' }).click()
+  await expect(page.getByText('Deleted 1 run')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'E2E delete runs' })).toHaveCount(0)
 })
