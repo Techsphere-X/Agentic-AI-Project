@@ -1201,63 +1201,108 @@
   margin-left: 0.5rem;
 }
 
-/* "Watch selected DAGs": highlighted while a DAG is dragged over it; one output per DAG. */
-.block-drop-target {
-  outline: 2px dashed var(--accent);
-  outline-offset: 3px;
+/* "Start when…": the real DAGs listed under "When this DAG runs". */
+.palette-dag-list {
+  margin: 2px 0 6px 10px;
+}
+
+.also-used-by {
+  margin: 0 0 6px;
+}
+
+/* "How should this workflow start?" */
+.start-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.start-choice,
+.start-dag {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface, transparent);
+  color: inherit;
+  cursor: pointer;
+}
+
+.start-choice:hover,
+.start-dag:hover {
+  border-color: var(--accent);
   background: var(--accent-soft);
 }
 
-.block-drop-hint {
-  margin: 6px 10px 10px;
-  padding: 8px;
-  border: 1px dashed var(--border);
-  border-radius: 6px;
-  font-size: 12px;
-  text-align: center;
-  color: var(--text-muted, #6b7280);
-}
-
-.dag-list {
+.start-dags {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.dag-chips {
+.start-dag-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  max-height: 50vh;
+  overflow: auto;
+}
+
+.start-dag {
+  padding: 8px 10px;
+}
+
+/* Switch cases and block run settings in the settings popover. */
+.cases-input {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  gap: 6px;
 }
 
-.dag-chip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-
-.dag-chip .muted {
-  margin-left: auto;
-}
-
-.dag-chip-remove {
-  border: none;
-  background: none;
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  color: inherit;
-}
-
-.dag-list-add {
+.case-row {
   display: grid;
   grid-template-columns: 1fr 1fr auto;
   gap: 6px;
   align-items: center;
+}
+
+.run-settings {
+  margin: 4px 0 8px;
+}
+
+.run-settings summary {
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+
+.webhook-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.cron-next {
+  display: block;
+}
+
+.test-block {
+  margin: 4px 0 8px;
+}
+
+.test-block summary {
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+
+.test-block .code-input {
+  width: 100%;
+  margin-bottom: 6px;
+}
+
+.test-result {
+  margin-top: 6px;
 }

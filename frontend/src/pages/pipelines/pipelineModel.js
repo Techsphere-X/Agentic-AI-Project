@@ -47,17 +47,13 @@ export function workflowFeeds(workflow) {
   const trigger = workflow.graph.nodes.find((n) => n.type.startsWith('trigger.'))
   if (!trigger) return null
   if (trigger.type === 'trigger.incident_stale') return { stale: true, types: null, dagIds: null, envs: null }
-  if (trigger.type === 'trigger.dag_run') {
-    const dagIds = trigger.config?.dag_ids?.length ? new Set(trigger.config.dag_ids) : null
+  if (trigger.type === 'trigger.dag') {
+    // "When this DAG runs": fed by its one DAG directly.
+    const dagIds = trigger.config?.dag_id ? new Set([trigger.config.dag_id]) : new Set()
     return { stale: false, dagRun: true, types: null, dagIds, envs: null }
   }
 
   const types = trigger.config?.incident_types?.length ? new Set(trigger.config.incident_types) : null
-  if (trigger.type === 'trigger.dag_watch') {
-    // Only the watched DAGs feed it; each has its own branch, so no filter walk.
-    const dagIds = new Set((trigger.config?.dags ?? []).map((d) => d.dag_id))
-    return { stale: false, types, dagIds, envs: null }
-  }
   let dagIds = null
   let envs = null
   let current = edges[`${trigger.id}:next`]

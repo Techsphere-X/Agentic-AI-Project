@@ -213,6 +213,24 @@ def _monitor_dags(db: Session, actor: User, conn: AirflowConnection, report: See
     report.add(f"Monitoring {sum(1 for d in MONITORED_DAGS if d in dags)} DAG(s)")
 
 
+def ensure_dag(
+    db: Session, conn: AirflowConnection, dag_id: str, report: SeedReport
+) -> MonitoredDag:
+    """The DAG's row, registered (not yet seen in Airflow) when a sync has not found it, so a
+    'When this DAG runs' workflow can be turned on for it; the next sync fills it in."""
+    dag = db.scalar(
+        select(MonitoredDag).where(
+            MonitoredDag.connection_id == conn.id, MonitoredDag.dag_id == dag_id
+        )
+    )
+    if dag is None:
+        dag = MonitoredDag(connection_id=conn.id, dag_id=dag_id, is_present=False)
+        db.add(dag)
+        db.commit()
+        report.add(f"DAG {dag_id} registered (not synced from Airflow yet)")
+    return dag
+
+
 # ---------------------------------------------------------------------- workflows
 
 
@@ -390,11 +408,13 @@ def _workflows(
     actor: User,
     report: SeedReport,
     *,
+    airflow: AirflowConnection,
     source: DatabaseConnection,
     warehouse: DatabaseConnection,
     slack: NotificationChannel | None,
 ) -> None:
     send_via = str(slack.id) if slack else ""
+    ensure_dag(db, airflow, ETL_DAG, report)
     _save_workflow(
         db,
         actor,
@@ -415,6 +435,7 @@ def _workflows(
     )
 
     validate_params = {
+        "airflow_connection_id": str(airflow.id),
         "dag_id": ETL_DAG,
         "database_connection_id": str(warehouse.id),
         "sql": "SELECT count(*) FROM warehouse.fact_orders",
@@ -472,7 +493,9 @@ def seed(db: Session, cfg: DemoConfig) -> SeedReport:
     source = _database(db, actor, cfg, SOURCE_DB_NAME, cfg.source_db, report)
     warehouse = _database(db, actor, cfg, WAREHOUSE_DB_NAME, cfg.warehouse_db, report)
     slack = _slack(db, actor, cfg, report)
-    _workflows(db, actor, report, source=source, warehouse=warehouse, slack=slack)
+    _workflows(
+        db, actor, report, airflow=airflow, source=source, warehouse=warehouse, slack=slack
+    )
     return report
 
 

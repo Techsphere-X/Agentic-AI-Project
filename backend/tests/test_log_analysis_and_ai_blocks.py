@@ -33,14 +33,14 @@ def test_catalog_entries() -> None:
     assert analyze_entry["label"] == "Fetch task logs"
     assert analyze_entry["category"] == "diagnosis"
     assert analyze_entry["ports"] == ["analyzed", "no_logs"]
-    assert analyze_entry["needs_incident"] is True
+    assert analyze_entry["needs_target"] is True
     assert "max_log_lines" in analyze_entry["config_schema"]["properties"]
 
     ai_entry = cat["ai.generate_fix"]
     assert ai_entry["label"] == "Suggest a fix (AI)"
     assert ai_entry["category"] == "diagnosis"
     assert ai_entry["ports"] == ["solution_ready", "uncertain"]
-    assert ai_entry["needs_incident"] is True
+    assert ai_entry["needs_target"] is True
     assert "min_confidence_pct" in ai_entry["config_schema"]["properties"]
 
 

@@ -152,7 +152,7 @@ erDiagram
         int workflow_version
         json graph "snapshot"
         uuid incident_id FK "nullable"
-        string trigger_event "opened | recurred | stale | manual"
+        string trigger_event "opened | recurred | stale | manual | schedule | dag_run"
         string dedup_key "UNIQUE(workflow_id, dedup_key)"
         enum status "PENDING | RUNNING | WAITING | COMPLETED | FAILED | CANCELLED"
         boolean dry_run
@@ -226,7 +226,9 @@ Each node is `{id, type, name?, config}`. Each edge is `{from, port, to}`. Valid
 | Type | Config | Output ports | What it does |
 |---|---|---|---|
 | `trigger.incident` | `events` (`opened`/`recurred`), `incident_types` | `next` | Starts a run when detection opens or re-records an incident. |
-| `trigger.incident_stale` | `minutes` (5–10080) | `next` | Starts a run when an incident stays `OPEN` (unacknowledged) longer than `minutes`. |
+| `trigger.incident_stale` | `minutes` (5–10080) | `next` | Starts a run when an incident stays `OPEN` (unacknowledged) longer than `minutes`; again after each recurrence. |
+| `trigger.dag` *(Plan 5)* | `connection_id`, `dag_id`, `states` | `in_progress` / `success` / `failed` | "When this DAG runs": each event of the DAG's runs starts its own run. Starting on `failed` means the workflow owns the DAG's failures (no automatic failure incident). Replaced `trigger.dag_run` and `trigger.dag_watch`. |
+| `trigger.manual` / `trigger.schedule` | – / `every_minutes` | `next` | "Run now", or every N minutes while on. |
 | `condition.filter` | `environments`, `incident_types`, `min_severity`, `dag_ids`, `tags_any`, `min_occurrences`, `max_occurrences`, `diagnosis_categories` | `true` / `false` | All set criteria must match. |
 | `diagnose.classify_log` | – | `next` | Runs the log classifier; stores `context.diagnosis`; adds a `diagnosed` incident event. |
 | `check.dag_state` | – | `ready` / `paused` / `busy` | Asks Airflow whether the DAG is paused or already has a queued/running run. |

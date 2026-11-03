@@ -30,13 +30,17 @@ def test_catalog_includes_sla_block():
 def test_graph_validation_sla_block():
     graph = {
         "nodes": [
-            {"id": "t", "type": "trigger.dag_run", "config": {}},
+            {
+                "id": "t",
+                "type": "trigger.dag",
+                "config": {"connection_id": "c1", "dag_id": "etl"},
+            },
             {"id": "s", "type": "check.sla", "config": {"margin_pct": 25, "sample_size": 5}},
             {"id": "n1", "type": "notify", "config": {"title": "Exceeded"}},
             {"id": "n2", "type": "notify", "config": {"title": "Normal"}},
         ],
         "edges": [
-            {"from": "t", "port": "next", "to": "s"},
+            {"from": "t", "port": "success", "to": "s"},
             {"from": "s", "port": "exceeded", "to": "n1"},
             {"from": "s", "port": "met", "to": "n2"},
         ],
@@ -51,10 +55,14 @@ def test_graph_validation_sla_block():
 def test_graph_validation_invalid_margin():
     graph = {
         "nodes": [
-            {"id": "t", "type": "trigger.dag_run", "config": {}},
+            {
+                "id": "t",
+                "type": "trigger.dag",
+                "config": {"connection_id": "c1", "dag_id": "etl"},
+            },
             {"id": "s", "type": "check.sla", "config": {"margin_pct": 999}},
         ],
-        "edges": [{"from": "t", "port": "next", "to": "s"}],
+        "edges": [{"from": "t", "port": "success", "to": "s"}],
     }
     with pytest.raises(GraphError):
         validate_graph(graph)
@@ -65,7 +73,9 @@ class CustomMockAdapter(MockAirflowAdapter):
         super().__init__(AdapterConfig(base_url="http://mock-airflow"), simulate_latency=False)
         self._runs = runs
 
-    async def list_dag_runs(self, dag_id: str, *, since: datetime | None = None, limit: int = 100) -> list[AirflowDagRun]:
+    async def list_dag_runs(
+        self, dag_id: str, *, since: datetime | None = None, limit: int = 100
+    ) -> list[AirflowDagRun]:
         return self._runs
 
     async def get_dag_run(self, dag_id: str, run_id: str) -> AirflowDagRun | None:
@@ -111,6 +121,7 @@ def test_sla_block_execution_exceeded(db: Session, admin: User, monkeypatch: pyt
 
     custom_adapter = CustomMockAdapter(history)
     from app.services import airflow_service
+
     monkeypatch.setattr(airflow_service, "adapter_for", lambda c: custom_adapter)
 
     graph = {
@@ -215,6 +226,7 @@ def test_sla_block_execution_met(db: Session, admin: User, monkeypatch: pytest.M
 
     custom_adapter = CustomMockAdapter(history)
     from app.services import airflow_service
+
     monkeypatch.setattr(airflow_service, "adapter_for", lambda c: custom_adapter)
 
     graph = {
@@ -233,12 +245,22 @@ def test_sla_block_execution_met(db: Session, admin: User, monkeypatch: pytest.M
             {
                 "id": "notify_exceeded",
                 "type": "notify",
-                "config": {"channel": "in_app", "level": "WARNING", "title": "Exceeded", "message": "bad"},
+                "config": {
+                    "channel": "in_app",
+                    "level": "WARNING",
+                    "title": "Exceeded",
+                    "message": "bad",
+                },
             },
             {
                 "id": "notify_met",
                 "type": "notify",
-                "config": {"channel": "in_app", "level": "INFO", "title": "SLA Normal on {{sla.dag_id}}", "message": "All good"},
+                "config": {
+                    "channel": "in_app",
+                    "level": "INFO",
+                    "title": "SLA Normal on {{sla.dag_id}}",
+                    "message": "All good",
+                },
             },
         ],
         "edges": [
@@ -270,7 +292,9 @@ def test_sla_block_execution_met(db: Session, admin: User, monkeypatch: pytest.M
     assert "SLA Normal on orders_pipeline" in notifs[0].title
 
 
-def test_in_flight_sla_detection_exceeded(db: Session, admin: User, monkeypatch: pytest.MonkeyPatch):
+def test_in_flight_sla_detection_exceeded(
+    db: Session, admin: User, monkeypatch: pytest.MonkeyPatch
+):
     conn, dags = make_env(db, DeploymentEnvironment.DEV, "orders_pipeline")
     conn.is_default = True
     db.commit()
@@ -309,6 +333,7 @@ def test_in_flight_sla_detection_exceeded(db: Session, admin: User, monkeypatch:
 
     custom_adapter = CustomMockAdapter(history)
     from app.services import airflow_service
+
     monkeypatch.setattr(airflow_service, "adapter_for", lambda c: custom_adapter)
 
     graph = {
@@ -338,7 +363,12 @@ def test_in_flight_sla_detection_exceeded(db: Session, admin: User, monkeypatch:
             {
                 "id": "notify_met",
                 "type": "notify",
-                "config": {"channel": "in_app", "level": "INFO", "title": "Normal", "message": "Normal"},
+                "config": {
+                    "channel": "in_app",
+                    "level": "INFO",
+                    "title": "Normal",
+                    "message": "Normal",
+                },
             },
         ],
         "edges": [
@@ -374,7 +404,9 @@ def test_in_flight_sla_detection_exceeded(db: Session, admin: User, monkeypatch:
     assert "in-flight run 'run_in_flight_long' has been running for 25.0 min" in notifs[0].body
 
 
-def test_in_flight_sla_detection_idle_dag_no_false_alarm(db: Session, admin: User, monkeypatch: pytest.MonkeyPatch):
+def test_in_flight_sla_detection_idle_dag_no_false_alarm(
+    db: Session, admin: User, monkeypatch: pytest.MonkeyPatch
+):
     conn, dags = make_env(db, DeploymentEnvironment.DEV, "orders_pipeline")
     conn.is_default = True
     db.commit()
@@ -399,6 +431,7 @@ def test_in_flight_sla_detection_idle_dag_no_false_alarm(db: Session, admin: Use
 
     custom_adapter = CustomMockAdapter(history)
     from app.services import airflow_service
+
     monkeypatch.setattr(airflow_service, "adapter_for", lambda c: custom_adapter)
 
     graph = {
@@ -418,12 +451,22 @@ def test_in_flight_sla_detection_idle_dag_no_false_alarm(db: Session, admin: Use
             {
                 "id": "notify_exceeded",
                 "type": "notify",
-                "config": {"channel": "in_app", "level": "WARNING", "title": "Breach", "message": "bad"},
+                "config": {
+                    "channel": "in_app",
+                    "level": "WARNING",
+                    "title": "Breach",
+                    "message": "bad",
+                },
             },
             {
                 "id": "notify_met",
                 "type": "notify",
-                "config": {"channel": "in_app", "level": "INFO", "title": "Idle / Within SLA", "message": "all good"},
+                "config": {
+                    "channel": "in_app",
+                    "level": "INFO",
+                    "title": "Idle / Within SLA",
+                    "message": "all good",
+                },
             },
         ],
         "edges": [
@@ -458,9 +501,9 @@ def test_in_flight_sla_detection_idle_dag_no_false_alarm(db: Session, admin: Use
 
 def test_in_flight_template_validation():
     from app.automation.templates import IN_FLIGHT_SLA_TEMPLATE
+
     validated = validate_graph(IN_FLIGHT_SLA_TEMPLATE.graph)
     assert validated.trigger.type == "trigger.schedule"
     assert validated.nodes["sla_check"].type == "check.sla"
     assert validated.nodes["sla_check"].config["only_in_flight"] is True
     assert validated.next_nodes("sla_check", "exceeded") == ["notify_sla"]
-

@@ -10,20 +10,19 @@ import {
   workflowFeeds,
 } from '../../pages/pipelines/pipelineModel'
 import {
-  addWatchedDag,
   connect,
   connectionProblem,
-  dagKey,
   defaultConfig,
   fromFlow,
   linkOrder,
   nextNodeId,
   parseBlockPayload,
+  hasRunSettings,
   portLabel,
-  portName,
-  portTone,
   portsOf,
   prunePortEdges,
+  portTone,
+  retargetTriggerEdges,
   retypeNode,
   toFlow,
 } from './graph'
@@ -143,14 +142,14 @@ test('database reconciliation block exposes its result branches', () => {
   )
 })
 
-test('DAG run trigger exposes ordered normalized state labels', () => {
+test('"When this DAG runs" names its DAG and the events it starts on', () => {
   assert.equal(
-    describeConfig('trigger.dag_run', {
-      states: ['success', 'in_progress', 'failed'],
-      dag_ids: ['agentic_reconciliation_pipeline'],
-    }),
-    'on Succeeded / In progress / Failed · agentic_reconciliation_pipeline',
+    describeConfig('trigger.dag', { dag_id: 'orders', states: ['in_progress', 'success', 'failed'] }),
+    'orders · on In progress / Succeeded / Failed',
   )
+  assert.equal(describeConfig('trigger.dag', { states: ['failed'] }), 'choose a DAG · on Failed')
+  assert.equal(NODE_LABELS['trigger.dag'], 'When this DAG runs')
+  assert.equal(describeConfig('incident.open', { severity: 'CRITICAL' }), 'DAG run failed · critical')
 })
 
 test('Run a DAG exposes succeeded, in progress, and failed outputs', () => {
@@ -236,23 +235,22 @@ test('pipeline diagram wires connection → DAG → monitors → workflows', () 
   assert.ok(edges.some((e) => e.source === 'conn:c1' && e.target === 'dag:d1'))
 })
 
-test('"When a DAG run finishes" workflows are fed by the DAGs they name', () => {
-  const runGraph = (dagIds) => ({
-    nodes: [{ id: 't', type: 'trigger.dag_run', config: { states: ['success'], dag_ids: dagIds } }],
+test('"When this DAG runs" workflows are fed by their one DAG', () => {
+  const runGraph = (dagId) => ({
+    nodes: [{ id: 't', type: 'trigger.dag', config: { connection_id: 'c1', dag_id: dagId, states: ['success'] } }],
     edges: [],
   })
-  const named = workflowFeeds({ graph: runGraph(['orders']) })
+  const named = workflowFeeds({ graph: runGraph('orders') })
   assert.equal(named.dagRun, true)
   assert.deepEqual([...named.dagIds], ['orders'])
-  assert.equal(workflowFeeds({ graph: runGraph([]) }).dagIds, null)
 
   const conn = { id: 'c1', name: 'dev', environment: 'DEV', is_active: true, is_live: true }
   const { nodes, edges } = buildPipeline({
     connections: [conn],
     dagsByConnection: { c1: [dag(), dag({ id: 'd2', dag_id: 'other' })] },
     workflows: [
-      { id: 'w1', name: 'Validate orders', mode: 'LIVE', graph: runGraph(['orders']) },
-      { id: 'w2', name: 'Validate all', mode: 'LIVE', graph: runGraph([]) },
+      { id: 'w1', name: 'Validate orders', mode: 'LIVE', graph: runGraph('orders') },
+      { id: 'w2', name: 'Validate other', mode: 'LIVE', graph: runGraph('other') },
     ],
     counts: {},
     checks: { 'c1:orders': { status: 'FAILED', run_id: 'r1' } },
@@ -262,7 +260,7 @@ test('"When a DAG run finishes" workflows are fed by the DAGs they name', () => 
   })
   const sources = (wf) => edges.filter((e) => e.target === wf).map((e) => e.source).sort()
   assert.deepEqual(sources('wf:w1'), ['dag:d1'])
-  assert.deepEqual(sources('wf:w2'), ['dag:d1', 'dag:d2'])
+  assert.deepEqual(sources('wf:w2'), ['dag:d2'])
   assert.equal(nodes.find((n) => n.id === 'dag:d1').data.lastCheck.status, 'FAILED')
   assert.equal(nodes.find((n) => n.id === 'dag:d2').data.lastCheck, null)
 })
@@ -397,58 +395,60 @@ test('blocks are grouped into stages in run order', () => {
   assert.equal(nodeIcon('check.dag_state'), '⋔')
 })
 
-// ---------------------------------------------------------------- "Watch selected DAGs"
+// ---------------------------------------------------------------- switching triggers
 
-const watchDef = { type: 'trigger.dag_watch', category: 'trigger', ports: [], dynamic_ports: 'dags', port_labels: {} }
-const watchNode = (dags) => ({ id: 'start', data: { nodeType: 'trigger.dag_watch', def: watchDef, config: { dags } } })
-
-test('a watch block has one output per watched DAG', () => {
-  const dags = [
-    { key: 'orders', connection_id: 'c1', dag_id: 'orders' },
-    { key: 'orders_2', connection_id: 'c2', dag_id: 'orders' },
-    { key: 'billing', connection_id: 'c1', dag_id: 'billing' },
-  ]
-  assert.deepEqual(portsOf(watchDef, { dags }), ['orders', 'orders_2', 'billing'])
-  assert.equal(portName(watchDef, 'billing', { dags }), 'billing')
-  assert.equal(portName(watchDef, 'orders_2', { dags }), 'orders (2)') // same id on two connections
-  assert.equal(portLabel(watchDef, 'billing', { dags: [dags[2]] }), 'billing') // even a single output is labelled
-  assert.equal(portTone(watchDef, 'billing'), 'neutral')
-  assert.deepEqual(portsOf({ ports: ['true', 'false'] }, {}), ['true', 'false'])
-})
-
-test('dropping DAGs on a watch block adds outputs; removing one drops its links', () => {
-  assert.equal(dagKey('my.dag', new Set()), 'my_dag')
-  assert.equal(dagKey('my.dag', new Set(['my_dag'])), 'my_dag_2')
-
-  let node = addWatchedDag(watchNode([]), { connection_id: 'c1', dag_id: 'orders' })
-  node = addWatchedDag(node, { connection_id: 'c1', dag_id: 'billing' })
-  assert.deepEqual(node.data.config.dags.map((d) => d.key), ['orders', 'billing'])
-  assert.equal(addWatchedDag(node, { connection_id: 'c1', dag_id: 'orders' }), null) // already watched
-
+test('switching the trigger moves links to the outputs the new trigger has', () => {
+  const dagDef = { type: 'trigger.dag', ports: ['in_progress', 'success', 'failed'], port_labels: {} }
+  const incidentDef = { type: 'trigger.incident', ports: ['next'], port_labels: {} }
   const edges = [
-    { id: 'a', source: 'start', sourceHandle: 'orders', target: 'x' },
-    { id: 'b', source: 'start', sourceHandle: 'billing', target: 'y' },
-    { id: 'c', source: 'x', sourceHandle: 'next', target: 'y' },
+    { id: 't:next->a', source: 't', sourceHandle: 'next', target: 'a' },
+    { id: 'a:next->b', source: 'a', sourceHandle: 'next', target: 'b' },
   ]
-  // Removing a DAG in the settings: the links from its output go too.
-  const without = { ...node, data: { ...node.data, config: { dags: node.data.config.dags.slice(1) } } }
-  assert.deepEqual(prunePortEdges(without, edges).map((e) => e.id), ['b', 'c'])
+  // Incident ('then') -> one DAG: incident workflows react to failures.
+  const toDag = retargetTriggerEdges(edges, 't', dagDef, {})
+  assert.deepEqual(toDag.map((e) => e.id), ['t:failed->a', 'a:next->b'])
+  // And back: every DAG output becomes 'then' (one link).
+  const both = [...toDag, { id: 't:success->a', source: 't', sourceHandle: 'success', target: 'a' }]
+  assert.deepEqual(retargetTriggerEdges(both, 't', incidentDef, {}).map((e) => e.id), ['t:next->a', 'a:next->b'])
 })
 
-test('a watch workflow is fed only by its watched DAGs', () => {
+// ---------------------------------------------------------------- Phase B: logic blocks
+
+test('Switch has an output per case plus otherwise; run settings can add an error output', () => {
+  const switchDef = { type: 'logic.switch', ports: [], dynamic_ports: 'cases', port_labels: {} }
+  const config = { value: '{{vars.env}}', cases: [{ key: 'case_1', label: 'Prod', equals: 'PROD' }, { key: 'case_2', equals: 'DEV' }] }
+  assert.deepEqual(portsOf(switchDef, config), ['case_1', 'case_2', 'otherwise'])
+  assert.equal(portLabel(switchDef, 'case_1', config), 'Prod')
+  assert.equal(portLabel(switchDef, 'case_2', config), 'DEV')
+  assert.equal(portTone(switchDef, 'otherwise'), 'neutral')
+
+  const runDag = { ports: ['success', 'in_progress', 'failed'] }
+  assert.deepEqual(portsOf(runDag, {}, { on_error: 'output' }), ['success', 'in_progress', 'failed', 'error'])
+  assert.equal(portTone(runDag, 'error'), 'bad')
+
+  // Removing a case or the error output drops the links from it.
+  const node = { id: 'sw', data: { def: switchDef, config: { cases: [config.cases[1]] } } }
+  const edges = [
+    { id: 'a', source: 'sw', sourceHandle: 'case_1', target: 'x' },
+    { id: 'b', source: 'sw', sourceHandle: 'otherwise', target: 'y' },
+  ]
+  assert.deepEqual(prunePortEdges(node, edges).map((e) => e.id), ['b'])
+})
+
+test('run settings are saved only when they differ from the defaults', () => {
+  assert.equal(hasRunSettings(undefined), false)
+  assert.equal(hasRunSettings({ retries: 0, retry_delay_seconds: 60, on_error: 'fail' }), false)
+  assert.equal(hasRunSettings({ retries: 2 }), true)
   const graph = {
     nodes: [
-      {
-        id: 'start',
-        type: 'trigger.dag_watch',
-        config: { dags: [{ key: 'orders', connection_id: 'c1', dag_id: 'orders' }], incident_types: ['DAG_RUN_FAILED'] },
-      },
+      { id: 't', type: 'trigger.manual', config: {}, position: { x: 0, y: 0 } },
+      { id: 'n', type: 'notify', config: {}, position: { x: 200, y: 0 }, settings: { retries: 1, on_error: 'output' } },
+      { id: 'm', type: 'notify', config: {}, position: { x: 400, y: 0 }, settings: { retries: 0 } },
     ],
     edges: [],
   }
-  const feeds = workflowFeeds({ graph })
-  assert.deepEqual([...feeds.dagIds], ['orders'])
-  assert.deepEqual([...feeds.types], ['DAG_RUN_FAILED'])
-  assert.equal(describeConfig('trigger.dag_watch', { dags: graph.nodes[0].config.dags, events: ['opened'] }), 'watching orders · on opened')
-  assert.equal(NODE_LABELS['trigger.dag_watch'], 'Watch selected DAGs')
+  const { nodes, edges } = toFlow(graph)
+  const back = fromFlow(nodes, edges)
+  assert.deepEqual(back.nodes.find((n) => n.id === 'n').settings, { retries: 1, on_error: 'output' })
+  assert.equal(back.nodes.find((n) => n.id === 'm').settings, undefined)
 })

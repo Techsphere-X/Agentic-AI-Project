@@ -2,11 +2,11 @@
 
 ## Project Goal
 
-Build an AI-powered operations platform for monitoring data pipelines and automatically helping recover from failures and data-quality incidents.
+Build a **visual workflow builder for data engineers**: draw automations on a canvas where a trigger starts the workflow, blocks do the work (Airflow, SQL, data checks, HTTP, messages) and each block's outputs decide what happens next. It is like n8n or Zapier, but for data pipelines, with approvals, dry runs and an audit trail built in. See `plan5.md`.
 
-The platform should monitor Airflow and other data workflows, detect operational and data-quality problems, investigate likely root causes, recommend or execute safe remediation, and verify the result.
+Monitoring Airflow, detecting failures and data-quality problems, and diagnosing their cause remain core features. They feed the builder as triggers (an incident, a finished DAG run, watched DAGs) and as blocks (classify, retry, verify). Recovering from incidents is one important use case, not the whole product.
 
-This is not only a CRUD application or a generic chatbot. It is an incident detection, diagnosis, approval, execution, and verification system for data-platform operations.
+This is not a CRUD application, a generic chatbot or an autonomous agent. Engineers design the flows. The engine runs them safely, with policy checks, approvals and verification.
 
 ## Core Workflow
 
@@ -107,4 +107,6 @@ Every new feature should answer:
 - Plan 2 (`plan2.md`): automation workflows. Deterministic log diagnosis; workflows stored as a graph of typed nodes (trigger, filter, classify, approval, Airflow action, verify, incident update, notify); a policy layer (PROD actions need an approval, daily per-DAG limit, dry run); six built-in workflows; Approvals, Runs, Workflows and Notifications UI.
 - Plan 3 (`plan3.md`): visual canvas. Drag-and-drop workflow editor (React Flow; palette and settings forms generated from the node catalog; server validation shown on the blocks), a pipeline canvas (Airflow connection → DAG → Failure / SLA monitor blocks → the automations they feed), and run replay on the canvas.
 - `frontend`: React + Vite app (dashboard, incidents, pipelines canvas, automation and workflow editor, Airflow connections, monitored DAGs, users).
-- Next: Plan 4 — data-quality monitors (row count, null rate, freshness column, schema drift) as new monitor blocks, with a database-source block.
+- Plan 4 (`plan4.md`): production hardening (live Airflow end-to-end, PostgreSQL, separate automation loop, Playwright, CI).
+- Since Plan 4: orchestration triggers (manual, schedule, DAG run finished), Airflow/SQL/compare-databases blocks, notification channels, the workflow assistant, "Watch selected DAGs" (one output per DAG), and deleting runs.
+- Plan 5 (`plan5.md`), implemented — reframe as a visual workflow builder: navigation and defaults, If/Switch/Wait-for-all blocks, error outputs and retries, cron and webhook triggers, test-a-block, versions, import/export, HTTP / for-each / call-workflow blocks. Next: data-quality monitors as blocks on top of it.

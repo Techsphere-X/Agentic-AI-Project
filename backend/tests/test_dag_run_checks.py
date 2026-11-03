@@ -1,5 +1,5 @@
-"""'When a DAG run finishes' workflows: one run per finished DAG run, a per-run check status
-recorded by the 'Record the run's status' block, and the 'Data check failed' incident."""
+"""'When this DAG runs' workflows: one run per DAG run event, a per-run check status recorded by
+the 'Record the run's status' block, and the 'Data check failed' incident."""
 
 from datetime import timedelta
 from pathlib import Path
@@ -13,7 +13,6 @@ from app.automation.graph import GraphError, validate_graph
 from app.automation.templates import TEMPLATES_BY_KEY
 from app.automation.types import DagRunCheckStatus, RunStatus, TriggerEvent
 from app.connectors import database as db_connector
-from app.core.exceptions import BadRequestError
 from app.detection import rules
 from app.detection.types import IncidentResolution, IncidentStatus, IncidentType
 from app.models.automation import DagRunCheck, Workflow, WorkflowRun
@@ -57,8 +56,18 @@ def _database(db: Session) -> str:
     return str(conn.id)
 
 
-def _trigger(**config: object) -> dict:
-    return {"id": "trigger", "type": "trigger.dag_run", "config": config}
+def _trigger(conn: object = None, dag_id: str = "etl", **config: object) -> dict:
+    connection_id = str(conn.id) if conn is not None else "c1"
+    config = {"connection_id": connection_id, "dag_id": dag_id, **config}
+    return {"id": "trigger", "type": "trigger.dag", "config": config}
+
+
+def _start_edges(to: str, states: list[str] | None = None) -> list[dict]:
+    """Every chosen event of the trigger leads to `to`."""
+    return [
+        {"from": "trigger", "port": port, "to": to}
+        for port in states or ["in_progress", "success", "failed"]
+    ]
 
 
 def _workflow(db: Session, graph: dict, name: str = "Validate") -> Workflow:
@@ -69,20 +78,26 @@ def _workflow(db: Session, graph: dict, name: str = "Validate") -> Workflow:
     return wf
 
 
-def _record_only(result: str = "passed", **trigger: object) -> dict:
+def _record_only(
+    result: str = "passed",
+    conn: object = None,
+    states: list[str] | None = None,
+    dag_id: str = "etl",
+) -> dict:
+    states = states or ["success", "failed"]
     return {
         "nodes": [
-            _trigger(**trigger),
+            _trigger(conn, dag_id, states=states),
             {"id": "record", "type": "check.record", "config": {"result": result}},
         ],
-        "edges": [{"from": "trigger", "port": "next", "to": "record"}],
+        "edges": _start_edges("record", states),
     }
 
 
-def _validate_graph(dwh: str) -> dict:
+def _validate_graph(dwh: str, conn: object) -> dict:
     return {
         "nodes": [
-            _trigger(states=["success"]),
+            _trigger(conn, states=["success"]),
             {
                 "id": "check",
                 "type": "database.check",
@@ -101,7 +116,7 @@ def _validate_graph(dwh: str) -> dict:
             },
         ],
         "edges": [
-            {"from": "trigger", "port": "next", "to": "check"},
+            {"from": "trigger", "port": "success", "to": "check"},
             {"from": "check", "port": "pass", "to": "ok"},
             {"from": "check", "port": "fail", "to": "bad"},
         ],
@@ -139,40 +154,52 @@ def test_finished_runs_after_watermark() -> None:
 # ---------------------------------------------------------------------- validation
 
 
-def test_record_block_needs_the_dag_run_trigger() -> None:
+def test_record_block_needs_the_dag_trigger() -> None:
     graph = _record_only()
     graph["nodes"][0] = {"id": "trigger", "type": "trigger.manual", "config": {}}
-    with pytest.raises(GraphError, match="needs the 'When a DAG run finishes' trigger"):
+    graph["edges"] = [{"from": "trigger", "port": "next", "to": "record"}]
+    with pytest.raises(GraphError, match="needs 'When this DAG runs'"):
         validate_graph(graph)
 
 
-def test_incident_blocks_are_rejected_under_the_dag_run_trigger() -> None:
+def test_fix_blocks_work_on_the_dag_run_without_an_incident() -> None:
     graph = {
         "nodes": [_trigger(), {"id": "fix", "type": "action.clear_failed_tasks", "config": {}}],
-        "edges": [{"from": "trigger", "port": "next", "to": "fix"}],
+        "edges": [{"from": "trigger", "port": "failed", "to": "fix"}],
     }
-    with pytest.raises(GraphError, match="needs an incident trigger"):
-        validate_graph(graph)
+    validate_graph(graph)
 
 
-def test_trigger_needs_a_state() -> None:
+def test_trigger_needs_a_dag_and_a_state() -> None:
+    graph = _record_only()
+    graph["nodes"][0]["config"]["states"] = []
     with pytest.raises(GraphError):
-        validate_graph(_record_only(states=[]))
-
-
-def test_dag_run_workflows_cannot_be_run_by_hand(db: Session, admin: User) -> None:
-    wf = _workflow(db, _record_only())
-    with pytest.raises(BadRequestError, match="starts when a DAG run finishes"):
-        automation_service.start_manual_run(db, wf.id, actor=admin)
+        validate_graph(graph)
+    graph = _record_only()
+    graph["nodes"][0]["config"]["dag_id"] = ""
+    with pytest.raises(GraphError, match="Choose a DAG"):
+        validate_graph(graph)
 
 
 def test_validate_every_run_template_builds() -> None:
     template = TEMPLATES_BY_KEY["validate-every-run"]
     graph = validate_graph(
-        template.build({"dag_id": "orders", "database_connection_id": "c1", "sql": "SELECT 1"})
+        template.build(
+            {
+                "airflow_connection_id": "af1",
+                "dag_id": "orders",
+                "database_connection_id": "c1",
+                "sql": "SELECT 1",
+            }
+        )
     )
-    assert graph.trigger.type == "trigger.dag_run"
-    assert graph.trigger.config == {"states": ["success"], "dag_ids": ["orders"]}
+    assert graph.trigger.type == "trigger.dag"
+    assert graph.trigger.config == {
+        "connection_id": "af1",
+        "dag_id": "orders",
+        "states": ["success"],
+    }
+    assert graph.next_nodes("trigger", "success") == ["check"]
 
 
 def test_reconcile_airflow_template_builds_success_only_graph() -> None:
@@ -180,6 +207,7 @@ def test_reconcile_airflow_template_builds_success_only_graph() -> None:
     graph = validate_graph(
         template.build(
             {
+                "airflow_connection_id": "af1",
                 "source_connection_id": "source-db",
                 "source_sql": "SELECT id, product, quantity FROM agentic_reconciliation_source",
                 "destination_connection_id": "destination-db",
@@ -189,10 +217,11 @@ def test_reconcile_airflow_template_builds_success_only_graph() -> None:
             }
         )
     )
-    assert graph.trigger.type == "trigger.dag_run"
+    assert graph.trigger.type == "trigger.dag"
     assert graph.trigger.config == {
+        "connection_id": "af1",
+        "dag_id": "agentic_reconciliation_pipeline",
         "states": ["success"],
-        "dag_ids": ["agentic_reconciliation_pipeline"],
     }
     assert graph.next_nodes("reconcile", "matched") == ["matched"]
     assert graph.next_nodes("reconcile", "mismatched") == ["mismatched"]
@@ -205,7 +234,7 @@ def test_reconcile_airflow_template_builds_success_only_graph() -> None:
 def test_each_finished_run_starts_the_workflow_once(db: Session, fake: FakeAirflow) -> None:
     conn = _conn(db)
     _dag(db, conn)
-    wf = _workflow(db, _record_only())
+    wf = _workflow(db, _record_only(conn=conn))
     fake.add_run("etl", "r1", "success", iso(at(10)), iso(at(10, 5)))
 
     summary = detection_service.run_cycle(db, now=T0)
@@ -232,32 +261,35 @@ def test_each_finished_run_starts_the_workflow_once(db: Session, fake: FakeAirfl
 
 
 @pytest.mark.parametrize("final_state", ["success", "failed"])
-def test_in_progress_run_is_enqueued_once_and_updated_when_terminal(
+def test_each_event_of_a_run_starts_its_own_workflow_run(
     db: Session, fake: FakeAirflow, final_state: str
 ) -> None:
     conn = _conn(db)
     _dag(db, conn, "etl")
-    workflow = _workflow(db, _record_only(states=["in_progress"]))
+    states = ["in_progress", "success", "failed"]
+    workflow = _workflow(db, _record_only(conn=conn, states=states))
     fake.add_run("etl", "r1", "running", iso(at(10)))
 
-    summary = detection_service.run_cycle(db, now=T0)
-    assert summary.automation_queued == 1
-    [check] = _checks(db)
-    assert check.run_state == "running"
-    workflow_run = db.get(WorkflowRun, check.workflow_run_id)
-    assert workflow_run.workflow_id == workflow.id
-    assert workflow_run.context["dag_run"]["normalized_state"] == "in_progress"
-
+    # In progress: one run through the 'in progress' output; no run check (not finished).
+    assert detection_service.run_cycle(db, now=T0).automation_queued == 1
+    [started] = db.scalars(select(WorkflowRun)).all()
+    assert started.workflow_id == workflow.id
+    assert started.context["dag_run"]["normalized_state"] == "in_progress"
+    assert _checks(db) == []
     assert detection_service.run_cycle(db, now=at(10, 1)).automation_queued == 0
-    assert len(_checks(db)) == 1
 
+    # It finishes: a second run through the final state's output, with a run check.
     fake.runs["etl"][0]["state"] = final_state
     fake.runs["etl"][0]["end_date"] = iso(at(10, 5))
-    assert detection_service.run_cycle(db, now=at(10, 6)).automation_queued == 0
-    db.refresh(check)
+    assert detection_service.run_cycle(db, now=at(10, 6)).automation_queued == 1
+    [check] = _checks(db)
     assert check.run_state == final_state
-    db.refresh(workflow_run)
-    assert workflow_run.context["dag_run"]["normalized_state"] == final_state
+    finished = db.get(WorkflowRun, check.workflow_run_id)
+    assert finished.id != started.id
+    assert finished.context["dag_run"]["normalized_state"] == final_state
+    _tick(db, at(10, 6))
+    db.refresh(finished)
+    assert [s.port for s in finished.steps][0] == final_state
 
 
 def test_reconciliation_workflow_filters_successful_target_dag(
@@ -270,6 +302,7 @@ def test_reconciliation_workflow_filters_successful_target_dag(
         db,
         TEMPLATES_BY_KEY["reconcile-airflow-dag"].build(
             {
+                "airflow_connection_id": str(conn.id),
                 "source_connection_id": "source-db",
                 "source_sql": "SELECT 1",
                 "destination_connection_id": "destination-db",
@@ -297,8 +330,8 @@ def test_reconciliation_workflow_filters_successful_target_dag(
         "dag_id": "agentic_reconciliation_pipeline",
         "run_id": "match-run",
         "state": "success",
-            "normalized_state": "success",
-            "airflow_state": "success",
+        "normalized_state": "success",
+        "airflow_state": "success",
         "environment": "DEV",
     }
 
@@ -320,7 +353,7 @@ def test_trigger_filters_by_state_and_dag(db: Session, fake: FakeAirflow) -> Non
     conn = _conn(db)
     _dag(db, conn, "etl")
     _dag(db, conn, "other")
-    _workflow(db, _record_only(states=["failed"], dag_ids=["etl"]))
+    _workflow(db, _record_only(conn=conn, states=["failed"], dag_id="etl"))
     fake.add_run("etl", "ok", "success", iso(at(10)), iso(at(10, 5)))
     fake.add_run("other", "bad_other", "failed", iso(at(10)), failed_task="t", log="x")
     detection_service.run_cycle(db, now=T0)
@@ -334,7 +367,7 @@ def test_trigger_filters_by_state_and_dag(db: Session, fake: FakeAirflow) -> Non
 def test_disabled_workflows_are_not_started(db: Session, fake: FakeAirflow) -> None:
     conn = _conn(db)
     _dag(db, conn)
-    wf = _workflow(db, _record_only())
+    wf = _workflow(db, _record_only(conn=conn))
     wf.enabled = False
     db.commit()
     fake.add_run("etl", "r1", "success", iso(at(10)), iso(at(10, 5)))
@@ -350,7 +383,7 @@ def test_data_check_records_status_and_drives_the_incident(
 ) -> None:
     conn = _conn(db)
     _dag(db, conn)
-    _workflow(db, _validate_graph(_database(db)))
+    _workflow(db, _validate_graph(_database(db), conn))
     alert = _workflow(
         db,
         {
@@ -399,7 +432,7 @@ def test_data_check_records_status_and_drives_the_incident(
 def test_failed_checks_recur_on_the_open_incident(db: Session, fake: FakeAirflow) -> None:
     conn = _conn(db)
     _dag(db, conn)
-    _workflow(db, _record_only(result="failed"))
+    _workflow(db, _record_only(result="failed", conn=conn))
     fake.add_run("etl", "r1", "success", iso(at(10)), iso(at(10, 5)))
     detection_service.run_cycle(db, now=T0)
     _tick(db, T0)
@@ -413,7 +446,7 @@ def test_failed_checks_recur_on_the_open_incident(db: Session, fake: FakeAirflow
 def test_no_incident_when_turned_off(db: Session, fake: FakeAirflow) -> None:
     conn = _conn(db)
     _dag(db, conn)
-    graph = _record_only(result="failed")
+    graph = _record_only(result="failed", conn=conn)
     graph["nodes"][1]["config"]["open_incident"] = False
     _workflow(db, graph)
     fake.add_run("etl", "r1", "success", iso(at(10)), iso(at(10, 5)))
@@ -430,8 +463,11 @@ def test_unrecorded_and_cancelled_runs(db: Session, fake: FakeAirflow, admin: Us
     _workflow(
         db,
         {
-            "nodes": [_trigger(), {"id": "tell", "type": "notify", "config": {"title": "x"}}],
-            "edges": [{"from": "trigger", "port": "next", "to": "tell"}],
+            "nodes": [
+                _trigger(conn, states=["success"]),
+                {"id": "tell", "type": "notify", "config": {"title": "x"}},
+            ],
+            "edges": [{"from": "trigger", "port": "success", "to": "tell"}],
         },
     )
     fake.add_run("etl", "r1", "success", iso(at(10)), iso(at(10, 5)))
@@ -451,7 +487,7 @@ def test_unrecorded_and_cancelled_runs(db: Session, fake: FakeAirflow, admin: Us
 def test_dry_run_records_nothing(db: Session, fake: FakeAirflow) -> None:
     conn = _conn(db)
     _dag(db, conn)
-    wf = _workflow(db, _record_only(result="failed"))
+    wf = _workflow(db, _record_only(result="failed", conn=conn))
     wf.mode = "DRY_RUN"
     db.commit()
     fake.add_run("etl", "r1", "success", iso(at(10)), iso(at(10, 5)))
@@ -469,7 +505,7 @@ def test_run_checks_api(
 ) -> None:
     conn = _conn(db)
     _dag(db, conn)
-    _workflow(db, _record_only())
+    _workflow(db, _record_only(conn=conn))
     fake.add_run("etl", "r1", "success", iso(at(10)), iso(at(10, 5)))
     detection_service.run_cycle(db, now=T0)
     _tick(db, T0)
@@ -493,5 +529,6 @@ def test_run_checks_api(
 
     types = client.get("/api/v1/automation/node-types", headers=viewer_headers).json()
     by_type = {t["type"]: t for t in types}
-    assert by_type["trigger.dag_run"]["needs_dag_run"] is True
+    assert by_type["trigger.dag"]["needs_dag_run"] is True
+    assert by_type["trigger.dag"]["ports"] == ["in_progress", "success", "failed"]
     assert by_type["check.record"]["category"] == "output"

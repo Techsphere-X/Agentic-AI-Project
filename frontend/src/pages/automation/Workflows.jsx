@@ -185,6 +185,7 @@ function WorkflowCard({ workflow, canEdit, canRun, onChange, onDelete }) {
 export default function Workflows() {
   const { hasRole } = useAuth()
   const toast = useToast()
+  const navigate = useNavigate()
   const [workflows, setWorkflows] = useState(null)
   const canEdit = hasRole('ADMIN')
   const canRun = hasRole('ADMIN', 'OPERATOR')
@@ -209,6 +210,26 @@ export default function Workflows() {
     )
   }
 
+  /** A workflow exported from the editor: created (turned off) and opened. */
+  async function onImport(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    try {
+      const data = JSON.parse(await file.text())
+      if (!data?.graph?.nodes) throw new Error('This file is not an exported workflow')
+      const created = await automationApi.createWorkflow({
+        name: data.name || file.name.replace(/\.json$/i, ''),
+        description: data.description ?? null,
+        graph: data.graph,
+      })
+      toast.success(`Imported “${created.name}” (turned off)`)
+      navigate(`/automation/workflows/${created.id}`)
+    } catch (err) {
+      toast.error(err.message === 'Unexpected end of JSON input' ? 'The file is not valid JSON' : err.message)
+    }
+  }
+
   async function onDelete(workflow) {
     if (!window.confirm(`Delete “${workflow.name}”? This cannot be undone.`)) return
     try {
@@ -228,9 +249,15 @@ export default function Workflows() {
           {!canEdit && <p className="muted">Only admins can change workflows.</p>}
         </div>
         {canEdit && (
-          <Link className="btn btn-primary" to="/automation/workflows/new">
-            New workflow
-          </Link>
+          <div className="card-actions">
+            <label className="btn btn-secondary file-btn">
+              Import…
+              <input type="file" accept="application/json,.json" hidden onChange={onImport} />
+            </label>
+            <Link className="btn btn-primary" to="/automation/workflows/new">
+              New workflow
+            </Link>
+          </div>
         )}
       </div>
       {!workflows ? (

@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.automation.graph import validate_graph
-from app.models.airflow import AirflowConnection, MonitoredDag
+from app.models.airflow import MonitoredDag
 from app.models.automation import Workflow
 from app.models.user import User
 
@@ -111,8 +111,8 @@ def test_fix_workflows_split_the_causes(db: Session, admin: User) -> None:
 
 def test_rerun_is_idempotent_and_sets_the_etl_sla(db: Session, admin: User) -> None:
     seed_demo.seed(db, seed_demo.DemoConfig(mock_airflow=True))
-    conn = db.scalar(select(AirflowConnection))
-    db.add(MonitoredDag(connection_id=conn.id, dag_id=seed_tests.ETL_DAG, sla_minutes=60))
+    etl = db.scalar(select(MonitoredDag).where(MonitoredDag.dag_id == seed_tests.ETL_DAG))
+    etl.sla_minutes = 60
     db.commit()
 
     seed_tests.seed(db)

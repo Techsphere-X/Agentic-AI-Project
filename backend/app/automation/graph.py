@@ -16,6 +16,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
+from app.automation import cron
 from app.detection.types import IncidentSeverity, IncidentType
 from app.diagnosis.log_classifier import CATEGORY_LABELS, FailureCategory
 
@@ -54,92 +55,6 @@ class IncidentTriggerConfig(_Config):
     )  # empty = any
 
 
-MAX_WATCHED_DAGS = 20
-
-
-def _port_key(dag_id: str, taken: set[str]) -> str:
-    """A readable, unique port id for a watched DAG, e.g. `orders_pipeline` or `orders_2`."""
-    base = re.sub(r"[^A-Za-z0-9_-]", "_", dag_id)[:90] or "dag"
-    key, n = base, 2
-    while key in taken:
-        key, n = f"{base}_{n}", n + 1
-    return key
-
-
-class WatchedDag(_Config):
-    key: str = Field(default="", max_length=100)  # output port id; filled from dag_id if empty
-    connection_id: str = Field(min_length=1, max_length=64)
-    dag_id: str = Field(min_length=1, max_length=250)
-
-    @field_validator("dag_id", "connection_id")
-    @classmethod
-    def _strip(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise ValueError("must not be empty")
-        return value
-
-
-class DagWatchTriggerConfig(_Config):
-    dags: list[WatchedDag] = Field(
-        default_factory=list,
-        max_length=MAX_WATCHED_DAGS,
-        json_schema_extra={
-            "x-label": "Watched DAGs",
-            "x-widget": "dag_list",
-            "x-hint": "Drag DAGs onto the block; each DAG gets its own output",
-        },
-    )
-    events: list[Literal["opened", "recurred"]] = Field(
-        default=["opened"],
-        min_length=1,
-        json_schema_extra={
-            "x-label": "Start when the incident",
-            "x-options": {"opened": "Opens", "recurred": "Happens again"},
-        },
-    )
-    incident_types: list[IncidentType] = Field(
-        default_factory=list,
-        json_schema_extra={
-            "x-label": "Incident types",
-            "x-options": {
-                "DAG_RUN_FAILED": "DAG run failed",
-                "SLA_MISSED": "SLA missed",
-                "DATA_CHECK_FAILED": "Data check failed",
-            },
-        },
-    )  # empty = any
-
-    @model_validator(mode="after")
-    def _unique(self) -> "DagWatchTriggerConfig":
-        if not self.dags:
-            raise ValueError("Add at least one DAG to watch (drag a DAG onto the block)")
-        keys: set[str] = set()
-        seen: set[tuple[str, str]] = set()
-        for dag in self.dags:
-            if (dag.connection_id, dag.dag_id) in seen:
-                raise ValueError(f"DAG '{dag.dag_id}' is watched twice")
-            seen.add((dag.connection_id, dag.dag_id))
-            if not dag.key:
-                dag.key = _port_key(dag.dag_id, keys)
-            if not re.fullmatch(NODE_ID_PATTERN, dag.key):
-                raise ValueError(f"Invalid output id '{dag.key}'")
-            if dag.key in keys:
-                raise ValueError(f"Output id '{dag.key}' is used twice")
-            keys.add(dag.key)
-        return self
-
-
-def _watched_dag_ports(config: dict[str, Any]) -> list[tuple[str, str]]:
-    dags = config.get("dags") or []
-    ids = [d.get("dag_id", "") for d in dags]
-    return [
-        (d["key"], d["dag_id"] if ids.count(d["dag_id"]) == 1 else f"{d['dag_id']} ({i + 1})")
-        for i, d in enumerate(dags)
-        if d.get("key")
-    ]
-
-
 class StaleTriggerConfig(_Config):
     minutes: int = Field(
         default=30,
@@ -149,30 +64,6 @@ class StaleTriggerConfig(_Config):
             "x-label": "Open and unacknowledged for (minutes)",
         },
     )
-
-
-class DagRunTriggerConfig(_Config):
-    states: list[Literal["success", "in_progress", "failed"]] = Field(
-        default=["success", "failed"],
-        min_length=1,
-        json_schema_extra={
-            "x-label": "When the run",
-            "x-options": {
-                "success": "Succeeded",
-                "in_progress": "In progress",
-                "failed": "Failed",
-            },
-        },
-    )
-    dag_ids: list[str] = Field(
-        default_factory=list,
-        json_schema_extra={"x-label": "DAGs", "x-hint": "Empty = every monitored DAG"},
-    )
-
-    @field_validator("dag_ids")
-    @classmethod
-    def _clean(cls, value: list[str]) -> list[str]:
-        return [v.strip() for v in value if v.strip()]
 
 
 class FilterConfig(_Config):
@@ -566,7 +457,46 @@ class NotifyConfig(_Config):
 
 
 class ScheduleTriggerConfig(_Config):
-    every_minutes: int = Field(default=60, ge=5, le=10080, json_schema_extra=_ui("Every (minutes)"))
+    mode: Literal["every", "cron"] = Field(
+        default="every",
+        json_schema_extra=_ui(
+            "Repeat",
+            options={"every": "Every N minutes", "cron": "At set times (cron)"},
+        ),
+    )
+    every_minutes: int = Field(
+        default=60,
+        ge=5,
+        le=10080,
+        json_schema_extra={**_ui("Every (minutes)"), "x-show-when": {"mode": "every"}},
+    )
+    cron: str = Field(
+        default="0 6 * * *",
+        max_length=100,
+        json_schema_extra={
+            **_ui(
+                "Cron schedule",
+                "cron",
+                "minute hour day month weekday, e.g. 0 6 * * 1-5 = 06:00 on weekdays",
+            ),
+            "x-show-when": {"mode": "cron"},
+        },
+    )
+    timezone: str = Field(
+        default="UTC",
+        max_length=64,
+        json_schema_extra={**_ui("Time zone", "timezone"), "x-show-when": {"mode": "cron"}},
+    )
+
+    @model_validator(mode="after")
+    def _cron(self) -> "ScheduleTriggerConfig":
+        if self.mode == "cron":
+            try:
+                cron.parse(self.cron)
+                cron.zone(self.timezone)
+            except cron.CronError as exc:
+                raise ValueError(str(exc)) from exc
+        return self
 
 
 class _AirflowTarget(_Config):
@@ -582,6 +512,41 @@ class _AirflowTarget(_Config):
         if not self.dag_id:
             raise ValueError("Choose a DAG")
         return self
+
+
+DAG_EVENTS = {"in_progress": "In progress", "success": "Succeeded", "failed": "Failed"}
+
+
+class DagTriggerConfig(_AirflowTarget):
+    """'When this DAG runs': one DAG; each chosen event starts its own workflow run."""
+
+    states: list[Literal["in_progress", "success", "failed"]] = Field(
+        default_factory=lambda: ["in_progress", "success", "failed"],
+        min_length=1,
+        json_schema_extra=_ui(
+            "Start on",
+            hint="Each event starts its own run, through the matching output",
+            options=DAG_EVENTS,
+        ),
+    )
+
+
+class OpenIncidentConfig(_Config):
+    incident_type: IncidentType = Field(
+        default=IncidentType.DAG_RUN_FAILED,
+        json_schema_extra=_ui("Incident type", options=_INCIDENT_TYPES),
+    )
+    severity: IncidentSeverity = Field(
+        default=IncidentSeverity.HIGH,
+        json_schema_extra=_ui("Severity", options=_SEVERITIES),
+    )
+    title: str = Field(
+        default="{{dag_run.dag_id}} {{dag_run.state}}",
+        min_length=1,
+        max_length=300,
+        json_schema_extra=_ui("Title", "template"),
+    )
+    note: str = Field(default="", max_length=2000, json_schema_extra=_ui("Note", "template"))
 
 
 class RunDagConfig(_AirflowTarget):
@@ -700,6 +665,214 @@ class ReconcileConfig(_Config):
         return self
 
 
+# ---------------------------------------------------------------------- logic configs
+
+COMPARE_OPERATORS = {
+    "=": "equals",
+    "!=": "does not equal",
+    ">": "is greater than",
+    ">=": "is at least",
+    "<": "is less than",
+    "<=": "is at most",
+    "contains": "contains",
+    "is_empty": "is empty",
+    "not_empty": "is not empty",
+}
+VALUE_NAME_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+MAX_SWITCH_CASES = 20
+
+
+class IfConfig(_Config):
+    left: str = Field(
+        default="",
+        max_length=2000,
+        json_schema_extra=_ui("Value", "template", "e.g. {{results.count_rows.value}}"),
+    )
+    operator: Literal["=", "!=", ">", ">=", "<", "<=", "contains", "is_empty", "not_empty"] = Field(
+        default="=", json_schema_extra=_ui("Is", options=COMPARE_OPERATORS)
+    )
+    right: str = Field(
+        default="",
+        max_length=2000,
+        json_schema_extra=_ui("Compared with", "template", "Not used for 'is empty'"),
+    )
+
+
+class SwitchCase(_Config):
+    key: str = Field(default="", max_length=100)  # output port id; filled from the label
+    label: str = Field(default="", max_length=100)
+    equals: str = Field(max_length=500)
+
+
+class SwitchConfig(_Config):
+    value: str = Field(
+        default="",
+        max_length=2000,
+        json_schema_extra=_ui("Value", "template", "e.g. {{dag_run.state}}"),
+    )
+    cases: list[SwitchCase] = Field(
+        default_factory=list,
+        max_length=MAX_SWITCH_CASES,
+        json_schema_extra=_ui(
+            "Cases",
+            "cases",
+            "Each case gets its own output; anything else goes to 'otherwise'",
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _keys(self) -> "SwitchConfig":
+        taken: set[str] = {"otherwise"}
+        for case in self.cases:
+            if not case.key:
+                base = re.sub(r"[^A-Za-z0-9_-]", "_", case.label or case.equals)[:90] or "case"
+                key, n = base, 2
+                while key in taken:
+                    key, n = f"{base}_{n}", n + 1
+                case.key = key
+            if not re.fullmatch(NODE_ID_PATTERN, case.key):
+                raise ValueError(f"Invalid output id '{case.key}'")
+            if case.key in taken:
+                raise ValueError(f"Two cases use the output '{case.key}'")
+            taken.add(case.key)
+        return self
+
+
+def _switch_ports(config: dict[str, Any]) -> list[tuple[str, str]]:
+    cases = [(c["key"], c.get("label") or c["equals"]) for c in config.get("cases") or []]
+    return [*cases, ("otherwise", "otherwise")]
+
+
+class SetValueConfig(_Config):
+    name: str = Field(
+        default="value",
+        max_length=64,
+        json_schema_extra=_ui("Name", hint="Later blocks use {{vars.<name>}}"),
+    )
+    value: str = Field(default="", max_length=4000, json_schema_extra=_ui("Value", "template"))
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, value: str) -> str:
+        if not re.fullmatch(VALUE_NAME_PATTERN, value):
+            raise ValueError("Use letters, digits and _ (not starting with a digit)")
+        return value
+
+
+class NodeSettings(BaseModel):
+    """How the engine runs a block (not part of the block's own settings)."""
+
+    model_config = ConfigDict(extra="forbid")
+    retries: int = Field(default=0, ge=0, le=5)
+    retry_delay_seconds: int = Field(default=60, ge=5, le=3600)
+    # "fail": the block's failure fails the run. "output": it continues on the 'error' output.
+    on_error: Literal["fail", "output"] = "fail"
+
+
+# ---------------------------------------------------------------------- integration configs
+
+HTTP_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
+MAX_FOR_EACH_ROWS = 100
+
+
+class HttpRequestConfig(_Config):
+    method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"] = Field(
+        default="POST", json_schema_extra=_ui("Method", options={m: m for m in HTTP_METHODS})
+    )
+    url: str = Field(
+        default="",
+        max_length=2000,
+        json_schema_extra=_ui("URL", "template", "http(s)://…; may use {{placeholders}}"),
+    )
+    headers: str = Field(
+        default="",
+        max_length=4000,
+        json_schema_extra=_ui("Headers", "template", "One per line: Name: value"),
+    )
+    body: str = Field(
+        default="",
+        max_length=20000,
+        json_schema_extra=_ui("Body", "template", "Sent as is (e.g. JSON); not sent with GET"),
+    )
+    environment: Literal["DEV", "STAGING", "PROD"] = Field(
+        default="PROD",
+        json_schema_extra=_ui(
+            "Target environment",
+            hint="Changes in PROD need an approval first; GET only reads and needs none",
+            options=_ENVIRONMENTS,
+        ),
+    )
+    timeout_seconds: int = Field(
+        default=30, ge=1, le=120, json_schema_extra=_ui("Timeout (seconds)")
+    )
+
+    @field_validator("url")
+    @classmethod
+    def _url(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Enter the URL to call")
+        if "{{" not in value and not value.startswith(("http://", "https://")):
+            raise ValueError("The URL must start with http:// or https://")
+        return value
+
+
+class _CallWorkflow(_Config):
+    workflow_id: str = Field(
+        default="",
+        json_schema_extra=_ui(
+            "Workflow to run", "workflow", "One that starts by hand or by webhook"
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _chosen(self) -> "_CallWorkflow":
+        if not self.workflow_id:
+            raise ValueError("Choose the workflow to run")
+        return self
+
+
+class CallWorkflowConfig(_CallWorkflow):
+    input: str = Field(
+        default="{}",
+        max_length=20000,
+        json_schema_extra=_ui(
+            "Input (JSON)",
+            "template",
+            "The called workflow reads it as {{trigger.body.<field>}}",
+        ),
+    )
+    wait: bool = Field(default=True, json_schema_extra=_ui("Wait until it finishes"))
+    timeout_minutes: int = Field(
+        default=60, ge=1, le=1440, json_schema_extra=_ui("Give up after (minutes)")
+    )
+
+
+class ForEachConfig(_CallWorkflow):
+    connection_id: str = Field(
+        default="", json_schema_extra=_ui("Database connection", "database_connection")
+    )
+    sql: str = Field(
+        default="",
+        max_length=20000,
+        json_schema_extra=_ui("Rows (read-only SQL)", "sql", "One run of the workflow per row"),
+    )
+    max_rows: int = Field(
+        default=20,
+        ge=1,
+        le=MAX_FOR_EACH_ROWS,
+        json_schema_extra=_ui("At most this many rows"),
+    )
+
+    @model_validator(mode="after")
+    def _query(self) -> "ForEachConfig":
+        if not self.connection_id:
+            raise ValueError("Choose a database connection")
+        if not self.sql.strip():
+            raise ValueError("Enter the SQL that returns the rows")
+        return self
+
+
 class WaitConfig(_Config):
     minutes: int = Field(default=5, ge=1, le=1440, json_schema_extra=_ui("Minutes"))
 
@@ -716,6 +889,7 @@ class NodeType:
         "diagnosis",
         "approval",
         "action",
+        "integration",
         "verify",
         "output",
     ]
@@ -723,9 +897,11 @@ class NodeType:
     ports: tuple[str, ...]
     config_model: type[_Config] = NoConfig
     port_labels: dict[str, str] = field(default_factory=dict)
-    # Works on the incident that started the run (only valid under an incident trigger).
+    # Works on the incident (an incident trigger, or after an 'Open incident' block).
     needs_incident: bool = False
-    # Works on the finished DAG run that started the workflow (only under trigger.dag_run).
+    # Works on "the DAG run": the incident's run, or the run that started 'When this DAG runs'.
+    needs_target: bool = False
+    # Works on the DAG run that started the workflow (only under "When this DAG runs").
     needs_dag_run: bool = False
     # Changes something outside the platform: policy-checked, simulated in dry runs.
     is_action: bool = False
@@ -751,6 +927,7 @@ class NodeType:
             "port_labels": {p: self.port_labels.get(p, _PORT_LABELS.get(p, p)) for p in self.ports},
             "port_tones": {p: port_tone(p) for p in self.ports},
             "needs_incident": self.needs_incident,
+            "needs_target": self.needs_target,
             "needs_dag_run": self.needs_dag_run,
             "is_action": self.is_action,
             "outputs": list(self.outputs),
@@ -769,6 +946,7 @@ _CATEGORY_STAGES: dict[str, Stage] = {
     "diagnosis": "diagnose",
     "approval": "decide",
     "action": "act",
+    "integration": "act",
     "verify": "verify",
     "output": "notify",
 }
@@ -786,6 +964,7 @@ _GOOD_PORTS = frozenset(
         "analyzed",
         "retryable",
         "solution_ready",
+        "done",
     }
 )
 _BAD_PORTS = frozenset(
@@ -839,19 +1018,6 @@ NODE_TYPES: dict[str, NodeType] = {
             needs_incident=True,
         ),
         NodeType(
-            "trigger.dag_watch",
-            "Watch selected DAGs",
-            "trigger",
-            "Starts when an incident opens (or happens again) on one of the DAGs you drag onto "
-            "it. Each watched DAG has its own output, so every DAG can get its own steps. "
-            "Watched DAGs are switched to monitored when the workflow is on.",
-            (),
-            DagWatchTriggerConfig,
-            needs_incident=True,
-            port_rule=_watched_dag_ports,
-            dynamic_ports="dags",
-        ),
-        NodeType(
             "trigger.incident_stale",
             "When an incident is ignored",
             "trigger",
@@ -861,14 +1027,16 @@ NODE_TYPES: dict[str, NodeType] = {
             needs_incident=True,
         ),
         NodeType(
-            "trigger.dag_run",
-            "When a DAG run finishes",
+            "trigger.dag",
+            "When this DAG runs",
             "trigger",
-            "Starts when a monitored DAG run succeeds, fails, or is in progress, so the workflow "
-            "can check or report its state.",
-            ("next", "success", "in_progress", "failed"),
-            DagRunTriggerConfig,
-            {"success": "succeeded", "in_progress": "in progress", "failed": "failed"},
+            "Starts when the chosen DAG has a run in progress, a run that succeeded, or a run "
+            "that failed. Each event starts its own run through the matching output, so every "
+            "outcome of the DAG can get its own steps. No incident is opened automatically for "
+            "this DAG while the workflow is on: add 'Open incident' where you want one.",
+            ("in_progress", "success", "failed"),
+            DagTriggerConfig,
+            {"in_progress": "in progress", "success": "succeeded", "failed": "failed"},
             needs_dag_run=True,
         ),
         NodeType(
@@ -876,6 +1044,15 @@ NODE_TYPES: dict[str, NodeType] = {
             "When run manually",
             "trigger",
             "Starts when someone presses “Run now” on the workflow.",
+            ("next",),
+        ),
+        NodeType(
+            "trigger.webhook",
+            "When a webhook is called",
+            "trigger",
+            "Starts when another system sends a POST request to the workflow's secret URL (shown "
+            "in the block's settings once the workflow is saved). The request's JSON body is "
+            "available as {{trigger.body.<field>}}.",
             ("next",),
         ),
         NodeType(
@@ -902,10 +1079,10 @@ NODE_TYPES: dict[str, NodeType] = {
             "check.dag_state",
             "Check DAG state",
             "logic",
-            "Asks Airflow whether the incident's DAG is paused or already has an active run.",
+            "Asks Airflow whether the workflow's DAG is paused or already has an active run.",
             ("ready", "paused", "busy"),
             port_labels={"ready": "ready (idle)", "paused": "paused", "busy": "already running"},
-            needs_incident=True,
+            needs_target=True,
         ),
         NodeType(
             "check.sla",
@@ -923,6 +1100,82 @@ NODE_TYPES: dict[str, NodeType] = {
                 "sla.threshold_minutes",
                 "sla.estimated_baseline_minutes",
             ),
+        ),
+        NodeType(
+            "logic.if",
+            "If",
+            "logic",
+            "Compares a value (any {{placeholder}}, e.g. a query result or the DAG run's state) "
+            "and continues on 'true' or 'false'. Numbers compare as numbers.",
+            ("true", "false"),
+            IfConfig,
+            {"true": "true", "false": "false"},
+            stage="check",
+        ),
+        NodeType(
+            "logic.switch",
+            "Switch",
+            "logic",
+            "Picks an output by value: each case you add gets its own output, anything else "
+            "goes to 'otherwise'.",
+            (),
+            SwitchConfig,
+            stage="check",
+            port_rule=_switch_ports,
+            dynamic_ports="cases",
+        ),
+        NodeType(
+            "logic.join",
+            "Wait for all",
+            "logic",
+            "Continues once every branch leading into it has arrived (branches that will not "
+            "run are not waited for). Use it to bring parallel steps back together.",
+            ("next",),
+            stage="decide",
+        ),
+        NodeType(
+            "logic.set",
+            "Set value",
+            "logic",
+            "Stores a value under a name, for later blocks as {{vars.<name>}}.",
+            ("next",),
+            SetValueConfig,
+            stage="decide",
+            outputs=("vars",),
+        ),
+        NodeType(
+            "http.request",
+            "HTTP request",
+            "integration",
+            "Calls another system's API (GET, POST, …) with {{placeholders}} in the URL, headers "
+            "and body. Continues on 'succeeded' for a 2xx answer, otherwise on 'failed'. Its "
+            "answer is {{results.<id>.status}} and {{results.<id>.body}}.",
+            ("success", "failed"),
+            HttpRequestConfig,
+            is_action=True,
+            outputs=("results.{id}.status", "results.{id}.body"),
+        ),
+        NodeType(
+            "flow.call_workflow",
+            "Run another workflow",
+            "integration",
+            "Starts another workflow (one that starts by hand or by webhook) with input, and "
+            "can wait for it to finish. Reuse common steps this way.",
+            ("success", "failed"),
+            CallWorkflowConfig,
+            outputs=("results.{id}.run_id", "results.{id}.status"),
+        ),
+        NodeType(
+            "flow.for_each",
+            "For each row",
+            "integration",
+            "Runs a query and starts the chosen workflow once per row (one after another, at "
+            "most 100), each with the row as {{trigger.body.<column>}}. 'Failed' when any of "
+            "those runs failed.",
+            ("done", "failed"),
+            ForEachConfig,
+            {"done": "all done", "failed": "some failed"},
+            outputs=("results.{id}.rows", "results.{id}.failed"),
         ),
         NodeType(
             "flow.wait",
@@ -1014,7 +1267,7 @@ NODE_TYPES: dict[str, NodeType] = {
                 "analysis.log_snippet",
                 "analysis.task_id",
             ),
-            needs_incident=True,
+            needs_target=True,
         ),
         NodeType(
             "diagnose.classify_log",
@@ -1031,7 +1284,7 @@ NODE_TYPES: dict[str, NodeType] = {
                 "unknown": "unknown",
                 "next": "always",
             },
-            needs_incident=True,
+            needs_target=True,
             outputs=(
                 "diagnosis.label",
                 "diagnosis.category",
@@ -1048,7 +1301,7 @@ NODE_TYPES: dict[str, NodeType] = {
             ("solution_ready", "uncertain"),
             AiGenerateFixConfig,
             {"solution_ready": "fix suggested", "uncertain": "not sure"},
-            needs_incident=True,
+            needs_target=True,
             outputs=(
                 "ai_solution.explanation",
                 "ai_solution.recommended_action",
@@ -1073,7 +1326,7 @@ NODE_TYPES: dict[str, NodeType] = {
                 "escalate": "hand to a person",
                 "ignore": "leave it alone",
             },
-            needs_incident=True,
+            needs_target=True,
             stage="decide",
             outputs=("decision.label", "decision.reason", "decision.fix"),
         ),
@@ -1089,29 +1342,30 @@ NODE_TYPES: dict[str, NodeType] = {
             "action.clear_failed_tasks",
             "Retry failed tasks",
             "action",
-            "Clears the failed tasks of the incident's latest failing run so Airflow reruns them.",
+            "Clears the failed tasks of the DAG run (the one that started the workflow, or the "
+            "incident's latest failing run) so Airflow reruns them.",
             ("success", "failed"),
             ClearTasksConfig,
-            needs_incident=True,
+            needs_target=True,
             is_action=True,
         ),
         NodeType(
             "action.trigger_dag_run",
-            "Re-run the incident's DAG",
+            "Re-run the DAG",
             "action",
-            "Triggers a new run of the incident's DAG. To run any other DAG, use 'Run a DAG'.",
+            "Triggers a new run of the workflow's DAG. To run any other DAG, use 'Run a DAG'.",
             ("success", "failed"),
-            needs_incident=True,
+            needs_target=True,
             is_action=True,
         ),
         NodeType(
             "action.set_dag_paused",
             "Pause or resume a DAG",
             "action",
-            "Pauses (or resumes) the incident's DAG in Airflow.",
+            "Pauses (or resumes) the workflow's DAG in Airflow.",
             ("success", "failed"),
             SetPausedConfig,
-            needs_incident=True,
+            needs_target=True,
             is_action=True,
         ),
         NodeType(
@@ -1121,6 +1375,19 @@ NODE_TYPES: dict[str, NodeType] = {
             "Waits for the run touched by the last action to finish and checks it succeeded.",
             ("success", "failed"),
             VerifyConfig,
+        ),
+        NodeType(
+            "incident.open",
+            "Open incident",
+            "output",
+            "Opens an incident for the DAG run that started the workflow, with its logs as "
+            "evidence. If one is already open for this DAG and type, the run is recorded on it "
+            "('already open'). Blocks after it can update the incident.",
+            ("opened", "already_open"),
+            OpenIncidentConfig,
+            {"opened": "opened", "already_open": "already open"},
+            needs_dag_run=True,
+            outputs=("incident.id", "incident.title", "incident.severity"),
         ),
         NodeType(
             "incident.update",
@@ -1158,15 +1425,22 @@ NODE_TYPES: dict[str, NodeType] = {
 # the workflow assistant's prompt, which needs the details (e.g. what "always" means).
 _SUMMARIES: dict[str, str] = {
     "trigger.incident": "Starts for an incident on any monitored DAG.",
-    "trigger.dag_watch": "Starts for an incident on one of the watched DAGs.",
     "trigger.incident_stale": "Starts when an incident stays unacknowledged too long.",
-    "trigger.dag_run": "Starts when a monitored DAG run finishes.",
+    "trigger.dag": "Starts when the DAG's run is in progress, succeeds or fails.",
     "trigger.manual": "Starts when someone presses Run now.",
-    "trigger.schedule": "Starts every N minutes while turned on.",
+    "trigger.schedule": "Starts every N minutes, or at set times (cron).",
+    "trigger.webhook": "Starts when its secret URL is called.",
     "condition.filter": "Continues only for incidents that match.",
-    "check.dag_state": "Is the incident's DAG paused or already running?",
+    "check.dag_state": "Is the DAG paused or already running?",
     "check.sla": "Is this run slower than its past runs allow?",
+    "logic.if": "Continues on true or false.",
+    "logic.switch": "One output per case, plus otherwise.",
+    "logic.join": "Waits until every branch into it has arrived.",
+    "logic.set": "Stores a value for {{vars.<name>}}.",
     "flow.wait": "Waits, then continues.",
+    "http.request": "Calls another system's API.",
+    "flow.call_workflow": "Starts another workflow, and can wait for it.",
+    "flow.for_each": "Runs a workflow once per row of a query.",
     "pipeline.run_dag": "Starts a run of the chosen DAG.",
     "pipeline.wait_for_dag": "Waits for the chosen DAG to succeed.",
     "database.run_sql": "Runs SQL on the chosen database.",
@@ -1178,9 +1452,10 @@ _SUMMARIES: dict[str, str] = {
     "decide.choose_fix": "Picks the fix from the diagnosis and past attempts.",
     "approval.request": "Waits for someone to approve.",
     "action.clear_failed_tasks": "Re-runs the failed tasks.",
-    "action.trigger_dag_run": "Starts a new run of the incident's DAG.",
-    "action.set_dag_paused": "Pauses or resumes the incident's DAG.",
+    "action.trigger_dag_run": "Starts a new run of the workflow's DAG.",
+    "action.set_dag_paused": "Pauses or resumes the workflow's DAG.",
     "verify.run_success": "Waits for the last action's run and checks it.",
+    "incident.open": "Opens an incident for the DAG run.",
     "incident.update": "Resolves, escalates, acknowledges or notes the incident.",
     "check.record": "Marks the finished run as passed or failed.",
     "notify": "Sends a message in the app or through a channel.",
@@ -1188,6 +1463,10 @@ _SUMMARIES: dict[str, str] = {
 
 TRIGGER_TYPES = frozenset(t for t, nt in NODE_TYPES.items() if nt.category == "trigger")
 INCIDENT_TRIGGER_TYPES = frozenset(t for t in TRIGGER_TYPES if NODE_TYPES[t].needs_incident)
+# Triggers that give the run a DAG run to work on (an incident's run, or the DAG's own run).
+TARGET_TRIGGER_TYPES = INCIDENT_TRIGGER_TYPES | {"trigger.dag"}
+# Start blocks replaced by "When this DAG runs" (saved workflows are migrated).
+LEGACY_TRIGGERS = frozenset({"trigger.dag_watch", "trigger.dag_run"})
 ACTION_TYPES = frozenset(t for t, nt in NODE_TYPES.items() if nt.is_action)
 
 
@@ -1205,6 +1484,8 @@ class Node:
     config: dict[str, Any]
     # Canvas layout; the engine only uses it to order blocks linked from the same output.
     position: dict[str, float] | None = None
+    # How the engine runs it: retries and the 'error' output (NodeSettings), when set.
+    settings: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -1230,29 +1511,31 @@ class Graph:
         return [t for _, t in sorted(enumerate(targets), key=key)]
 
 
-def watched_dag(
-    trigger_config: dict[str, Any], connection_id: Any, dag_id: str
-) -> dict[str, Any] | None:
-    """The 'Watch selected DAGs' entry for a DAG on a connection, or None."""
-    for dag in trigger_config.get("dags") or []:
-        if dag["dag_id"] == dag_id and dag["connection_id"] == str(connection_id):
-            return dag
-    return None
+def node_ports(
+    node_type: str, config: dict[str, Any], settings: dict[str, Any] | None = None
+) -> tuple[str, ...]:
+    """Output ports of a block: fixed by its type, or (with a `port_rule`) from its config;
+    plus 'error' when its settings send failures there."""
+    nt = NODE_TYPES[node_type]
+    ports = (
+        tuple(port for port, _ in nt.port_rule(config)) if nt.port_rule is not None else nt.ports
+    )
+    if (settings or {}).get("on_error") == "output":
+        ports = (*ports, "error")
+    return ports
 
 
-def node_ports(node_type: str, config: dict[str, Any]) -> tuple[str, ...]:
-    """Output ports of a block: fixed, or (for e.g. 'Watch selected DAGs') from its config."""
+def node_port_labels(
+    node_type: str, config: dict[str, Any], settings: dict[str, Any] | None = None
+) -> dict[str, str]:
     nt = NODE_TYPES[node_type]
     if nt.port_rule is not None:
-        return tuple(port for port, _ in nt.port_rule(config))
-    return nt.ports
-
-
-def node_port_labels(node_type: str, config: dict[str, Any]) -> dict[str, str]:
-    nt = NODE_TYPES[node_type]
-    if nt.port_rule is not None:
-        return dict(nt.port_rule(config))
-    return {p: nt.port_labels.get(p, _PORT_LABELS.get(p, p)) for p in nt.ports}
+        labels = dict(nt.port_rule(config))
+    else:
+        labels = {p: nt.port_labels.get(p, _PORT_LABELS.get(p, p)) for p in nt.ports}
+    if (settings or {}).get("on_error") == "output":
+        labels["error"] = "error"
+    return labels
 
 
 def _problem(message: str, **where: str) -> dict[str, str]:
@@ -1285,6 +1568,14 @@ def validate_graph(raw: Any) -> Graph:
             problems.append(_problem(f"Duplicate node id '{node_id}'", node=node_id))
             continue
         node_type = NODE_TYPES.get(str(item.get("type")))
+        if str(item.get("type")) in LEGACY_TRIGGERS:
+            problems.append(
+                _problem(
+                    "This start block was replaced by 'When this DAG runs': pick the DAG there",
+                    node=node_id,
+                )
+            )
+            continue
         if node_type is None:
             problems.append(_problem(f"Unknown node type '{item.get('type')}'", node=node_id))
             continue
@@ -1301,6 +1592,15 @@ def validate_graph(raw: Any) -> Graph:
         if problem:
             problems.append(_problem(problem, node=node_id))
             continue
+        settings = None
+        if item.get("settings") and node_type.category != "trigger":
+            try:
+                parsed = NodeSettings.model_validate(item["settings"])
+            except ValidationError as exc:
+                problems.append(_problem(f"Run settings: {exc.errors()[0]['msg']}", node=node_id))
+                continue
+            if parsed != NodeSettings():
+                settings = parsed.model_dump()
         name = item.get("name")
         nodes[node_id] = Node(
             id=node_id,
@@ -1308,6 +1608,7 @@ def validate_graph(raw: Any) -> Graph:
             name=str(name)[:200] if name else None,
             config=config.model_dump(mode="json"),
             position=position,
+            settings=settings,
         )
 
     raw_ids = {str(n.get("id")) for n in raw_nodes if isinstance(n, dict)}
@@ -1323,7 +1624,7 @@ def validate_graph(raw: Any) -> Graph:
             if src not in raw_ids or dst not in raw_ids:  # else the node itself was reported
                 problems.append(_problem(f"{label} references an unknown node", edge=edge))
             continue
-        if port not in node_ports(nodes[src].type, nodes[src].config):
+        if port not in node_ports(nodes[src].type, nodes[src].config, nodes[src].settings):
             problems.append(
                 _problem(f"{label}: node '{src}' has no output port '{port}'", edge=edge)
             )
@@ -1347,29 +1648,58 @@ def validate_graph(raw: Any) -> Graph:
     # Report every remaining problem at once, so the editor can show them all.
     graph = Graph(nodes=nodes, edges=edges, trigger_id=triggers[0])
     problems.extend(_structure_problems(graph, check_reachable=blocks_ok))
-    if graph.trigger.type not in INCIDENT_TRIGGER_TYPES:
-        problems.extend(
-            _problem(
-                f"'{NODE_TYPES[n.type].label}' works on an incident, so it needs an incident "
-                "trigger",
-                node=n.id,
-            )
-            for n in graph.nodes.values()
-            if NODE_TYPES[n.type].needs_incident
-        )
-    if graph.trigger.type != "trigger.dag_run":
-        problems.extend(
-            _problem(
-                f"'{NODE_TYPES[n.type].label}' works on a finished DAG run, so it needs the "
-                "'When a DAG run finishes' trigger",
-                node=n.id,
-            )
-            for n in graph.nodes.values()
-            if NODE_TYPES[n.type].needs_dag_run
-        )
+    problems.extend(_trigger_fit_problems(graph))
+    for n in graph.nodes.values():
+        if n.type == "logic.join":
+            incoming = {src for (src, _), targets in graph.edges.items() if n.id in targets}
+            if len(incoming) < 2:
+                problems.append(
+                    _problem(
+                        "'Wait for all' brings branches together: link at least two blocks into it",
+                        node=n.id,
+                    )
+                )
     if problems:
         raise GraphError(problems)
     return graph
+
+
+def _trigger_fit_problems(graph: Graph) -> list[dict[str, str]]:
+    """Blocks that cannot work under the workflow's trigger."""
+    trigger = graph.trigger.type
+    opened = [n.id for n in graph.nodes.values() if n.type == "incident.open"]
+    problems = []
+    for n in graph.nodes.values():
+        nt = NODE_TYPES[n.type]
+        if nt.category == "trigger":
+            continue
+        if nt.needs_incident and trigger not in INCIDENT_TRIGGER_TYPES:
+            # After an 'Open incident' block the run has an incident to work on.
+            if not any(n.id in _downstream(graph, o) and n.id != o for o in opened):
+                problems.append(
+                    _problem(
+                        f"'{nt.label}' works on an incident: start from an incident, or put an "
+                        "'Open incident' block before it",
+                        node=n.id,
+                    )
+                )
+        if nt.needs_target and trigger not in TARGET_TRIGGER_TYPES:
+            problems.append(
+                _problem(
+                    f"'{nt.label}' works on a DAG run: start with 'When this DAG runs' or an "
+                    "incident trigger",
+                    node=n.id,
+                )
+            )
+        if nt.needs_dag_run and trigger != "trigger.dag":
+            problems.append(
+                _problem(
+                    f"'{nt.label}' works on the DAG run that started the workflow, so it needs "
+                    "'When this DAG runs'",
+                    node=n.id,
+                )
+            )
+    return problems
 
 
 def _config_message(node_type: NodeType, err: Any) -> str:
@@ -1431,6 +1761,11 @@ def _structure_problems(graph: Graph, *, check_reachable: bool) -> list[dict[str
     return problems
 
 
+def downstream(graph: Graph, start: str) -> set[str]:
+    """`start` and every block reachable from it."""
+    return _downstream(graph, start)
+
+
 def _downstream(graph: Graph, start: str) -> set[str]:
     """`start` and every block reachable from it."""
     seen: set[str] = set()
@@ -1444,7 +1779,9 @@ def _downstream(graph: Graph, start: str) -> set[str]:
 
 
 # Values every run offers to {{placeholders}} (see NodeContext.render_values).
-_GLOBAL_VALUES = frozenset({"workflow", "environment", "last_error", "links", "results"})
+_GLOBAL_VALUES = frozenset(
+    {"workflow", "environment", "last_error", "links", "results", "vars", "trigger"}
+)
 _INCIDENT_VALUES = frozenset({"incident"})
 _PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z0-9_.]+)\s*\}\}")
 
@@ -1461,7 +1798,7 @@ def graph_warnings(graph: Graph) -> list[dict[str, str]]:
         offered = set(_GLOBAL_VALUES)
         if NODE_TYPES[graph.trigger.type].needs_incident:
             offered |= _INCIDENT_VALUES
-        if graph.trigger.type == "trigger.dag_run":
+        if graph.trigger.type == "trigger.dag":
             offered.add("dag_run")
         for upstream in before:
             offered |= {o.split(".")[0] for o in NODE_TYPES[graph.nodes[upstream].type].outputs}
@@ -1502,6 +1839,7 @@ def to_raw(graph: Graph) -> dict[str, Any]:
                 **({"name": n.name} if n.name else {}),
                 "config": n.config,
                 **({"position": n.position} if n.position else {}),
+                **({"settings": n.settings} if n.settings else {}),
             }
             for n in graph.nodes.values()
         ],

@@ -74,6 +74,10 @@ class RunVerifyDagParameters(BaseModel):
 
 
 class ValidateRunParameters(BaseModel):
+    airflow_connection_id: str = Field(
+        min_length=1,
+        json_schema_extra={"x-label": "Airflow connection", "x-widget": "airflow_connection"},
+    )
     dag_id: str = Field(
         min_length=1, max_length=250, json_schema_extra={"x-label": "DAG to validate"}
     )
@@ -159,11 +163,34 @@ class ReconcileParameters(BaseModel):
 
 
 class AirflowReconcileParameters(ReconcileParameters):
+    airflow_connection_id: str = Field(
+        min_length=1,
+        json_schema_extra={"x-label": "Airflow connection", "x-widget": "airflow_connection"},
+    )
     dag_id: str = Field(
         default="agentic_reconciliation_pipeline",
         min_length=1,
         max_length=250,
         json_schema_extra={"x-label": "Airflow DAG", "x-widget": "dag"},
+    )
+
+
+class DagSlaParameters(BaseModel):
+    connection_id: str = Field(
+        min_length=1,
+        json_schema_extra={"x-label": "Airflow connection", "x-widget": "airflow_connection"},
+    )
+    dag_id: str = Field(
+        min_length=1,
+        max_length=250,
+        json_schema_extra={"x-label": "DAG", "x-widget": "dag"},
+    )
+
+
+def _dag_trigger(connection_id: str, dag_id: str, *states: str) -> dict[str, Any]:
+    """'When this DAG runs' for one DAG, starting on the given events."""
+    return _n(
+        "trigger", "trigger.dag", connection_id=connection_id, dag_id=dag_id, states=list(states)
     )
 
 
@@ -533,7 +560,7 @@ TEMPLATES: tuple[Template, ...] = (
 def _validate_run_graph(parameters: ValidateRunParameters) -> dict[str, Any]:
     return {
         "nodes": [
-            _n("trigger", "trigger.dag_run", states=["success"], dag_ids=[parameters.dag_id]),
+            _dag_trigger(parameters.airflow_connection_id, parameters.dag_id, "success"),
             _n(
                 "check",
                 "database.check",
@@ -561,7 +588,7 @@ def _validate_run_graph(parameters: ValidateRunParameters) -> dict[str, Any]:
             ),
         ],
         "edges": [
-            _e("trigger", "next", "check"),
+            _e("trigger", "success", "check"),
             _e("check", "pass", "passed"),
             _e("check", "fail", "failed"),
             _e("failed", "next", "notify"),
@@ -578,6 +605,7 @@ VALIDATE_RUN_TEMPLATE = Template(
     ),
     graph=_validate_run_graph(
         ValidateRunParameters(
+            airflow_connection_id="template-airflow",
             dag_id="template-dag",
             database_connection_id="template-connection",
             sql="SELECT 1",
@@ -585,7 +613,8 @@ VALIDATE_RUN_TEMPLATE = Template(
     ),
     parameter_model=ValidateRunParameters,
     builder=_validate_run_graph,
-    supported_trigger_types=("trigger.dag_run",),
+    version=2,
+    supported_trigger_types=("trigger.dag",),
 )
 
 
@@ -594,13 +623,16 @@ def _reconcile_graph(
     *,
     trigger_type: str = "trigger.manual",
     dag_id: str | None = None,
+    airflow_connection_id: str = "",
 ) -> dict[str, Any]:
-    trigger_config = {}
-    if trigger_type == "trigger.dag_run":
-        trigger_config = {"states": ["success"], "dag_ids": [dag_id]}
+    if trigger_type == "trigger.dag":
+        trigger = _dag_trigger(airflow_connection_id, dag_id or "", "success")
+    else:
+        trigger = _n("trigger", trigger_type)
+    start_port = "success" if trigger_type == "trigger.dag" else "next"
     return {
         "nodes": [
-            _n("trigger", trigger_type, **trigger_config),
+            trigger,
             _n(
                 "reconcile",
                 "database.reconcile",
@@ -639,7 +671,7 @@ def _reconcile_graph(
             ),
         ],
         "edges": [
-            _e("trigger", "next", "reconcile"),
+            _e("trigger", start_port, "reconcile"),
             _e("reconcile", "matched", "matched"),
             _e("reconcile", "mismatched", "mismatched"),
             _e("reconcile", "failed", "failed"),
@@ -648,7 +680,12 @@ def _reconcile_graph(
 
 
 def _airflow_reconcile_graph(parameters: AirflowReconcileParameters) -> dict[str, Any]:
-    return _reconcile_graph(parameters, trigger_type="trigger.dag_run", dag_id=parameters.dag_id)
+    return _reconcile_graph(
+        parameters,
+        trigger_type="trigger.dag",
+        dag_id=parameters.dag_id,
+        airflow_connection_id=parameters.airflow_connection_id,
+    )
 
 
 RECONCILE_TEMPLATE = Template(
@@ -671,7 +708,8 @@ AIRFLOW_RECONCILE_TEMPLATE = Template(
     ),
     parameter_model=AirflowReconcileParameters,
     builder=_airflow_reconcile_graph,
-    supported_trigger_types=("trigger.dag_run",),
+    version=2,
+    supported_trigger_types=("trigger.dag",),
 )
 
 RUN_VERIFY_TEMPLATE = Template(
@@ -686,16 +724,11 @@ RUN_VERIFY_TEMPLATE = Template(
     supported_trigger_types=("trigger.manual",),
 )
 
-ADAPTIVE_SLA_TEMPLATE = Template(
-    key="adaptive-sla-alert",
-    name="Alert when a DAG run misses its SLA",
-    description=(
-        "Estimates the expected execution SLA dynamically from historical runs in Airflow. "
-        "If a DAG run exceeds the estimated threshold, alerts via Slack or email."
-    ),
-    graph={
+
+def _adaptive_sla_graph(parameters: DagSlaParameters) -> dict[str, Any]:
+    return {
         "nodes": [
-            _n("trigger", "trigger.dag_run", states=["success", "failed"], dag_ids=[]),
+            _dag_trigger(parameters.connection_id, parameters.dag_id, "success", "failed"),
             _n("sla_check", "check.sla", metric="duration", margin_pct=20, sample_size=10),
             _n(
                 "notify_sla",
@@ -714,12 +747,26 @@ ADAPTIVE_SLA_TEMPLATE = Template(
             ),
         ],
         "edges": [
-            _e("trigger", "next", "sla_check"),
+            _e("trigger", "success", "sla_check"),
+            _e("trigger", "failed", "sla_check"),
             _e("sla_check", "exceeded", "notify_sla"),
         ],
-    },
-    supported_trigger_types=("trigger.dag_run", "trigger.manual", "trigger.schedule"),
+    }
+
+
+ADAPTIVE_SLA_TEMPLATE = Template(
+    key="adaptive-sla-alert",
+    name="Alert when a DAG run misses its SLA",
+    description=(
+        "Estimates the expected execution SLA dynamically from historical runs in Airflow. "
+        "If a DAG run exceeds the estimated threshold, alerts via Slack or email."
+    ),
+    parameter_model=DagSlaParameters,
+    builder=_adaptive_sla_graph,
+    version=2,
+    supported_trigger_types=("trigger.dag",),
 )
+
 
 IN_FLIGHT_SLA_TEMPLATE = Template(
     key="in-flight-sla-monitor",

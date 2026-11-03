@@ -4,12 +4,19 @@
 // Keep in step with the labels in backend/app/automation/graph.py (NODE_TYPES).
 export const NODE_LABELS = {
   'trigger.incident': 'When any DAG has an incident',
-  'trigger.dag_watch': 'Watch selected DAGs',
   'trigger.incident_stale': 'When an incident is ignored',
-  'trigger.dag_run': 'When a DAG run finishes',
+  'trigger.dag': 'When this DAG runs',
   'trigger.manual': 'When run manually',
   'trigger.schedule': 'On a schedule',
+  'trigger.webhook': 'When a webhook is called',
   'condition.filter': 'Filter incidents',
+  'http.request': 'HTTP request',
+  'flow.call_workflow': 'Run another workflow',
+  'flow.for_each': 'For each row',
+  'logic.if': 'If',
+  'logic.switch': 'Switch',
+  'logic.join': 'Wait for all',
+  'logic.set': 'Set value',
   'check.dag_state': 'Check DAG state',
   'check.sla': 'Check SLA',
   'database.check': 'Check data (SQL)',
@@ -22,12 +29,13 @@ export const NODE_LABELS = {
   'flow.wait': 'Wait',
   'pipeline.wait_for_dag': 'Wait for a DAG run',
   'pipeline.run_dag': 'Run a DAG',
-  'action.trigger_dag_run': "Re-run the incident's DAG",
+  'action.trigger_dag_run': 'Re-run the DAG',
   'action.clear_failed_tasks': 'Retry failed tasks',
   'action.set_dag_paused': 'Pause or resume a DAG',
   'database.run_sql': 'Run SQL',
   'verify.run_success': 'Verify the run succeeded',
   notify: 'Send a notification',
+  'incident.open': 'Open incident',
   'incident.update': 'Update the incident',
   'check.record': 'Record the run result',
 }
@@ -39,7 +47,7 @@ export const STAGES = [
   { id: 'check', label: 'Check', title: 'Check conditions & data', categories: ['logic', 'database'] },
   { id: 'diagnose', label: 'Diagnose', title: 'Diagnose the failure', categories: ['diagnosis'] },
   { id: 'decide', label: 'Decide', title: 'Decide & wait', categories: ['logic', 'approval', 'pipeline'] },
-  { id: 'act', label: 'Act', title: 'Change something', categories: ['pipeline', 'database', 'action'] },
+  { id: 'act', label: 'Act', title: 'Change something', categories: ['pipeline', 'database', 'action', 'integration'] },
   { id: 'verify', label: 'Verify', title: 'Verify it worked', categories: ['verify'] },
   { id: 'notify', label: 'Notify', title: 'Record & notify', categories: ['output'] },
 ]
@@ -54,6 +62,7 @@ const STAGE_BY_CATEGORY = {
   diagnosis: 'diagnose',
   approval: 'decide',
   action: 'act',
+  integration: 'act',
   verify: 'verify',
   output: 'notify',
 }
@@ -71,6 +80,15 @@ export const NODE_ICONS = {
   'ai.generate_fix': '🤖',
   'pipeline.wait_for_dag': '⏳',
   'database.reconcile': '⇄',
+  'http.request': '🌐',
+  'flow.call_workflow': '↪',
+  'flow.for_each': '⟳',
+  'logic.if': '⋔',
+  'logic.switch': '⑂',
+  'logic.join': '⧉',
+  'logic.set': '𝑥',
+  'trigger.webhook': '🔗',
+  'trigger.schedule': '🕒',
   trigger: '⚡',
   condition: '⋔',
   analyze: '📄',
@@ -95,7 +113,7 @@ const DAG_RUN_STATE_LABELS = {
 }
 
 // Workflows with these triggers are started by people or the clock, not by incidents.
-const BY_HAND_TRIGGERS = new Set(['trigger.manual', 'trigger.schedule'])
+const BY_HAND_TRIGGERS = new Set(['trigger.manual', 'trigger.schedule', 'trigger.webhook'])
 
 export function triggerType(graph) {
   return graph?.nodes?.find((n) => n.type?.startsWith('trigger.'))?.type ?? null
@@ -112,6 +130,12 @@ function shortSql(sql = '') {
 
 export function nodeIcon(type) {
   return NODE_ICONS[type] ?? NODE_ICONS[type.split('.')[0]] ?? '•'
+}
+
+const INCIDENT_TYPE_LABELS = {
+  DAG_RUN_FAILED: 'DAG run failed',
+  SLA_MISSED: 'SLA missed',
+  DATA_CHECK_FAILED: 'Data check failed',
 }
 
 export const CATEGORY_LABELS = {
@@ -135,21 +159,41 @@ export function describeConfig(type, config = {}) {
       parts.push(`on ${config.events?.join(' / ')}`)
       if (config.incident_types?.length) parts.push(config.incident_types.join(', '))
       break
-    case 'trigger.dag_watch': {
-      const dags = config.dags ?? []
-      parts.push(dags.length ? `watching ${dags.map((d) => d.dag_id).join(', ')}` : 'no DAGs yet: drop DAGs here')
-      parts.push(`on ${config.events?.join(' / ')}`)
-      if (config.incident_types?.length) parts.push(config.incident_types.join(', '))
+    case 'http.request':
+      parts.push(`${config.method ?? 'POST'} ${config.url || 'enter a URL'}`)
+      if (config.method !== 'GET' && config.environment) parts.push(config.environment.toLowerCase())
       break
-    }
+    case 'flow.call_workflow':
+      parts.push(config.wait === false ? "start, don't wait" : `wait ≤ ${config.timeout_minutes ?? 60} min`)
+      break
+    case 'flow.for_each':
+      parts.push(`${shortSql(config.sql) || 'enter SQL'} · ≤ ${config.max_rows ?? 20} rows`)
+      break
+    case 'logic.if':
+      parts.push(
+        ['is_empty', 'not_empty'].includes(config.operator)
+          ? `${config.left || '…'} ${config.operator === 'is_empty' ? 'is empty' : 'is not empty'}`
+          : `${config.left || '…'} ${config.operator ?? '='} ${config.right || '…'}`,
+      )
+      break
+    case 'logic.switch':
+      parts.push(`${config.value || '…'}: ${(config.cases ?? []).map((c) => c.label || c.equals).join(' / ') || 'no cases yet'}`)
+      break
+    case 'logic.set':
+      parts.push(`${config.name ?? 'value'} = ${config.value || '…'}`)
+      break
     case 'trigger.incident_stale':
       parts.push(`open & unacknowledged for ${config.minutes} min`)
       break
-    case 'trigger.dag_run':
+    case 'trigger.dag':
+      parts.push(config.dag_id || 'choose a DAG')
       parts.push(
-        `on ${(config.states ?? ['success', 'failed']).map((state) => DAG_RUN_STATE_LABELS[state] ?? state).join(' / ')}`,
+        `on ${(config.states ?? ['in_progress', 'success', 'failed']).map((state) => DAG_RUN_STATE_LABELS[state] ?? state).join(' / ')}`,
       )
-      parts.push(config.dag_ids?.length ? config.dag_ids.join(', ') : 'every monitored DAG')
+      break
+    case 'incident.open':
+      parts.push(INCIDENT_TYPE_LABELS[config.incident_type ?? 'DAG_RUN_FAILED'] ?? config.incident_type)
+      parts.push((config.severity ?? 'HIGH').toLowerCase())
       break
     case 'check.record':
       parts.push(`mark ${config.result ?? 'passed'}`)
@@ -159,6 +203,10 @@ export function describeConfig(type, config = {}) {
       parts.push('when someone presses Run now')
       break
     case 'trigger.schedule':
+      if (config.mode === 'cron') {
+        parts.push(`cron ${config.cron}${config.timezone && config.timezone !== 'UTC' ? ` (${config.timezone})` : ' UTC'}`)
+        break
+      }
       parts.push(
         config.every_minutes % 60 === 0
           ? `every ${config.every_minutes / 60 === 1 ? 'hour' : `${config.every_minutes / 60} h`}`
@@ -244,7 +292,7 @@ export function describeConfig(type, config = {}) {
   return parts.filter(Boolean).join(' · ')
 }
 
-const TRIGGER_EVENTS = { manual: 'Run now', schedule: 'schedule', dag_run: 'DAG run finished' }
+const TRIGGER_EVENTS = { manual: 'Run now', schedule: 'schedule', dag_run: 'DAG run', webhook: 'webhook', called: 'another workflow' }
 
 /** How a run started: "Run now", "schedule", or "incident opened" etc. */
 export function triggerText(event) {

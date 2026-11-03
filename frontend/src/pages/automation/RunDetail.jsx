@@ -52,6 +52,7 @@ export default function RunDetail() {
   const [error, setError] = useState(null)
   const [cancelling, setCancelling] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [rerunning, setRerunning] = useState(false)
   const navigate = useNavigate()
   const canOperate = hasRole('ADMIN', 'OPERATOR')
   const canDelete = hasRole('ADMIN')
@@ -80,6 +81,22 @@ export default function RunDetail() {
       toast.error(err.message)
     } finally {
       setCancelling(false)
+    }
+  }
+
+  // Runs started by hand or by a webhook can be started again with the same input.
+  const input = run?.context?.trigger?.body
+  const canRerun = canOperate && ['manual', 'webhook'].includes(run?.trigger_event)
+  async function rerun() {
+    setRerunning(true)
+    try {
+      const again = await automationApi.runWorkflow(run.workflow_id, input ? { input } : {})
+      toast.success('Run started again')
+      navigate(`/automation/runs/${again.id}`)
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setRerunning(false)
     }
   }
 
@@ -129,6 +146,11 @@ export default function RunDetail() {
         {canOperate && active && (
           <Button variant="danger" onClick={cancel} loading={cancelling}>
             Cancel run
+          </Button>
+        )}
+        {canRerun && !active && (
+          <Button onClick={rerun} loading={rerunning} title={input ? 'Same input as this run' : undefined}>
+            Run again{input ? ' with the same input' : ''}
           </Button>
         )}
         {canDelete && !active && (

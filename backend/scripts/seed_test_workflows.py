@@ -76,6 +76,7 @@ _SLA_DETAILS = (
 
 @dataclass(frozen=True)
 class Targets:
+    airflow: str  # Airflow connection id
     warehouse: str  # database connection ids
     source: str
     send_via: str  # Team Slack channel id, or "" for in-app only
@@ -87,7 +88,13 @@ class Targets:
 def sla_after_run_graph(t: Targets) -> dict[str, Any]:
     return {
         "nodes": [
-            _n("trigger", "trigger.dag_run", states=["success"], dag_ids=[ETL_DAG, LAB_DAG]),
+            _n(
+                "trigger",
+                "trigger.dag",
+                connection_id=t.airflow,
+                dag_id=ETL_DAG,
+                states=["success"],
+            ),
             _n(
                 "sla",
                 "check.sla",
@@ -107,7 +114,7 @@ def sla_after_run_graph(t: Targets) -> dict[str, Any]:
                 message="The run finished, but took longer than usual.\n" + _SLA_DETAILS,
             ),
         ],
-        "edges": [_e("trigger", "next", "sla"), _e("sla", "exceeded", "alert")],
+        "edges": [_e("trigger", "success", "sla"), _e("sla", "exceeded", "alert")],
     }
 
 
@@ -370,11 +377,16 @@ def quality_checks(fresh_within_minutes: int) -> list[Check | Reconcile]:
 
 
 def _quality_chain(
-    t: Targets, checks: list[Check | Reconcile], on_pass: str, on_fail: str
+    t: Targets,
+    checks: list[Check | Reconcile],
+    on_pass: str,
+    on_fail: str,
+    *,
+    start_port: str = "next",
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     """Checks one after another; the first failure goes to `on_fail`, all passing to `on_pass`."""
     nodes: list[dict[str, Any]] = []
-    edges: list[dict[str, str]] = [_e("trigger", "next", checks[0].id)]
+    edges: list[dict[str, str]] = [_e("trigger", start_port, checks[0].id)]
     for i, check in enumerate(checks):
         nxt = checks[i + 1].id if i + 1 < len(checks) else on_pass
         if isinstance(check, Reconcile):
@@ -413,10 +425,18 @@ def _quality_chain(
 
 def quality_after_run_graph(t: Targets) -> dict[str, Any]:
     checks = quality_checks(fresh_within_minutes=60)
-    nodes, edges = _quality_chain(t, checks, "record_passed", "record_failed")
+    nodes, edges = _quality_chain(
+        t, checks, "record_passed", "record_failed", start_port="success"
+    )
     return {
         "nodes": [
-            _n("trigger", "trigger.dag_run", states=["success"], dag_ids=[ETL_DAG]),
+            _n(
+                "trigger",
+                "trigger.dag",
+                connection_id=t.airflow,
+                dag_id=ETL_DAG,
+                states=["success"],
+            ),
             *nodes,
             _n(
                 "record_passed",
@@ -671,7 +691,7 @@ def fix_unknown_graph(t: Targets) -> dict[str, Any]:
 # ---------------------------------------------------------------------- entry points
 
 WORKFLOWS = (
-    (SLA_1, "After each ETL or failure-lab run: alert if it took over twice as long as usual.",
+    (SLA_1, "After each successful ETL run: alert if it took over twice as long as usual.",
      sla_after_run_graph),
     (SLA_2, "Every 5 minutes: alert if a failure-lab run is still going after twice its usual "
      "time.", sla_in_flight_graph),
@@ -707,7 +727,10 @@ def seed(db: Session) -> seed_demo.SeedReport:
     if warehouse is None or source is None or airflow is None:
         raise SystemExit("Run scripts/seed_demo.py first (connections are missing)")
     slack = _named(db, NotificationChannel, seed_demo.SLACK_NAME)
-    targets = Targets(str(warehouse.id), str(source.id), str(slack.id) if slack else "")
+    targets = Targets(
+        str(airflow.id), str(warehouse.id), str(source.id), str(slack.id) if slack else ""
+    )
+    seed_demo.ensure_dag(db, airflow, ETL_DAG, report)
 
     for name in OLD_DEMO_WORKFLOWS:
         old = _named(db, Workflow, name)

@@ -682,7 +682,12 @@ def test_stale_escalation(db: Session, orders_clock: Clock) -> None:
     assert old.severity == IncidentSeverity.HIGH
     assert fresh.severity == acked.severity == IncidentSeverity.MEDIUM
     assert "Severity raised to HIGH" in only(db, Notification).body
-    assert tick(db, orders_clock).enqueued == 0  # once per incident
+    assert tick(db, orders_clock).enqueued == 0  # once per occurrence
+
+    # It happens again and is still ignored: the next tick reminds again.
+    old.occurrence_count += 1
+    db.commit()
+    assert tick(db, orders_clock).enqueued == 1
 
 
 # ---------------------------------------------------------------------- mechanics

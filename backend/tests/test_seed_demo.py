@@ -79,8 +79,10 @@ def test_seed_twice_creates_no_duplicates(db: Session, admin: User) -> None:
 
 def test_monitors_known_sandbox_dags(db: Session, admin: User) -> None:
     seed_demo.seed(db, seed_demo.DemoConfig(mock_airflow=True))
-    conn = db.scalar(select(AirflowConnection))
-    db.add(MonitoredDag(connection_id=conn.id, dag_id=seed_demo.ETL_DAG, detect_failures=False))
+    # The first seed registered the ETL DAG (the mock Airflow does not have it); a later sync
+    # finds it in Airflow, unmonitored: the next seed monitors it with the demo settings.
+    dag = db.scalar(select(MonitoredDag).where(MonitoredDag.dag_id == seed_demo.ETL_DAG))
+    dag.is_present, dag.is_monitored, dag.detect_failures = True, False, False
     db.commit()
 
     seed_demo.seed(db, seed_demo.DemoConfig(mock_airflow=True))

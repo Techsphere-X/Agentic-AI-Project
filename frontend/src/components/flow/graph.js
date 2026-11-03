@@ -29,28 +29,36 @@ export const BAD_PORTS = new Set([
 
 /** "good" | "bad" | "neutral" for an output port, from its block's catalog entry. */
 export function portTone(def, port) {
-  if (def?.dynamic_ports) return 'neutral'
+  if (port === 'error') return 'bad'
+  if (def?.dynamic_ports) return port === 'otherwise' ? 'neutral' : 'good'
   return def?.port_tones?.[port] ?? (BAD_PORTS.has(port) ? 'bad' : 'good')
 }
 
+// Blocks whose outputs follow their settings (`dynamic_ports` in the catalog):
+// rule name -> config -> [{port, label}]. Keep in step with `port_rule` in the backend.
+const DYNAMIC_PORTS = {
+  // Switch: one output per case, plus 'otherwise'.
+  cases: (config) => [
+    ...(config.cases ?? []).filter((c) => c.key).map((c) => ({ port: c.key, label: c.label || c.equals })),
+    { port: 'otherwise', label: 'otherwise' },
+  ],
+}
+
 /**
- * Output ports of a block. Most are fixed by the catalog; "Watch selected DAGs"
- * (`dynamic_ports: 'dags'`) has one output per watched DAG, keyed by the entry's `key`.
+ * Output ports of a block: fixed by the catalog, or (dynamic blocks) from its config; plus
+ * 'error' when its run settings send failures there.
  */
-export function portsOf(def, config) {
-  if (def?.dynamic_ports === 'dags') return (config?.dags ?? []).map((d) => d.key).filter(Boolean)
-  return def?.ports ?? []
+export function portsOf(def, config, settings) {
+  const rule = DYNAMIC_PORTS[def?.dynamic_ports]
+  const ports = rule ? rule(config ?? {}).map((p) => p.port) : (def?.ports ?? [])
+  return settings?.on_error === 'output' ? [...ports, 'error'] : ports
 }
 
 /** The label shown next to an output port. */
 export function portName(def, port, config) {
-  if (def?.dynamic_ports === 'dags') {
-    const dags = config?.dags ?? []
-    const dag = dags.find((d) => d.key === port)
-    if (!dag) return port
-    const twins = dags.filter((d) => d.dag_id === dag.dag_id).length > 1
-    return twins ? `${dag.dag_id} (${dags.indexOf(dag) + 1})` : dag.dag_id
-  }
+  if (port === 'error') return 'error'
+  const rule = DYNAMIC_PORTS[def?.dynamic_ports]
+  if (rule) return rule(config ?? {}).find((p) => p.port === port)?.label ?? port
   return def?.port_labels?.[port] ?? port
 }
 
@@ -60,28 +68,25 @@ export function portLabel(def, port, config) {
   return portName(def, port, config)
 }
 
-/** Readable unique output id for a watched DAG, e.g. `orders_pipeline` or `orders_2`. */
-export function dagKey(dagId, taken) {
-  const base = (dagId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 90) || 'dag')
-  let key = base
-  for (let n = 2; taken.has(key); n += 1) key = `${base}_${n}`
-  return key
-}
-
 /**
- * Add a DAG `{connection_id, dag_id}` to a "Watch selected DAGs" block. Returns the updated
- * node, or null when that DAG is already watched.
+ * Links from a trigger that is being switched to `def`: links from outputs the new trigger
+ * also has stay; the others move to 'then', or to 'failed' for "When this DAG runs" (incident
+ * workflows react to failures). Labels follow the new trigger.
  */
-export function addWatchedDag(node, dag) {
-  const dags = node.data.config?.dags ?? []
-  if (dags.some((d) => d.dag_id === dag.dag_id && d.connection_id === dag.connection_id)) return null
-  const entry = { key: dagKey(dag.dag_id, new Set(dags.map((d) => d.key))), connection_id: dag.connection_id, dag_id: dag.dag_id }
-  return { ...node, data: { ...node.data, config: { ...node.data.config, dags: [...dags, entry] } } }
+export function retargetTriggerEdges(edges, triggerId, def, config) {
+  const ports = portsOf(def, config)
+  const fallback = ports.includes('next') ? 'next' : ports.includes('failed') ? 'failed' : ports[0]
+  const moved = edges.map((e) => {
+    if (e.source !== triggerId) return e
+    const port = ports.includes(e.sourceHandle) ? e.sourceHandle : fallback
+    return newEdge({ source: e.source, sourceHandle: port, target: e.target }, def, config)
+  })
+  return moved.filter((e, i) => e.sourceHandle && moved.findIndex((o) => o.id === e.id) === i)
 }
 
 /** Links leaving outputs a block no longer has (e.g. after its config changed). */
 export function prunePortEdges(node, edges) {
-  const ports = new Set(portsOf(node.data.def, node.data.config))
+  const ports = new Set(portsOf(node.data.def, node.data.config, node.data.settings))
   return edges.filter((e) => e.source !== node.id || ports.has(e.sourceHandle))
 }
 
@@ -111,11 +116,25 @@ export function toFlow(graph, extraData = () => ({})) {
     type: BLOCK,
     position: n.position ?? auto[n.id] ?? { x: 0, y: 0 },
     deletable: true,
-    data: { nodeType: n.type, name: n.name ?? '', config: n.config ?? {}, ...extraData(n) },
+    data: {
+      nodeType: n.type,
+      name: n.name ?? '',
+      config: n.config ?? {},
+      ...(n.settings ? { settings: n.settings } : {}),
+      ...extraData(n),
+    },
   }))
   const byId = Object.fromEntries(nodes.map((n) => [n.id, n.data]))
   const edges = (graph?.edges ?? []).map((e) => toEdge(e.from, e.port, e.to, byId[e.from]?.def, byId[e.from]?.config))
   return { nodes, edges }
+}
+
+export const DEFAULT_RUN_SETTINGS = { retries: 0, retry_delay_seconds: 60, on_error: 'fail' }
+
+/** Whether a block's run settings differ from the defaults (only then are they saved). */
+export function hasRunSettings(settings) {
+  if (!settings) return false
+  return Object.entries(DEFAULT_RUN_SETTINGS).some(([key, value]) => (settings[key] ?? value) !== value)
 }
 
 /** React Flow -> backend graph (positions rounded). */
@@ -126,6 +145,7 @@ export function fromFlow(nodes, edges) {
       type: n.data.nodeType,
       ...(n.data.name?.trim() ? { name: n.data.name.trim() } : {}),
       config: n.data.config ?? {},
+      ...(hasRunSettings(n.data.settings) ? { settings: n.data.settings } : {}),
       position: { x: Math.round(n.position.x), y: Math.round(n.position.y) },
     })),
     edges: edges.map((e) => ({ from: e.source, port: e.sourceHandle, to: e.target })),

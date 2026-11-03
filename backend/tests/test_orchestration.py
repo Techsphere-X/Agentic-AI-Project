@@ -145,11 +145,11 @@ def steps(run: WorkflowRun) -> list[tuple[str, str | None]]:
 # ---------------------------------------------------------------------- validation
 
 
-def test_incident_blocks_need_an_incident_trigger() -> None:
+def test_dag_run_blocks_need_a_dag_or_incident_trigger() -> None:
     graph = chain({"id": "fix", "type": "action.clear_failed_tasks", "config": {}})
     with pytest.raises(GraphError) as exc:
         validate_graph(graph)
-    assert "needs an incident trigger" in exc.value.problems[0]["message"]
+    assert "works on a DAG run" in exc.value.problems[0]["message"]
 
 
 def test_targets_must_be_chosen_and_parameters_valid() -> None:
@@ -569,7 +569,7 @@ def test_orchestration_blocks_are_in_the_catalog(client: TestClient, viewer_head
     assert props["dag_id"]["x-widget"] == "dag"
     assert types["pipeline.run_dag"]["ports"] == ["success", "in_progress", "failed"]
     assert types["pipeline.run_dag"]["port_labels"]["in_progress"] == "in progress"
-    assert types["action.clear_failed_tasks"]["needs_incident"] is True
+    assert types["action.clear_failed_tasks"]["needs_target"] is True
     assert types["database.check"]["needs_incident"] is False
 
 

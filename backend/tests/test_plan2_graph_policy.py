@@ -221,7 +221,7 @@ def test_loop_and_trigger_mismatch_are_reported_together() -> None:
     raw["edges"].append({"from": "f", "port": "false", "to": "c"})
     messages = " | ".join(p["message"] for p in _problems(raw))
     assert "loop" in messages
-    assert "needs an incident trigger" in messages
+    assert "works on an incident" in messages
 
 
 def test_unknown_placeholders_are_warned_about() -> None:

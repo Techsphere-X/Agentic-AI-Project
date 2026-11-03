@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { airflowApi, channelsApi, databaseApi } from '../../services/endpoints'
-import { Button, Toggle } from '../ui'
-import { dagKey } from './graph'
+import { airflowApi, automationApi, channelsApi, databaseApi } from '../../services/endpoints'
+import { Toggle } from '../ui'
 
 // Renders a settings form from a Pydantic JSON schema (the node-type catalog's config_schema).
 // Supports the shapes our node configs use: booleans, integers, strings, enums ($ref or inline,
@@ -10,7 +9,7 @@ import { dagKey } from './graph'
 // `x-widget` (see WIDGETS below). `template` fields get an "Insert variable" menu fed by the
 // `variables` prop: [{ group, key }].
 
-const LONG_TEXT = new Set(['message', 'note', 'description'])
+const LONG_TEXT = new Set(['message', 'note', 'description', 'headers', 'body', 'input'])
 
 function resolve(schema, root) {
   if (schema?.$ref) {
@@ -145,56 +144,140 @@ function DagInput({ id, value, onChange, disabled, connectionId, anyConnection }
 }
 
 /**
- * Watched DAGs ("Watch selected DAGs"): one chip per DAG, each an output of the block.
- * DAGs are usually dropped onto the block; this row adds one by name. Removing a chip also
- * removes the links from its output (the editor prunes them).
+ * Switch cases: label + value per row. Each case is an output of the block; its `key` (the
+ * output id) is fixed when the row is added, so editing the label keeps its links.
  */
-function DagListInput({ id, value, onChange, disabled }) {
-  const dags = value ?? []
-  const conns = useList('airflow', () => airflowApi.listConnections().then((r) => r.items))
-  const [connectionId, setConnectionId] = useState('')
-  const [dagId, setDagId] = useState('')
-  const connName = (cid) => {
-    const conn = conns?.find((c) => c.id === cid)
-    return conn ? `${conn.name} · ${conn.environment.toLowerCase()}` : 'unknown connection'
-  }
-  const duplicate = dags.some((d) => d.connection_id === connectionId && d.dag_id === dagId)
+function CasesInput({ value, onChange, disabled }) {
+  const cases = value ?? []
+  const update = (index, patch) => onChange(cases.map((c, i) => (i === index ? { ...c, ...patch } : c)))
   function add() {
-    const entry = { key: dagKey(dagId, new Set(dags.map((d) => d.key))), connection_id: connectionId, dag_id: dagId }
-    onChange([...dags, entry])
-    setDagId('')
+    const taken = new Set(cases.map((c) => c.key))
+    let n = cases.length + 1
+    while (taken.has(`case_${n}`)) n += 1
+    onChange([...cases, { key: `case_${n}`, label: '', equals: '' }])
   }
   return (
-    <div className="dag-list">
-      {dags.length === 0 && <p className="muted small">No DAGs yet. Drag DAGs from “DAGs to watch” onto the block.</p>}
-      <ul className="dag-chips">
-        {dags.map((d) => (
-          <li key={d.key} className="dag-chip" title={connName(d.connection_id)}>
-            <span className="mono">{d.dag_id}</span>
-            <span className="muted small">{connName(d.connection_id)}</span>
-            {!disabled && (
-              <button
-                type="button"
-                className="dag-chip-remove"
-                aria-label={`Stop watching ${d.dag_id}`}
-                onClick={() => onChange(dags.filter((x) => x.key !== d.key))}
-              >
-                ×
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
-      {!disabled && (
-        <div className="dag-list-add">
-          <ConnectionSelect id={`${id}-conn`} kind="airflow" value={connectionId} onChange={setConnectionId} />
-          <DagInput id={`${id}-dag`} value={dagId} onChange={setDagId} connectionId={connectionId} />
-          <Button size="sm" disabled={!connectionId || !dagId || duplicate} onClick={add}>
-            Add DAG
-          </Button>
+    <div className="cases-input">
+      {cases.map((c, i) => (
+        <div key={c.key || i} className="case-row">
+          <input
+            aria-label={`Case ${i + 1} label`}
+            placeholder="Label (optional)"
+            value={c.label ?? ''}
+            disabled={disabled}
+            onChange={(e) => update(i, { label: e.target.value })}
+          />
+          <input
+            aria-label={`Case ${i + 1} value`}
+            placeholder="Equals"
+            value={c.equals ?? ''}
+            disabled={disabled}
+            onChange={(e) => update(i, { equals: e.target.value })}
+          />
+          {!disabled && (
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={`Remove case ${i + 1}`}
+              onClick={() => onChange(cases.filter((_, j) => j !== i))}
+            >
+              ×
+            </button>
+          )}
         </div>
+      ))}
+      {!disabled && (
+        <button type="button" className="link-btn small" onClick={add}>
+          + Add case
+        </button>
       )}
     </div>
+  )
+}
+
+/** Cron schedule: the expression, then the next times it fires (from the server). */
+function CronInput({ id, value, onChange, disabled, values }) {
+  const [preview, setPreview] = useState({ key: null, next: [], error: null })
+  const timezone = values?.timezone || 'UTC'
+  const key = `${value}|${timezone}`
+  useEffect(() => {
+    if (!value) return undefined
+    let alive = true
+    const timer = setTimeout(() => {
+      automationApi
+        .schedulePreview(value, timezone)
+        .then((r) => alive && setPreview({ key, next: r.next, error: null }))
+        .catch((err) => alive && setPreview({ key, next: [], error: err.message }))
+    }, 400)
+    return () => {
+      alive = false
+      clearTimeout(timer)
+    }
+  }, [key, value, timezone])
+  const current = preview.key === key ? preview : null
+  return (
+    <>
+      <input
+        id={id}
+        type="text"
+        className="mono"
+        value={value ?? ''}
+        disabled={disabled}
+        placeholder="0 6 * * 1-5"
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {current?.error && <small className="field-error">{current.error}</small>}
+      {current && !current.error && current.next.length > 0 && (
+        <small className="field-hint cron-next">
+          Next: {current.next.map((t) => new Date(t).toLocaleString()).join(' · ')}
+        </small>
+      )}
+    </>
+  )
+}
+
+const TIME_ZONES = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : []
+
+function TimezoneInput({ id, value, onChange, disabled }) {
+  return (
+    <>
+      <input
+        id={id}
+        type="text"
+        list={`${id}-zones`}
+        value={value ?? ''}
+        disabled={disabled}
+        placeholder="UTC"
+        onChange={(e) => onChange(e.target.value.trim())}
+      />
+      <datalist id={`${id}-zones`}>
+        {['UTC', ...TIME_ZONES].map((zone) => (
+          <option key={zone} value={zone} />
+        ))}
+      </datalist>
+    </>
+  )
+}
+
+/** Another workflow to run: those that start by hand or by webhook. */
+function WorkflowSelect({ id, value, onChange, disabled }) {
+  const items = useList('workflows', () => automationApi.listWorkflows())
+  const callable = (items ?? []).filter((w) =>
+    w.graph?.nodes?.some((n) => n.type === 'trigger.manual' || n.type === 'trigger.webhook'),
+  )
+  const missing = value && items && !items.some((w) => w.id === value)
+  return (
+    <select id={id} value={value ?? ''} disabled={disabled || !items} onChange={(e) => onChange(e.target.value)}>
+      <option value="" disabled>
+        {items ? (callable.length ? '— choose —' : 'No workflow starts by hand or by webhook') : 'Loading…'}
+      </option>
+      {missing && <option value={value}>Deleted workflow</option>}
+      {callable.map((w) => (
+        <option key={w.id} value={w.id}>
+          {w.name}
+        </option>
+      ))}
+    </select>
   )
 }
 
@@ -276,7 +359,10 @@ const WIDGETS = {
   notification_channel: ChannelSelect,
   airflow_connection: (props) => <ConnectionSelect {...props} kind="airflow" />,
   database_connection: (props) => <ConnectionSelect {...props} kind="database" />,
-  dag_list: DagListInput,
+  cases: CasesInput,
+  workflow: WorkflowSelect,
+  cron: CronInput,
+  timezone: TimezoneInput,
   dag: (props) => (
     <DagInput {...props} connectionId={props.values?.connection_id} anyConnection={props.schema['x-any-connection']} />
   ),
@@ -443,8 +529,14 @@ function SchemaField({ name, schema, value, values, onChange, disabled, required
 
 export default function SchemaForm({ schema, value, onChange, disabled, variables }) {
   // `x-hidden` fields (kept for old workflows) only show while they hold a non-default value.
+  // `x-show-when` ({field: value}) shows a field only while other fields have those values.
+  const shown = (prop) =>
+    Object.entries(prop['x-show-when'] ?? {}).every(
+      ([field, wanted]) => (value?.[field] ?? schema.properties[field]?.default) === wanted,
+    )
   const properties = Object.entries(schema?.properties ?? {}).filter(
-    ([name, prop]) => !prop['x-hidden'] || (value?.[name] ?? null) !== (prop.default ?? null),
+    ([name, prop]) =>
+      (!prop['x-hidden'] || (value?.[name] ?? null) !== (prop.default ?? null)) && shown(prop),
   )
   if (!properties.length) return <p className="muted small">This block has no settings.</p>
   const required = new Set(schema.required ?? [])

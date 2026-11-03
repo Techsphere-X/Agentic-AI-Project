@@ -16,7 +16,7 @@ from app.core.exceptions import AppError
 from app.db.base import utcnow
 from app.detection import evidence, rules, severity
 from app.detection.evidence import EvidenceRecord
-from app.detection.types import EvidenceKind, IncidentResolution, IncidentType
+from app.detection.types import EvidenceKind, IncidentResolution, IncidentSeverity, IncidentType
 from app.models.airflow import AirflowConnection, MonitoredDag
 from app.models.incident import DetectionLease, Incident, IncidentEvidence
 from app.models.user import User
@@ -318,6 +318,102 @@ def _handle_finding(
     _enqueue(db, incident, TriggerEvent.OPENED, now, summary)
 
 
+def open_incident_for_run(
+    db: Session,
+    *,
+    conn: AirflowConnection,
+    dag: MonitoredDag,
+    run_id: str,
+    incident_type: IncidentType,
+    severity: IncidentSeverity,
+    title: str,
+    note: str,
+    now: datetime,
+    source: str,
+) -> tuple[Incident, bool]:
+    """Open an incident for a DAG run on request (the 'Open incident' block), with the run's
+    evidence. Returns (incident, created); an incident already open for this DAG and type
+    records the run as another occurrence instead."""
+    fingerprint = _fingerprint(incident_type, conn, dag)
+    incident = _open_incident(db, fingerprint)
+    records: list[EvidenceRecord] = []
+    summary_text = note
+    recorded = incident is not None and _run_already_recorded(db, conn, dag.dag_id, run_id)
+    if run_id and not recorded:
+        try:
+            adapter = airflow_service.adapter_for(conn)
+            run = run_async(lambda: adapter.get_dag_run(dag.dag_id, run_id))
+        except (AppError, AirflowAdapterError) as exc:
+            logger.warning("No evidence for %s/%s: %s", dag.dag_id, run_id, exc)
+            run = None
+        if run is not None:
+            records, text = _collect_failure_evidence(adapter, dag.dag_id, run)
+            summary_text = "\n".join(filter(None, [note, text]))
+
+    if incident is not None:
+        incident.occurrence_count += 1
+        incident.last_seen_at = now
+        if run_id:
+            incident.last_run_id = run_id
+        incident_service.add_occurrence(
+            db, incident, occurred_at=now, run_id=run_id or None, details={"source": source}
+        )
+        incident_service.add_event(
+            db,
+            incident,
+            "recurred",
+            details={"run_id": run_id, "count": incident.occurrence_count, "source": source},
+        )
+        _attach(db, incident, records, now)
+        return incident, False
+
+    incident = Incident(
+        id=uuid.uuid4(),
+        connection_id=conn.id,
+        monitored_dag_id=dag.id,
+        dag_id=dag.dag_id,
+        run_id=run_id or None,
+        last_run_id=run_id or None,
+        type=incident_type,
+        severity=severity,
+        title=title,
+        summary=summary_text or None,
+        fingerprint=fingerprint,
+        occurred_at=now,
+        first_seen_at=now,
+        last_seen_at=now,
+    )
+    db.add(incident)
+    db.flush()
+    incident_service.add_occurrence(
+        db, incident, occurred_at=now, run_id=run_id or None, details={"source": source}
+    )
+    incident_service.add_event(
+        db,
+        incident,
+        "opened",
+        details={"severity": incident.severity, "run_id": run_id, "source": source},
+    )
+    _attach(db, incident, records, now)
+    audit_service.record(
+        db,
+        action="incident.opened",
+        entity_type="incident",
+        entity_id=incident.id,
+        details={
+            "dag_id": dag.dag_id,
+            "type": incident_type,
+            "severity": incident.severity,
+            "run_id": run_id,
+            "source": source,
+        },
+    )
+    # Catch-all incident workflows ("Any DAG has an incident") hear about it too.
+    db.flush()
+    automation_service.enqueue_for_incident(db, incident, TriggerEvent.OPENED, now=now)
+    return incident, True
+
+
 def _enqueue(
     db: Session, incident: Incident, event: TriggerEvent, now: datetime, summary: CycleSummary
 ) -> None:
@@ -336,11 +432,17 @@ def _process_dag(
     runs: list[AirflowDagRun],
     now: datetime,
     summary: CycleSummary,
+    *,
+    workflow_states: set[str] | frozenset[str] = frozenset(),
 ) -> None:
+    """`workflow_states`: the events enabled 'When this DAG runs' workflows on this DAG start
+    on. When one starts on 'failed', the workflow decides about failure incidents, so none is
+    opened automatically (SLA incidents and auto-resolve are unchanged)."""
+    owns_failures = "failed" in workflow_states
     recent_failures = rules.count_recent_failures(runs, now)
 
     failures = rules.detect_failed_runs(dag.dag_id, runs, dag.detection_watermark)
-    for finding in failures if dag.detect_failures else []:
+    for finding in failures if dag.detect_failures and not owns_failures else []:
         assert finding.run is not None
         if _run_already_recorded(db, conn, dag.dag_id, finding.run.run_id):
             continue
@@ -412,24 +514,25 @@ def _process_dag(
         )
         summary.auto_resolved += 1
 
-    # Poll active runs so an in-progress workflow is started once and later receives
-    # the terminal state without creating a second workflow run.
-    for run in rules.in_progress_runs(runs):
-        db.flush()
-        summary.automation_queued += len(
-            automation_service.enqueue_for_dag_run(db, conn, dag, run, now=now)
-        )
+    # "When this DAG runs": every event (in progress, succeeded, failed) of each run starts
+    # the DAG's workflows once.
+    if workflow_states:
+        for run in rules.in_progress_runs(runs):
+            db.flush()
+            summary.automation_queued += len(
+                automation_service.enqueue_for_dag_event(db, conn, dag, run, now=now)
+            )
 
     for run in runs:
         if run.is_terminal:
             automation_service.refresh_dag_run_checks(db, conn, dag, run)
 
-    # "When a DAG run finishes" workflows: one run each per finished DAG run.
-    for run in rules.finished_runs(runs, dag.detection_watermark):
-        db.flush()
-        summary.automation_queued += len(
-            automation_service.enqueue_for_dag_run(db, conn, dag, run, now=now)
-        )
+    if workflow_states:
+        for run in rules.finished_runs(runs, dag.detection_watermark):
+            db.flush()
+            summary.automation_queued += len(
+                automation_service.enqueue_for_dag_event(db, conn, dag, run, now=now)
+            )
 
     dag.detection_watermark = rules.next_watermark(runs, dag.detection_watermark)
 
@@ -455,6 +558,8 @@ def run_cycle(
         .where(AirflowConnection.is_active.is_(True))
         .order_by(AirflowConnection.name)
     ).all()
+    # DAGs with 'When this DAG runs' workflows, and the events those start on.
+    dag_workflows = automation_service.dag_trigger_states(db)
     for conn in connections:
         dags = db.scalars(
             select(MonitoredDag)
@@ -486,7 +591,16 @@ def run_cycle(
                 summary.errors.append({"connection": conn.name, "error": exc.result.message})
                 break
             try:
-                _process_dag(db, adapter, conn, dag, runs, now, summary)
+                _process_dag(
+                    db,
+                    adapter,
+                    conn,
+                    dag,
+                    runs,
+                    now,
+                    summary,
+                    workflow_states=dag_workflows.get((conn.id, dag.dag_id), set()),
+                )
                 summary.dags += 1
                 db.commit()
             except Exception as exc:  # one bad DAG must not stop the cycle

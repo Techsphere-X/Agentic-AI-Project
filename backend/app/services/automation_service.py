@@ -1,13 +1,15 @@
 """Automation engine: enqueue workflow runs (incident events, schedules, "Run now"), advance
 them step by step, and handle approvals, cancellation and workflow CRUD."""
 
+import hmac
 import logging
 import os
+import secrets
 import socket
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from pydantic import ValidationError
@@ -15,13 +17,14 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from app.automation import cron
 from app.automation.graph import (
     ACTION_TYPES,
     INCIDENT_TRIGGER_TYPES,
     GraphError,
+    downstream,
     to_raw,
     validate_graph,
-    watched_dag,
 )
 from app.automation.templates import TEMPLATES, TEMPLATES_BY_KEY
 from app.automation.types import (
@@ -34,7 +37,7 @@ from app.automation.types import (
     WorkflowMode,
 )
 from app.core.config import get_settings
-from app.core.exceptions import BadRequestError, ConflictError, NotFoundError
+from app.core.exceptions import AppError, BadRequestError, ConflictError, NotFoundError
 from app.db.base import utcnow
 from app.detection.types import IncidentStatus
 from app.models.airflow import AirflowConnection, AirflowTriggerReservation, MonitoredDag
@@ -45,11 +48,13 @@ from app.models.automation import (
     Workflow,
     WorkflowRun,
     WorkflowStep,
+    WorkflowVersion,
 )
 from app.models.incident import Incident
 from app.models.user import User
-from app.orchestration.airflow.base import AirflowDagRun
-from app.services import audit_service, incident_service
+from app.orchestration.airflow.base import AirflowAdapterError, AirflowDagRun
+from app.orchestration.airflow.factory import run_async
+from app.services import airflow_service, audit_service, automation_nodes, incident_service
 from app.services.automation_nodes import EXECUTORS, NodeContext, NodeError, NodeResult
 
 logger = logging.getLogger(__name__)
@@ -196,6 +201,7 @@ def create_workflow(
     )
     db.add(workflow)
     db.flush()
+    _save_version(db, workflow, actor)
     audit_service.record(
         db,
         action="workflow.create",
@@ -229,9 +235,11 @@ def update_workflow(
             if _without_layout(graph) != _without_layout(workflow.graph):
                 workflow.version += 1  # behaviour changed; layout-only edits keep the version
                 changed["graph_version"] = workflow.version
+                workflow.graph = graph
+                _save_version(db, workflow, actor)
             workflow.graph = graph
     if workflow.enabled:
-        _monitor_watched_dags(db, workflow.graph, actor=actor, ip_address=ip_address)
+        _monitor_trigger_dag(db, workflow.graph, actor=actor, ip_address=ip_address)
     if changed:
         audit_service.record(
             db,
@@ -246,52 +254,203 @@ def update_workflow(
     return workflow
 
 
-def _watched_dags(graph: dict[str, Any]) -> list[dict[str, Any]]:
-    trigger = next(
-        (n for n in graph.get("nodes", []) if n.get("type") == "trigger.dag_watch"), None
-    )
-    return list((trigger or {}).get("config", {}).get("dags") or [])
+def _trigger_dag(graph: dict[str, Any]) -> dict[str, Any] | None:
+    """The config of a 'When this DAG runs' trigger, or None."""
+    trigger = next((n for n in graph.get("nodes", []) if n.get("type") == "trigger.dag"), None)
+    return (trigger or {}).get("config") or None
 
 
-def _monitor_watched_dags(
+def _monitor_trigger_dag(
     db: Session, graph: dict[str, Any], *, actor: User, ip_address: str | None
 ) -> None:
-    """'Watch selected DAGs': incidents only open for monitored DAGs, so switch them on."""
-    for watched in _watched_dags(graph):
-        try:
-            connection_id = uuid.UUID(watched["connection_id"])
-        except ValueError:
-            connection_id = None
-        dag = connection_id and db.scalar(
-            select(MonitoredDag).where(
-                MonitoredDag.connection_id == connection_id,
-                MonitoredDag.dag_id == watched["dag_id"],
-            )
+    """'When this DAG runs' needs the DAG polled: switch monitoring on for it."""
+    config = _trigger_dag(graph)
+    if config is None:
+        return
+    try:
+        connection_id = uuid.UUID(config["connection_id"])
+    except (KeyError, ValueError):
+        connection_id = None
+    dag = connection_id and db.scalar(
+        select(MonitoredDag).where(
+            MonitoredDag.connection_id == connection_id,
+            MonitoredDag.dag_id == config.get("dag_id"),
         )
-        if not dag:
-            raise BadRequestError(
-                f"DAG '{watched['dag_id']}' is not in the synced DAG list of its Airflow "
-                "connection; sync the connection or remove the DAG from the trigger"
-            )
-        if dag.is_monitored and dag.detect_failures:
+    )
+    if not dag:
+        raise BadRequestError(
+            f"DAG '{config.get('dag_id')}' is not in the synced DAG list of its Airflow "
+            "connection; sync the connection or choose another DAG"
+        )
+    if dag.is_monitored:
+        return
+    dag.is_monitored = True
+    audit_service.record(
+        db,
+        action="monitored_dag.toggle",
+        entity_type="monitored_dag",
+        entity_id=dag.id,
+        actor=actor,
+        details={
+            "connection_id": str(dag.connection_id),
+            "dag_id": dag.dag_id,
+            "is_monitored": True,
+            "reason": "used by an enabled 'When this DAG runs' workflow",
+        },
+        ip_address=ip_address,
+    )
+
+
+def dag_trigger_states(db: Session) -> dict[tuple[uuid.UUID, str], set[str]]:
+    """(connection id, DAG id) -> the events enabled 'When this DAG runs' workflows start on.
+
+    Detection polls these DAGs' runs for the workflows, and a DAG whose workflows start on
+    'failed' owns its failures: no automatic failure incident is opened for it."""
+    states: dict[tuple[uuid.UUID, str], set[str]] = {}
+    for graph in db.scalars(select(Workflow.graph).where(Workflow.enabled.is_(True))):
+        config = _trigger_dag(graph or {})
+        if config is None:
             continue
-        dag.is_monitored = True
-        dag.detect_failures = True
-        audit_service.record(
-            db,
-            action="monitored_dag.toggle",
-            entity_type="monitored_dag",
-            entity_id=dag.id,
-            actor=actor,
-            details={
-                "connection_id": str(dag.connection_id),
-                "dag_id": dag.dag_id,
-                "is_monitored": True,
-                "detect_failures": True,
-                "reason": "watched by an enabled workflow",
-            },
-            ip_address=ip_address,
+        try:
+            key = (uuid.UUID(config["connection_id"]), config["dag_id"])
+        except (KeyError, ValueError):
+            continue
+        states.setdefault(key, set()).update(config.get("states") or [])
+    return states
+
+
+def _save_version(db: Session, workflow: Workflow, actor: User | None) -> None:
+    if db.scalar(
+        select(WorkflowVersion.id).where(
+            WorkflowVersion.workflow_id == workflow.id,
+            WorkflowVersion.version == workflow.version,
         )
+    ):
+        return
+    db.add(
+        WorkflowVersion(
+            workflow_id=workflow.id,
+            version=workflow.version,
+            name=workflow.name,
+            graph=workflow.graph,
+            created_by=actor.id if actor is not None else None,
+        )
+    )
+
+
+def list_versions(db: Session, workflow_id: uuid.UUID) -> list[WorkflowVersion]:
+    get_workflow(db, workflow_id)
+    return list(
+        db.scalars(
+            select(WorkflowVersion)
+            .where(WorkflowVersion.workflow_id == workflow_id)
+            .options(selectinload(WorkflowVersion.creator))
+            .order_by(WorkflowVersion.version.desc())
+        )
+    )
+
+
+def get_version(db: Session, workflow_id: uuid.UUID, version: int) -> WorkflowVersion:
+    found = db.scalar(
+        select(WorkflowVersion).where(
+            WorkflowVersion.workflow_id == workflow_id, WorkflowVersion.version == version
+        )
+    )
+    if found is None:
+        raise NotFoundError(f"Version {version} not found")
+    return found
+
+
+def restore_version(
+    db: Session, workflow_id: uuid.UUID, version: int, *, actor: User, ip_address: str | None
+) -> Workflow:
+    """Bring back an older graph as a new version (history is never rewritten)."""
+    old = get_version(db, workflow_id, version)
+    workflow = update_workflow(
+        db, workflow_id, {"graph": old.graph}, actor=actor, ip_address=ip_address
+    )
+    audit_service.record(
+        db,
+        action="workflow.version_restored",
+        entity_type="workflow",
+        entity_id=workflow.id,
+        actor=actor,
+        details={"restored": version, "now": workflow.version},
+        ip_address=ip_address,
+    )
+    db.commit()
+    return workflow
+
+
+def test_node(
+    db: Session,
+    raw_graph: dict[str, Any],
+    node_id: str,
+    *,
+    workflow_id: uuid.UUID | None = None,
+    input: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """'Test this block': run one block as a dry run and undo everything it wrote.
+
+    Its context is `input`, or what the workflow's latest run knew; actions are simulated.
+    """
+    try:
+        graph = validate_graph(raw_graph)
+    except GraphError as exc:
+        raise BadRequestError(f"The workflow is not valid: {exc}") from exc
+    node = graph.nodes.get(node_id)
+    if node is None:
+        raise NotFoundError(f"Block '{node_id}' not found")
+    context: dict[str, Any] = {}
+    incident = None
+    latest = None
+    if workflow_id is not None:
+        latest = db.scalar(
+            select(WorkflowRun)
+            .where(WorkflowRun.workflow_id == workflow_id)
+            .order_by(WorkflowRun.created_at.desc())
+            .limit(1)
+        )
+    if input is not None:
+        context = dict(input)
+    elif latest is not None:
+        context = {k: v for k, v in (latest.context or {}).items() if k != "nodes"}
+        incident = latest.incident
+    savepoint = db.begin_nested()
+    try:
+        run = WorkflowRun(
+            id=uuid.uuid4(),
+            workflow_id=workflow_id,
+            workflow_version=0,
+            graph=raw_graph,
+            incident_id=incident.id if incident else None,
+            trigger_event="test",
+            dedup_key=f"test:{uuid.uuid4()}",
+            status=RunStatus.RUNNING,
+            dry_run=True,
+            context=context,
+        )
+        if workflow_id is not None:
+            db.add(run)
+            db.flush()
+        ctx = NodeContext(
+            db=db, run=run, graph=graph, incident=incident, now=utcnow(), settings=get_settings()
+        )
+        try:
+            result = EXECUTORS[node.type](ctx, node)
+        except NodeError as exc:
+            return {"port": None, "output": {}, "message": None, "error": str(exc)}
+        except Exception as exc:  # a test must never break the editor
+            logger.warning("Testing block %s failed: %s", node_id, exc)
+            return {"port": None, "output": {}, "message": None, "error": str(exc)[:500]}
+        return {
+            "port": result.port,
+            "output": result.output,
+            "message": result.message,
+            "waits": result.wait_until is not None,
+        }
+    finally:
+        savepoint.rollback()
 
 
 def _without_layout(graph: dict[str, Any]) -> dict[str, Any]:
@@ -338,12 +497,10 @@ def delete_workflow(
 
 def _incident_matches(trigger: Any, incident: Incident) -> bool:
     """Whether an incident (whatever the event) is one this incident trigger reacts to."""
-    if trigger.type in ("trigger.incident", "trigger.dag_watch"):
+    if trigger.type == "trigger.incident":
         types = trigger.config["incident_types"]
         if types and incident.type not in types:
             return False
-    if trigger.type == "trigger.dag_watch":
-        return watched_dag(trigger.config, incident.connection_id, incident.dag_id) is not None
     return True
 
 
@@ -355,7 +512,7 @@ def _trigger_matches(
     except GraphError:
         logger.warning("Workflow %s has an invalid graph; skipped", workflow.id)
         return False
-    if trigger.type in ("trigger.incident", "trigger.dag_watch"):
+    if trigger.type == "trigger.incident":
         return event.value in trigger.config["events"] and _incident_matches(trigger, incident)
     if trigger.type == "trigger.incident_stale" and event == TriggerEvent.STALE:
         return incident.first_seen_at <= now - timedelta(minutes=trigger.config["minutes"])
@@ -363,13 +520,18 @@ def _trigger_matches(
 
 
 def _dedup_key(incident: Incident, event: TriggerEvent) -> str:
-    if event == TriggerEvent.STALE:
-        return f"{incident.id}:stale"
+    if event == TriggerEvent.STALE:  # once per occurrence: a recurrence ignored again counts
+        return f"{incident.id}:stale:{incident.occurrence_count}"
     return f"{incident.id}:{event.value}:{incident.occurrence_count}"
 
 
 def enqueue_for_incident(
-    db: Session, incident: Incident, event: TriggerEvent, *, now: datetime | None = None
+    db: Session,
+    incident: Incident,
+    event: TriggerEvent,
+    *,
+    now: datetime | None = None,
+    workflows: list[Workflow] | None = None,
 ) -> list[WorkflowRun]:
     """Create PENDING runs for enabled workflows triggered by this incident event.
 
@@ -380,7 +542,8 @@ def enqueue_for_incident(
         return []
     now = now or utcnow()
     runs = []
-    workflows = db.scalars(select(Workflow).where(Workflow.enabled.is_(True))).all()
+    if workflows is None:
+        workflows = list(db.scalars(select(Workflow).where(Workflow.enabled.is_(True))))
     for workflow in workflows:
         if not _trigger_matches(workflow, incident, event, now):
             continue
@@ -406,7 +569,23 @@ def enqueue_for_incident(
     return runs
 
 
-def enqueue_for_dag_run(
+def dag_run_context(
+    conn: AirflowConnection, dag: MonitoredDag, dag_run: AirflowDagRun
+) -> dict[str, Any]:
+    """What a 'When this DAG runs' run knows about the DAG run that started it."""
+    return {
+        "connection_id": str(conn.id),
+        "monitored_dag_id": str(dag.id),
+        "dag_id": dag.dag_id,
+        "run_id": dag_run.run_id,
+        "state": dag_run.normalized_state,
+        "normalized_state": dag_run.normalized_state,
+        "airflow_state": dag_run.state,
+        "environment": str(conn.environment),
+    }
+
+
+def enqueue_for_dag_event(
     db: Session,
     conn: AirflowConnection,
     dag: MonitoredDag,
@@ -414,63 +593,83 @@ def enqueue_for_dag_run(
     *,
     now: datetime | None = None,
 ) -> list[WorkflowRun]:
-    """Create PENDING runs (each with a PENDING DagRunCheck) for enabled "When a DAG run
-    finishes" workflows that match this finished run. Called inside the detection cycle."""
+    """'When this DAG runs': a PENDING run for each enabled workflow on this DAG whose chosen
+    events include the run's state. Each (Airflow run, state) starts a workflow at most once,
+    and a run that the workflow itself is fixing does not start it again."""
     if not get_settings().AUTOMATION_ENABLED:
         return []
+    now = now or utcnow()
+    state = dag_run.normalized_state
+    if state not in ("in_progress", "success", "failed"):
+        return []
     runs = []
-    dedup = f"dagrun:{conn.id}:{dag.dag_id}:{dag_run.run_id}"[:200]
+    dedup = f"dagrun:{conn.id}:{dag.dag_id}:{dag_run.run_id}:{state}"[:200]
     for workflow in db.scalars(select(Workflow).where(Workflow.enabled.is_(True))).all():
-        try:
-            trigger = validate_graph(workflow.graph).trigger
-        except GraphError:
+        config = _trigger_dag(workflow.graph or {})
+        if (
+            config is None
+            or config.get("connection_id") != str(conn.id)
+            or config.get("dag_id") != dag.dag_id
+            or state not in (config.get("states") or [])
+        ):
             continue
-        if trigger.type != "trigger.dag_run":
-            continue
-        if trigger.config["dag_ids"] and dag.dag_id not in trigger.config["dag_ids"]:
-            continue
-        existing = _dag_run_check(db, workflow.id, conn, dag.dag_id, dag_run.run_id)
-        if existing is not None:
-            _refresh_dag_run_check(existing, dag_run, conn, dag)
-            continue
-        if dag_run.normalized_state not in trigger.config["states"]:
-            continue
-        if _started_by(db, workflow, conn, dag.dag_id, dag_run.run_id):
-            continue  # its own "Run a DAG" block started this run: do not loop
         if db.scalar(
             select(WorkflowRun.id).where(
                 WorkflowRun.workflow_id == workflow.id, WorkflowRun.dedup_key == dedup
             )
         ):
             continue
+        if _started_by(db, workflow, conn, dag.dag_id, dag_run.run_id) or _owned_by_fix(
+            db, workflow, conn, dag.dag_id, dag_run.run_id, now
+        ):
+            continue  # its own fix touched this run: the fixing run follows it with 'Verify'
         run = _add_run(db, workflow, TriggerEvent.DAG_RUN, dedup)
         if run is None:
             continue
-        run.context = {
-            "dag_run": {
-                "connection_id": str(conn.id),
-                "monitored_dag_id": str(dag.id),
-                "dag_id": dag.dag_id,
-                "run_id": dag_run.run_id,
-                "state": dag_run.state,
-                "normalized_state": dag_run.normalized_state,
-                "airflow_state": dag_run.state,
-                "environment": str(conn.environment),
-            }
-        }
-        db.add(
-            DagRunCheck(
-                connection_id=conn.id,
-                monitored_dag_id=dag.id,
-                dag_id=dag.dag_id,
-                run_id=dag_run.run_id,
-                run_state=dag_run.state,
-                workflow_run_id=run.id,
-                status=DagRunCheckStatus.PENDING,
+        run.context = {"dag_run": dag_run_context(conn, dag, dag_run)}
+        if (
+            dag_run.is_terminal
+            and _dag_run_check(db, workflow.id, conn, dag.dag_id, dag_run.run_id) is None
+        ):
+            db.add(
+                DagRunCheck(
+                    connection_id=conn.id,
+                    monitored_dag_id=dag.id,
+                    dag_id=dag.dag_id,
+                    run_id=dag_run.run_id,
+                    run_state=dag_run.state,
+                    workflow_run_id=run.id,
+                    status=DagRunCheckStatus.PENDING,
+                )
             )
-        )
         runs.append(run)
     return runs
+
+
+FIX_CLAIM_HOURS = 1
+
+
+def _owned_by_fix(
+    db: Session,
+    workflow: Workflow,
+    conn: AirflowConnection,
+    dag_id: str,
+    run_id: str,
+    now: datetime,
+) -> bool:
+    """A run of this workflow (active, or finished within the last hour) is fixing that
+    Airflow run: it cleared its failed tasks, so its next states belong to that run."""
+    claim = {"connection_id": str(conn.id), "dag_id": dag_id, "run_id": run_id}
+    recent = db.scalars(
+        select(WorkflowRun.context).where(
+            WorkflowRun.workflow_id == workflow.id,
+            or_(
+                WorkflowRun.status.in_(ACTIVE_RUN_STATUSES),
+                WorkflowRun.finished_at >= now - timedelta(hours=FIX_CLAIM_HOURS),
+            ),
+        )
+    )
+    return any(claim in ((context or {}).get("fix_claims") or []) for context in recent)
 
 
 def _dag_run_check(
@@ -600,6 +799,31 @@ def _has_active_run(db: Session, workflow_id: uuid.UUID) -> bool:
     )
 
 
+def _latest_dag_run_context(db: Session, config: dict[str, Any], now: datetime) -> dict[str, Any]:
+    """'Run now' on a 'When this DAG runs' workflow: replay it on the DAG's latest run."""
+    conn = db.get(AirflowConnection, uuid.UUID(config["connection_id"]))
+    dag = conn and db.scalar(
+        select(MonitoredDag).where(
+            MonitoredDag.connection_id == conn.id, MonitoredDag.dag_id == config["dag_id"]
+        )
+    )
+    if not conn or not dag:
+        raise BadRequestError(f"DAG '{config['dag_id']}' is not in the synced DAG list")
+    try:
+        adapter = airflow_service.adapter_for(conn)
+        runs = run_async(
+            lambda: adapter.list_dag_runs(dag.dag_id, since=now - timedelta(days=30), limit=20)
+        )
+    except (AppError, AirflowAdapterError) as exc:
+        message = exc.message if isinstance(exc, AppError) else exc.result.message
+        raise BadRequestError(f"Could not read the runs of {dag.dag_id}: {message}") from exc
+    runs = [r for r in runs if r.normalized_state in ("in_progress", "success", "failed")]
+    if not runs:
+        raise BadRequestError(f"{dag.dag_id} has no runs in the last 30 days to start from")
+    latest = max(runs, key=lambda r: r.sort_date or datetime.min.replace(tzinfo=UTC))
+    return dag_run_context(conn, dag, latest)
+
+
 def start_manual_run(
     db: Session,
     workflow_id: uuid.UUID,
@@ -607,6 +831,7 @@ def start_manual_run(
     actor: User,
     dry_run: bool | None = None,
     now: datetime | None = None,
+    input: dict[str, Any] | None = None,
 ) -> WorkflowRun:
     """ "Run now": start a run of a manual or scheduled workflow and advance it right away.
 
@@ -619,11 +844,10 @@ def start_manual_run(
         trigger = validate_graph(workflow.graph).trigger
     except GraphError as exc:
         raise BadRequestError(f"The workflow is not valid: {exc}") from exc
-    if trigger.type == "trigger.dag_run":
-        raise BadRequestError(
-            "This workflow starts when a DAG run finishes; run the DAG in Airflow to start it"
-        )
     incident_id = None
+    context: dict[str, Any] = {}
+    if trigger.type == "trigger.dag":
+        context = {"dag_run": _latest_dag_run_context(db, trigger.config, now or utcnow())}
     if trigger.type in INCIDENT_TRIGGER_TYPES:
         # Run on the newest open incident this trigger would react to.
         candidates = db.scalars(
@@ -647,6 +871,10 @@ def start_manual_run(
         dry_run=dry_run,
     )
     assert run is not None  # a fresh random dedup key cannot collide
+    if input is not None:
+        context["trigger"] = {"body": input}
+    if context:
+        run.context = context
     audit_service.record(
         db,
         action="automation.run_manual",
@@ -659,6 +887,10 @@ def start_manual_run(
     return run_now(db, run.id, now=now) or run
 
 
+# A cron time is run if the engine sees it within this long (it ticks every few seconds).
+CRON_CATCH_UP = timedelta(minutes=15)
+
+
 def _enqueue_scheduled(db: Session, now: datetime) -> int:
     """One run per schedule slot for each enabled scheduled workflow that is not busy."""
     count = 0
@@ -669,8 +901,16 @@ def _enqueue_scheduled(db: Session, now: datetime) -> int:
             continue
         if trigger.type != "trigger.schedule":
             continue
-        slot = int(now.timestamp()) // (trigger.config["every_minutes"] * 60)
-        dedup = f"schedule:{trigger.config['every_minutes']}:{slot}"
+        config = trigger.config
+        if config.get("mode") == "cron":
+            # The latest set time within the last few minutes (a late tick still catches it).
+            fire = cron.latest_fire(config["cron"], config["timezone"], now, CRON_CATCH_UP)
+            if fire is None:
+                continue
+            dedup = f"schedule:cron:{fire.isoformat()}"
+        else:
+            slot = int(now.timestamp()) // (config["every_minutes"] * 60)
+            dedup = f"schedule:{config['every_minutes']}:{slot}"
         if _has_active_run(db, workflow.id) or db.scalar(
             select(WorkflowRun.id).where(
                 WorkflowRun.workflow_id == workflow.id, WorkflowRun.dedup_key == dedup
@@ -684,15 +924,17 @@ def _enqueue_scheduled(db: Session, now: datetime) -> int:
 
 
 def _enqueue_stale(db: Session, now: datetime) -> int:
+    """'When an incident is ignored': graphs are checked once per tick, then only those
+    workflows are matched against each open incident."""
     count = 0
-    workflows = db.scalars(select(Workflow).where(Workflow.enabled.is_(True))).all()
-    thresholds = []
-    for workflow in workflows:
+    stale_workflows, thresholds = [], []
+    for workflow in db.scalars(select(Workflow).where(Workflow.enabled.is_(True))).all():
         try:
             trigger = validate_graph(workflow.graph).trigger
         except GraphError:
             continue
         if trigger.type == "trigger.incident_stale":
+            stale_workflows.append(workflow)
             thresholds.append(trigger.config["minutes"])
     if not thresholds:
         return 0
@@ -703,9 +945,133 @@ def _enqueue_stale(db: Session, now: datetime) -> int:
         )
     ).all()
     for incident in incidents:
-        count += len(enqueue_for_incident(db, incident, TriggerEvent.STALE, now=now))
+        count += len(
+            enqueue_for_incident(
+                db, incident, TriggerEvent.STALE, now=now, workflows=stale_workflows
+            )
+        )
     db.commit()
     return count
+
+
+# ---------------------------------------------------------------------- called workflows
+
+MAX_CALL_DEPTH = 3
+CALLABLE_TRIGGERS = frozenset({"trigger.manual", "trigger.webhook"})
+
+
+def _start_child_run(
+    db: Session, parent: WorkflowRun, workflow_id: str, body: dict[str, Any]
+) -> WorkflowRun:
+    """'Run another workflow' / 'For each row': a run of `workflow_id` with `body` as its
+    input. It inherits dry run; the engine advances it like any other run."""
+    try:
+        workflow = db.get(Workflow, uuid.UUID(workflow_id))
+    except ValueError:
+        workflow = None
+    if workflow is None:
+        raise NodeError("The workflow to run no longer exists")
+    if workflow.id == parent.workflow_id:
+        raise NodeError("A workflow cannot run itself")
+    depth = int(((parent.context or {}).get("parent") or {}).get("depth", 0)) + 1
+    if depth > MAX_CALL_DEPTH:
+        raise NodeError(f"Workflows can run each other at most {MAX_CALL_DEPTH} levels deep")
+    try:
+        trigger = validate_graph(workflow.graph).trigger
+    except GraphError as exc:
+        raise NodeError(f"'{workflow.name}' is not valid: {exc}") from exc
+    if trigger.type not in CALLABLE_TRIGGERS:
+        raise NodeError(f"'{workflow.name}' does not start by hand or by webhook")
+    run = _add_run(
+        db, workflow, TriggerEvent.CALLED, f"called:{uuid.uuid4()}", dry_run=parent.dry_run
+    )
+    assert run is not None  # a fresh random dedup key cannot collide
+    run.context = {
+        "trigger": {"body": body},
+        "parent": {"run_id": str(parent.id), "workflow": parent.workflow_name, "depth": depth},
+    }
+    db.flush()
+    return run
+
+
+automation_nodes.start_child_run = _start_child_run
+
+
+# ---------------------------------------------------------------------- webhooks
+
+WEBHOOK_MAX_BODY_BYTES = 64 * 1024
+WEBHOOK_MAX_PER_MINUTE = 30
+
+
+def webhook_token(db: Session, workflow_id: uuid.UUID, *, actor: User, rotate: bool = False) -> str:
+    """The secret in the workflow's webhook URL, made on first use; `rotate` replaces it so
+    the old URL stops working."""
+    workflow = get_workflow(db, workflow_id)
+    if workflow.webhook_token is None or rotate:
+        workflow.webhook_token = secrets.token_urlsafe(32)
+        audit_service.record(
+            db,
+            action="workflow.webhook_token_rotated" if rotate else "workflow.webhook_token_created",
+            entity_type="workflow",
+            entity_id=workflow.id,
+            actor=actor,
+            details={"name": workflow.name},
+        )
+        db.commit()
+    return workflow.webhook_token
+
+
+def receive_webhook(
+    db: Session,
+    workflow_id: uuid.UUID,
+    token: str,
+    body: Any,
+    *,
+    ip_address: str | None = None,
+    now: datetime | None = None,
+) -> WorkflowRun:
+    """Start a run of an enabled 'When a webhook is called' workflow. Every failure looks the
+    same from outside (not found), so the URL cannot be probed."""
+    now = now or utcnow()
+    workflow = db.get(Workflow, workflow_id)
+    if (
+        workflow is None
+        or not workflow.webhook_token
+        or not hmac.compare_digest(workflow.webhook_token, token)
+        or not workflow.enabled
+        or not get_settings().AUTOMATION_ENABLED
+    ):
+        raise NotFoundError("Not found")
+    try:
+        trigger = validate_graph(workflow.graph).trigger
+    except GraphError as exc:
+        raise NotFoundError("Not found") from exc
+    if trigger.type != "trigger.webhook":
+        raise NotFoundError("Not found")
+    recent = db.scalar(
+        select(func.count())
+        .select_from(WorkflowRun)
+        .where(
+            WorkflowRun.workflow_id == workflow.id,
+            WorkflowRun.trigger_event == TriggerEvent.WEBHOOK.value,
+            WorkflowRun.created_at >= now - timedelta(minutes=1),
+        )
+    )
+    if (recent or 0) >= WEBHOOK_MAX_PER_MINUTE:
+        raise ConflictError(f"At most {WEBHOOK_MAX_PER_MINUTE} calls a minute", code="rate_limited")
+    run = _add_run(db, workflow, TriggerEvent.WEBHOOK, f"webhook:{uuid.uuid4()}")
+    assert run is not None  # a fresh random dedup key cannot collide
+    run.context = {"trigger": {"body": body, "received_at": now.isoformat()}}
+    audit_service.record(
+        db,
+        action="automation.webhook_received",
+        entity_type="workflow_run",
+        entity_id=run.id,
+        details={"workflow": workflow.name},
+        ip_address=ip_address,
+    )
+    db.commit()
+    return run
 
 
 # ---------------------------------------------------------------------- execution
@@ -852,6 +1218,13 @@ def _advance(db: Session, run: WorkflowRun, now: datetime, max_steps: int) -> No
             _set_queue(run, queue[1:])
             queue = queue[1:]
             continue
+        if node.type == "logic.join" and any(
+            node.id in downstream(graph, other) for other in queue[1:]
+        ):
+            # 'Wait for all': another queued branch can still arrive; run it later.
+            queue = [*queue[1:], node.id]
+            _set_queue(run, queue)
+            continue
         step = _waiting_step(run, node.id)
 
         if (
@@ -877,12 +1250,36 @@ def _advance(db: Session, run: WorkflowRun, now: datetime, max_steps: int) -> No
             )
             db.add(step)
             run.steps.append(step)
+        failure: str | None = None
         try:
             result: NodeResult = EXECUTORS[node.type](ctx, node)
         except NodeError as exc:
+            failure = str(exc)
+            result = NodeResult(None, {"error": failure}, failure)
+        settings = node.settings or {}
+        failed = failure is not None or (
+            result.wait_until is None and result.port in _FAILURE_PORTS
+        )
+        if failed and _retry_left(run, node.id, settings):
+            # Try the block again later (its own waiting state starts over).
+            attempt = _count_attempt(run, node.id)
+            delay = settings.get("retry_delay_seconds", 60)
+            ctx.set_node_state(node.id, {})
+            step.status = StepStatus.WAITING
+            step.output = result.output
+            step.message = f"Attempt {attempt} failed ({result.message}); trying again in {delay} s"
+            run.status = RunStatus.WAITING
+            run.wake_at = now + timedelta(seconds=delay)
+            _set_queue(run, queue)
+            db.commit()
+            return
+        if failure is not None and settings.get("on_error") == "output":
+            ctx.set_context("last_error", failure)
+            result = NodeResult("error", {"error": failure}, f"Error: {failure}")
+        elif failure is not None:
             # The block's outputs are not followed, but other queued branches still run.
             step.status = StepStatus.FAILED
-            step.message = str(exc)
+            step.message = failure
             step.finished_at = now
             done.add(node.id)
             queue = queue[1:]
@@ -924,6 +1321,22 @@ def _advance(db: Session, run: WorkflowRun, now: datetime, max_steps: int) -> No
         _finish(db, run, RunStatus.FAILED, now, error="; ".join(errors))
     else:
         _finish(db, run, RunStatus.COMPLETED, now)
+
+
+# Outputs a block takes when it did not succeed; with retries set, the block is tried again.
+_FAILURE_PORTS = frozenset({"failed", "fail", "timeout"})
+
+
+def _retry_left(run: WorkflowRun, node_id: str, settings: dict[str, Any]) -> bool:
+    attempts = ((run.context or {}).get("attempts") or {}).get(node_id, 0)
+    return attempts < settings.get("retries", 0)
+
+
+def _count_attempt(run: WorkflowRun, node_id: str) -> int:
+    attempts = dict((run.context or {}).get("attempts") or {})
+    attempts[node_id] = attempts.get(node_id, 0) + 1
+    run.context = {**(run.context or {}), "attempts": attempts}
+    return attempts[node_id]
 
 
 def _set_queue(run: WorkflowRun, queue: list[str]) -> None:
@@ -1003,8 +1416,11 @@ def list_runs(
     incident_id: uuid.UUID | None,
     limit: int,
     offset: int,
+    trigger_events: list[str] | None = None,
 ) -> tuple[list[WorkflowRun], int]:
     query = select(WorkflowRun)
+    if trigger_events:
+        query = query.where(WorkflowRun.trigger_event.in_(trigger_events))
     if statuses:
         query = query.where(WorkflowRun.status.in_(statuses))
     if workflow_id:

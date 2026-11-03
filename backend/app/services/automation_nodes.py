@@ -19,12 +19,12 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.automation import policy, remediation
-from app.automation.graph import ACTION_TYPES, Graph, Node, watched_dag
+from app.automation.graph import ACTION_TYPES, Graph, Node
 from app.automation.render import render
 from app.automation.types import (
     ApprovalStatus,
@@ -45,6 +45,7 @@ from app.detection.types import (
     IncidentStatus,
     IncidentType,
 )
+from app.diagnosis import hybrid
 from app.diagnosis.log_classifier import RETRYABLE, FailureCategory
 from app.models.airflow import AirflowConnection, AirflowTriggerReservation, MonitoredDag
 from app.models.automation import (
@@ -100,6 +101,22 @@ class ActionFailed(Exception):
     """An action ran but did not succeed (the node follows its 'failed' port)."""
 
 
+@dataclass(frozen=True)
+class Target:
+    """The DAG run a block works on: the incident's run, or the run that started a
+    'When this DAG runs' workflow."""
+
+    connection_id: uuid.UUID | None
+    dag_id: str
+    run_id: str
+    monitored_dag_id: uuid.UUID | None = None
+
+
+# Kept in the run's context so later blocks (and later ticks) reuse fetched logs.
+_MAX_TARGET_LOGS = 3
+_MAX_TARGET_LOG_CHARS = 20_000
+
+
 @dataclass
 class NodeContext:
     db: Session
@@ -120,21 +137,58 @@ class NodeContext:
         return self.incident
 
     @property
+    def has_target(self) -> bool:
+        return self.incident is not None or bool((self.get_context("dag_run") or {}).get("dag_id"))
+
+    @property
+    def target(self) -> Target:
+        """The DAG run this workflow works on (see `Target`)."""
+        if self.incident is not None:
+            incident = self.incident
+            return Target(
+                incident.connection_id,
+                incident.dag_id,
+                incident.last_run_id or incident.run_id or "",
+                incident.monitored_dag_id,
+            )
+        dag_run = self.get_context("dag_run") or {}
+        if dag_run.get("dag_id"):
+            return Target(
+                _uuid(dag_run.get("connection_id") or ""),
+                dag_run["dag_id"],
+                dag_run.get("run_id") or "",
+                _uuid(dag_run.get("monitored_dag_id") or ""),
+            )
+        raise NodeError(
+            "This block works on a DAG run: start with 'When this DAG runs' or an incident trigger"
+        )
+
+    @property
     def connection(self) -> AirflowConnection:
-        conn = self.db.get(AirflowConnection, self.the_incident.connection_id)
+        conn = self.db.get(AirflowConnection, self.target.connection_id)
         if conn is None:
-            raise NodeError("The incident's Airflow connection no longer exists")
+            raise NodeError("The DAG's Airflow connection no longer exists")
         return conn
 
     @property
     def dag(self) -> MonitoredDag | None:
-        if self.incident is None:
+        if not self.has_target:
             return None
-        return self.db.get(MonitoredDag, self.incident.monitored_dag_id)
+        target = self.target
+        if target.monitored_dag_id is not None:
+            dag = self.db.get(MonitoredDag, target.monitored_dag_id)
+            if dag is not None:
+                return dag
+        return self.db.scalar(
+            select(MonitoredDag).where(
+                MonitoredDag.connection_id == target.connection_id,
+                MonitoredDag.dag_id == target.dag_id,
+            )
+        )
 
     @property
     def environment(self) -> str:
-        return str(self.connection.environment) if self.incident is not None else ""
+        return str(self.connection.environment) if self.has_target else ""
 
     # Blocks that name their own target (pipeline.* / database.*).
     def airflow_connection(self, connection_id: str) -> AirflowConnection:
@@ -144,7 +198,7 @@ class NodeContext:
         return conn
 
     def airflow_adapter(self, conn: AirflowConnection) -> AirflowAdapter:
-        if self.incident is not None and conn.id == self.incident.connection_id:
+        if self.has_target and conn.id == self.target.connection_id:
             return self.adapter()
         if conn.id not in self._adapters:
             try:
@@ -236,6 +290,8 @@ class NodeContext:
             "results": self.get_context("results", {}),
             "workflow": {"name": self.run.workflow_name, "trigger": self.run.trigger_event},
             "dag_run": self.get_context("dag_run", {}),
+            "vars": self.get_context("vars", {}),
+            "trigger": self.get_context("trigger", {}),
             "environment": self.environment,
             "last_error": self.get_context("last_error", ""),
             "links": {
@@ -259,38 +315,82 @@ def _uuid(value: str) -> uuid.UUID | None:
 # ---------------------------------------------------------------------- triggers & logic
 
 
-_TRIGGER_TEXT = {"manual": "Started manually", "schedule": "Started by the schedule"}
+_TRIGGER_TEXT = {
+    "manual": "Started manually",
+    "schedule": "Started by the schedule",
+    "webhook": "Started by a webhook call",
+}
 
 
 def _trigger(ctx: NodeContext, node: Node) -> NodeResult:
     event = ctx.run.trigger_event
-    if event == TriggerEvent.DAG_RUN:
+    if node.type == "trigger.dag":
         dag_run = ctx.get_context("dag_run", {})
         state = dag_run.get("normalized_state", dag_run.get("state"))
-        port = state if state in {"success", "in_progress", "failed"} else "next"
-        if not ctx.graph.next_nodes(node.id, port):
-            port = "next"
+        if state not in {"success", "in_progress", "failed"}:
+            raise NodeError(f"Unknown DAG run state '{state}'")
+        label = {"success": "succeeded", "in_progress": "is in progress", "failed": "failed"}
         return NodeResult(
-            port,
+            state,
             {
                 "dag_id": dag_run.get("dag_id"),
                 "run_id": dag_run.get("run_id"),
                 "state": state,
                 "airflow_state": dag_run.get("airflow_state", dag_run.get("state")),
             },
-            f"Run {dag_run.get('run_id')} of {dag_run.get('dag_id')} {state}",
-        )
-    if node.type == "trigger.dag_watch":
-        incident = ctx.the_incident
-        watched = watched_dag(node.config, incident.connection_id, incident.dag_id)
-        if watched is None:
-            raise NodeError(f"DAG '{incident.dag_id}' is not watched by this trigger")
-        return NodeResult(
-            watched["key"],
-            {"dag_id": incident.dag_id, "connection_id": str(incident.connection_id)},
-            f"Incident on {incident.dag_id} ({event})",
+            f"Run {dag_run.get('run_id')} of {dag_run.get('dag_id')} {label[state]}",
         )
     return NodeResult("next", message=_TRIGGER_TEXT.get(event, f"Triggered by incident {event}"))
+
+
+# ---------------------------------------------------------------------- If / Switch / values
+
+
+def compare_values(left: str, op: str, right: str) -> bool:
+    """'If': numbers compare as numbers; =, != and contains also work on text."""
+    if op == "is_empty":
+        return left.strip() == ""
+    if op == "not_empty":
+        return left.strip() != ""
+    if op == "contains":
+        return right in left
+    return compare(left, op, right)
+
+
+def _if(ctx: NodeContext, node: Node) -> NodeResult:
+    cfg = node.config
+    values = ctx.render_values()
+    left = render(cfg["left"], values).strip()
+    right = render(cfg["right"], values).strip()
+    op = cfg["operator"]
+    result = compare_values(left, op, right)
+    shown = f"'{left}' {op}" if op in ("is_empty", "not_empty") else f"'{left}' {op} '{right}'"
+    output = {"left": left, "right": right, "operator": op, "result": result}
+    ctx.record_result(node.id, output)
+    return NodeResult("true" if result else "false", output, f"{shown}: {result}")
+
+
+def _switch(ctx: NodeContext, node: Node) -> NodeResult:
+    value = render(node.config["value"], ctx.render_values()).strip()
+    for case in node.config["cases"]:
+        if compare(value, "=", case["equals"].strip()):
+            ctx.record_result(node.id, {"value": value, "case": case["key"]})
+            label = case.get("label") or case["equals"]
+            return NodeResult(case["key"], {"value": value}, f"'{value}' -> {label}")
+    ctx.record_result(node.id, {"value": value, "case": "otherwise"})
+    return NodeResult("otherwise", {"value": value}, f"'{value}' -> otherwise")
+
+
+def _join(ctx: NodeContext, node: Node) -> NodeResult:
+    # The engine only runs it once no other queued block can still reach it.
+    return NodeResult("next", message="All branches arrived")
+
+
+def _set_value(ctx: NodeContext, node: Node) -> NodeResult:
+    name = node.config["name"]
+    value = render(node.config["value"], ctx.render_values())
+    ctx.set_context("vars", {**ctx.get_context("vars", {}), name: value})
+    return NodeResult("next", {"name": name, "value": value}, f"{name} = {value[:200]}")
 
 
 def _filter(ctx: NodeContext, node: Node) -> NodeResult:
@@ -354,11 +454,68 @@ def diagnosis_outcome(diagnosis: dict[str, Any], min_confidence_pct: int | None)
     return "retryable" if category in RETRYABLE else "needs_fix"
 
 
+def _fetch_task_logs(
+    ctx: NodeContext, conn: AirflowConnection, dag_id: str, run_id: str
+) -> list[tuple[Any, str]]:
+    """(task instance, log text) of the run's failed tasks (all tasks if none failed)."""
+    adapter = ctx.airflow_adapter(conn)
+    instances = run_async(lambda: adapter.list_task_instances(dag_id, run_id))
+    failed = [ti for ti in instances if ti.state == "failed"]
+    logs = []
+    for ti in (failed or instances)[:_MAX_TARGET_LOGS]:
+        try:
+            log = run_async(
+                lambda ti=ti: adapter.get_task_log(
+                    dag_id, run_id, ti.task_id, ti.try_number, max_bytes=65536
+                )
+            )
+        except AirflowAdapterError as err:
+            logger.warning("Failed to fetch log for task %s: %s", ti.task_id, err)
+            continue
+        if log and log.content:
+            logs.append((ti, log.content))
+    return logs
+
+
+def _target_logs(ctx: NodeContext) -> list[str]:
+    """Task logs of the run's DAG run, newest first: the incident's evidence, or (for 'When
+    this DAG runs') fetched from Airflow once and kept in the run's context."""
+    if ctx.incident is not None:
+        return diagnosis_service.task_logs(ctx.db, ctx.incident)
+    cached = ctx.get_context("target_logs")
+    if cached is not None:
+        return list(cached)
+    target = ctx.target
+    logs: list[str] = []
+    if target.run_id:
+        try:
+            fetched = _fetch_task_logs(ctx, ctx.connection, target.dag_id, target.run_id)
+            logs = [text[-_MAX_TARGET_LOG_CHARS:] for _, text in fetched]
+        except AirflowAdapterError as exc:
+            logger.warning("Could not fetch logs for %s/%s: %s", target.dag_id, target.run_id, exc)
+    ctx.set_context("target_logs", logs)
+    return logs
+
+
 def _load_diagnosis(ctx: NodeContext, *, refresh: bool = False) -> dict[str, Any]:
     """The stored diagnosis (computed when evidence arrived, or an operator correction), so the
     workflow and the incident page always agree; computed here only if it is missing, or
-    recomputed from the latest logs when asked."""
-    incident = ctx.the_incident
+    recomputed from the latest logs when asked. Without an incident, the DAG run's logs are
+    classified and the result is kept in the run's context."""
+    if ctx.incident is None:
+        cached = ctx.get_context("target_diagnosis")
+        if cached and not refresh:
+            return dict(cached)
+        if refresh:
+            ctx.set_context("target_logs", None)
+        payload, _ = hybrid.decide(
+            _target_logs(ctx),
+            diagnosis_service.model_client(),
+            ctx.settings.ML_MIN_CONFIDENCE,
+        )
+        ctx.set_context("target_diagnosis", payload)
+        return dict(payload)
+    incident = ctx.incident
     if refresh:
         stored = diagnosis_service.diagnose_and_store(ctx.db, incident, record_event=False)
     else:
@@ -453,9 +610,10 @@ def _analyze_task_logs(ctx: NodeContext, node: Node) -> NodeResult:
     cfg = node.config
     incident = ctx.incident
     logs: list[str] = []
-    dag_id = incident.dag_id if incident else ""
-    run_id = (incident.last_run_id or incident.run_id or "") if incident else ""
-    conn_id = str(incident.connection_id) if incident else None
+    target = ctx.target if ctx.has_target else None
+    dag_id = target.dag_id if target else ""
+    run_id = target.run_id if target else ""
+    conn_id = str(target.connection_id) if target and target.connection_id else None
 
     # Check upstream node results (e.g. from pipeline.run_dag)
     results = ctx.get_context("results", {})
@@ -478,7 +636,7 @@ def _analyze_task_logs(ctx: NodeContext, node: Node) -> NodeResult:
         conn = None
         if conn_id:
             conn = ctx.db.get(AirflowConnection, _uuid(conn_id))
-        elif incident is not None:
+        elif ctx.has_target:
             conn = ctx.connection
         if conn is not None:
             try:
@@ -555,8 +713,8 @@ def _analyze_task_logs(ctx: NodeContext, node: Node) -> NodeResult:
 
 
 def _dag_state(ctx: NodeContext, node: Node) -> NodeResult:
-    dag_id = ctx.the_incident.dag_id
-    cache_key = (ctx.the_incident.connection_id, dag_id)
+    dag_id = ctx.target.dag_id
+    cache_key = (ctx.target.connection_id, dag_id)
     cached = ctx._dag_state_cache.get(cache_key)
     if cached is not None:
         logger.debug("Reused cached DAG state for %s", dag_id)
@@ -624,6 +782,8 @@ def _check_sla(ctx: NodeContext, node: Node) -> NodeResult:
             dag_id = dag_run_ctx.get("dag_id") or ""
         if not run_id:
             run_id = dag_run_ctx.get("run_id") or ""
+        if not conn_id and dag_id == dag_run_ctx.get("dag_id"):
+            conn_id = dag_run_ctx.get("connection_id")
 
     if ctx.incident:
         if not dag_id:
@@ -817,42 +977,64 @@ _FIX_ACTIONS = ("action.clear_failed_tasks", "action.trigger_dag_run")
 
 
 def _fix_history(ctx: NodeContext) -> tuple[int, int]:
-    """(fixes carried out, verifications that failed) on this incident, by any live run."""
-    rows = ctx.db.execute(
-        select(WorkflowStep.node_type, WorkflowStep.port)
+    """(fixes carried out, verifications that failed) on this incident, by any live run; or,
+    without an incident, by this workflow on the same DAG in the last 24h."""
+    query = (
+        select(WorkflowStep.node_type, WorkflowStep.port, WorkflowRun.context)
         .join(WorkflowRun, WorkflowRun.id == WorkflowStep.run_id)
         .where(
-            WorkflowRun.incident_id == ctx.the_incident.id,
             WorkflowRun.dry_run.is_(False),
             WorkflowStep.node_type.in_((*_FIX_ACTIONS, "verify.run_success")),
         )
-    ).all()
+    )
+    if ctx.incident is not None:
+        query = query.where(WorkflowRun.incident_id == ctx.incident.id)
+        rows = [(t, p) for t, p, _ in ctx.db.execute(query).all()]
+    else:
+        dag_id = ctx.target.dag_id
+        query = query.where(
+            WorkflowRun.workflow_id == ctx.run.workflow_id,
+            WorkflowRun.created_at >= ctx.now - timedelta(hours=24),
+        )
+        rows = [
+            (t, p)
+            for t, p, context in ctx.db.execute(query).all()
+            if ((context or {}).get("dag_run") or {}).get("dag_id") == dag_id
+        ]
     attempts = sum(1 for t, p in rows if t in _FIX_ACTIONS and p == "success")
     failed = sum(1 for t, p in rows if t == "verify.run_success" and p == "failed")
     return attempts, failed
 
 
 def _fix_facts(ctx: NodeContext, node: Node, diagnosis: dict[str, Any]) -> remediation.Facts:
-    incident = ctx.the_incident
+    incident = ctx.incident
+    target = ctx.target
     dag_state = "unknown"
     if node.config.get("check_dag_state", False):
         try:
             dag_state = _dag_state(ctx, node).port or "unknown"
         except (NodeError, AppError) as exc:
-            logger.info("Choose the fix: DAG state unavailable for %s: %s", incident.dag_id, exc)
+            logger.info("Choose the fix: DAG state unavailable for %s: %s", target.dag_id, exc)
     attempts, failed = _fix_history(ctx)
+    if incident is not None:
+        kind, status = str(incident.type), str(incident.status)
+        severity_, occurrences = str(incident.severity), incident.occurrence_count
+        failed_run = incident.type == IncidentType.DAG_RUN_FAILED and bool(target.run_id)
+    else:  # 'When this DAG runs': the run itself is the subject
+        state = (ctx.get_context("dag_run") or {}).get("normalized_state")
+        kind, status, severity_, occurrences = "DAG_RUN_FAILED", "OPEN", "HIGH", 1
+        failed_run = state == "failed" and bool(target.run_id)
     return remediation.Facts(
-        incident_type=str(incident.type),
-        incident_status=str(incident.status),
-        dag_id=incident.dag_id,
+        incident_type=kind,
+        incident_status=status,
+        dag_id=target.dag_id,
         environment=ctx.environment,
-        severity=str(incident.severity),
-        occurrences=incident.occurrence_count,
+        severity=severity_,
+        occurrences=occurrences,
         category=str(diagnosis.get("category") or FailureCategory.UNKNOWN),
         confidence=float(diagnosis.get("confidence") or 0),
         source=str(diagnosis.get("source") or "regex"),
-        has_failed_run=incident.type == IncidentType.DAG_RUN_FAILED
-        and bool(incident.last_run_id or incident.run_id),
+        has_failed_run=failed_run,
         fix_attempts=attempts,
         failed_verifications=failed,
         actions_today=_actions_last_24h(ctx),
@@ -885,8 +1067,7 @@ def _choose_fix(ctx: NodeContext, node: Node) -> NodeResult:
     if advisor is not None:
 
         def ask_advisor() -> remediation.Advice:
-            logs = diagnosis_service.task_logs(ctx.db, ctx.the_incident)
-            return advisor.advise(facts, choice, diagnosis, logs)
+            return advisor.advise(facts, choice, diagnosis, _target_logs(ctx))
 
         ask = ask_advisor
 
@@ -927,11 +1108,11 @@ def _ai_generate_fix(ctx: NodeContext, node: Node) -> NodeResult:
     cfg = node.config
     min_conf = cfg.get("min_confidence_pct", 70)
     instruction = cfg.get("instruction", "")
-    incident = ctx.the_incident
     analysis = ctx.get_context("analysis") or {}
     diagnosis = ctx.get_context("diagnosis") or _load_diagnosis(ctx)
 
-    headline = analysis.get("headline") or diagnosis.get("label") or incident.title
+    subject = ctx.incident.title if ctx.incident is not None else f"{ctx.target.dag_id} failed"
+    headline = analysis.get("headline") or diagnosis.get("label") or subject
     stack_trace = analysis.get("stack_trace") or analysis.get("log_snippet") or ""
 
     advisor = decision_advisor(ctx.settings)
@@ -952,7 +1133,7 @@ def _ai_generate_fix(ctx: NodeContext, node: Node) -> NodeResult:
     try:
         facts = _fix_facts(ctx, node, diagnosis)
         choice = remediation.choose_fix(facts, remediation.Settings())
-        logs = [stack_trace] if stack_trace else diagnosis_service.task_logs(ctx.db, incident)
+        logs = [stack_trace] if stack_trace else _target_logs(ctx)
         advice = advisor.advise(facts, choice, diagnosis, logs)
         conf_pct = round(advice.confidence * 100)
         output = {
@@ -1005,7 +1186,11 @@ _ACTION_TEXT = {
 
 
 def describe_action(
-    action: dict[str, Any], incident: Incident | None, *, database: str = "the database"
+    action: dict[str, Any],
+    incident: Incident | None,
+    *,
+    database: str = "the database",
+    target: Target | None = None,
 ) -> str:
     template = _ACTION_TEXT.get(action.get("type", ""), "continue the workflow")
     config = action.get("config") or {}
@@ -1013,10 +1198,14 @@ def describe_action(
         template = "unpause {dag_id}"
     if action.get("type") == "database.run_sql" and config.get("read_only"):
         template = "run a read-only query on {database}"
+    if incident is not None:
+        run_id, dag_id = incident.last_run_id or incident.run_id or "", incident.dag_id
+    elif target is not None:
+        run_id, dag_id = target.run_id, target.dag_id
+    else:
+        run_id, dag_id = "", ""
     return template.format(
-        run_id=(incident.last_run_id or incident.run_id) if incident else "",
-        dag_id=config.get("dag_id") or (incident.dag_id if incident else ""),
-        database=database,
+        run_id=run_id, dag_id=config.get("dag_id") or dag_id, database=database
     )
 
 
@@ -1032,11 +1221,13 @@ def _action_environment(ctx: NodeContext, action: dict[str, Any]) -> tuple[str, 
         conn = ctx.db.get(AirflowConnection, _uuid(config["connection_id"]))
         if conn is not None:
             return str(conn.environment), ""
+    if kind == "http":
+        return ("DEV" if config.get("method") == "GET" else config.get("environment", "PROD")), ""
     if kind == "database" and config.get("connection_id"):
         db_conn = ctx.db.get(DatabaseConnection, _uuid(config["connection_id"]))
         if db_conn is not None:
             return str(db_conn.environment), db_conn.name
-    if ctx.incident is not None:
+    if ctx.has_target:
         return ctx.environment, ""
     return "PROD", ""
 
@@ -1062,7 +1253,12 @@ def _approval(ctx: NodeContext, node: Node) -> NodeResult:
             )
         what = ", then ".join(
             dict.fromkeys(
-                describe_action(a, ctx.incident, database=database or "the database")
+                describe_action(
+                    a,
+                    ctx.incident,
+                    database=database or "the database",
+                    target=ctx.target if ctx.has_target else None,
+                )
                 for a, _, database in targets
             )
         )
@@ -1079,7 +1275,7 @@ def _approval(ctx: NodeContext, node: Node) -> NodeResult:
         if ai_sol and ai_sol.get("explanation"):
             summary += f" AI Solution: {ai_sol['explanation']}"
         expires = ctx.now + timedelta(minutes=node.config["timeout_minutes"])
-        subject = ctx.incident.dag_id if ctx.incident is not None else ctx.run.workflow_name
+        subject = ctx.target.dag_id if ctx.has_target else ctx.run.workflow_name
         approval = Approval(
             id=uuid.uuid4(),
             run_id=ctx.run.id,
@@ -1160,25 +1356,30 @@ def _approval(ctx: NodeContext, node: Node) -> NodeResult:
 
 
 def _actions_last_24h(ctx: NodeContext) -> int:
-    """Successful automated actions on the incident's DAG in the last 24h (rate limit)."""
-    incident = ctx.the_incident
+    """Successful automated actions on the target DAG in the last 24h (rate limit), whether a
+    run worked on it through an incident or through 'When this DAG runs'."""
+    target = ctx.target
     since = ctx.now - timedelta(hours=24)
-    return (
-        ctx.db.scalar(
-            select(func.count(WorkflowStep.id))
-            .join(WorkflowRun, WorkflowRun.id == WorkflowStep.run_id)
-            .join(Incident, Incident.id == WorkflowRun.incident_id)
-            .where(
-                Incident.connection_id == incident.connection_id,
-                Incident.dag_id == incident.dag_id,
-                WorkflowStep.node_type.in_(ACTION_TYPES),
-                WorkflowStep.port == "success",
-                WorkflowStep.finished_at >= since,
-                WorkflowRun.dry_run.is_(False),
-            )
+    rows = ctx.db.execute(
+        select(Incident.connection_id, Incident.dag_id, WorkflowRun.context)
+        .select_from(WorkflowStep)
+        .join(WorkflowRun, WorkflowRun.id == WorkflowStep.run_id)
+        .outerjoin(Incident, Incident.id == WorkflowRun.incident_id)
+        .where(
+            WorkflowStep.node_type.in_(ACTION_TYPES),
+            WorkflowStep.port == "success",
+            WorkflowStep.finished_at >= since,
+            WorkflowRun.dry_run.is_(False),
         )
-        or 0
-    )
+    ).all()
+    count = 0
+    for conn_id, dag_id, context in rows:
+        if dag_id is None:
+            dag_run = (context or {}).get("dag_run") or {}
+            conn_id, dag_id = _uuid(dag_run.get("connection_id") or ""), dag_run.get("dag_id")
+        if conn_id == target.connection_id and dag_id == target.dag_id:
+            count += 1
+    return count
 
 
 def _run_action(
@@ -1328,9 +1529,18 @@ def _trigger_dag_once(
     return {"dag_id": dag_id, "run_id": run.run_id}
 
 
+def _claim_fix(ctx: NodeContext, dag_id: str, run_id: str) -> None:
+    """Remember the Airflow run this workflow run is fixing, so that run's next states do not
+    start the same workflow again (the fixing run waits for them with 'Verify')."""
+    claims = list(ctx.get_context("fix_claims") or [])
+    claim = {"connection_id": str(ctx.target.connection_id), "dag_id": dag_id, "run_id": run_id}
+    if claim not in claims:
+        ctx.set_context("fix_claims", [*claims, claim])
+
+
 def _clear_failed_tasks(ctx: NodeContext, node: Node) -> NodeResult:
-    incident = ctx.the_incident
-    run_id = incident.last_run_id or incident.run_id
+    target = ctx.target
+    run_id = target.run_id
     if not run_id:
         ctx.set_context("last_error", "There is no failed run to retry.")
         return NodeResult("failed", message="There is no failed run to retry")
@@ -1338,7 +1548,7 @@ def _clear_failed_tasks(ctx: NodeContext, node: Node) -> NodeResult:
     def execute() -> dict[str, Any]:
         cleared = run_async(
             lambda: ctx.adapter().clear_task_instances(
-                incident.dag_id,
+                target.dag_id,
                 run_id,
                 only_failed=True,
                 include_downstream=node.config["include_downstream"],
@@ -1346,8 +1556,9 @@ def _clear_failed_tasks(ctx: NodeContext, node: Node) -> NodeResult:
         )
         if not cleared:
             raise AirflowAdapterError(_adapter_result(f"No failed tasks to clear in run {run_id}"))
+        _claim_fix(ctx, target.dag_id, run_id)
         ctx.set_context(
-            "action_target", {"dag_id": incident.dag_id, "run_id": run_id, "action": "clear"}
+            "action_target", {"dag_id": target.dag_id, "run_id": run_id, "action": "clear"}
         )
         return {"run_id": run_id, "cleared_tasks": cleared}
 
@@ -1356,19 +1567,20 @@ def _clear_failed_tasks(ctx: NodeContext, node: Node) -> NodeResult:
         node,
         f"retry the failed tasks of run {run_id}",
         execute,
-        {"dag_id": incident.dag_id, "run_id": run_id, "action": "clear"},
+        {"dag_id": target.dag_id, "run_id": run_id, "action": "clear"},
     )
 
 
 def _trigger_dag_run(ctx: NodeContext, node: Node) -> NodeResult:
-    incident = ctx.the_incident
-    dag_id = incident.dag_id
+    dag_id = ctx.target.dag_id
+    reason = f"incident {ctx.incident.id}" if ctx.incident is not None else f"run {ctx.run.id}"
 
     def execute() -> dict[str, Any]:
-        note = f"Triggered by automation '{ctx.run.workflow_name}' for incident {incident.id}"
+        note = f"Triggered by automation '{ctx.run.workflow_name}' for {reason}"
         result = _trigger_dag_once(
             ctx, node_id=node.id, conn=ctx.connection, dag_id=dag_id, note=note
         )
+        _claim_fix(ctx, dag_id, result["run_id"])
         ctx.set_context(
             "action_target", {"dag_id": dag_id, "run_id": result["run_id"], "action": "trigger"}
         )
@@ -1381,7 +1593,7 @@ def _trigger_dag_run(ctx: NodeContext, node: Node) -> NodeResult:
 
 
 def _set_dag_paused(ctx: NodeContext, node: Node) -> NodeResult:
-    dag_id = ctx.the_incident.dag_id
+    dag_id = ctx.target.dag_id
     paused = node.config["paused"]
 
     def execute() -> dict[str, Any]:
@@ -1499,8 +1711,44 @@ def _verify_wait(ctx: NodeContext, deadline: datetime, message: str) -> NodeResu
 # ---------------------------------------------------------------------- incident & notify
 
 
+def _open_incident(ctx: NodeContext, node: Node) -> NodeResult:
+    """'Open incident': the workflow decides when its DAG gets an incident."""
+    from app.services import detection_service  # detection imports the automation service
+
+    cfg = node.config
+    target = ctx.target
+    conn, dag = ctx.connection, ctx.dag
+    if dag is None:
+        raise NodeError(f"DAG {target.dag_id} is not in the synced DAG list")
+    values = ctx.render_values()
+    title = render(cfg["title"], values).strip()[:300] or f"{target.dag_id} needs attention"
+    note = render(cfg["note"] or "", values).strip()
+    if ctx.dry_run:
+        return NodeResult("opened", {"simulated": True}, f"Dry run: would open '{title}'")
+    incident, created = detection_service.open_incident_for_run(
+        ctx.db,
+        conn=conn,
+        dag=dag,
+        run_id=target.run_id,
+        incident_type=IncidentType(cfg["incident_type"]),
+        severity=IncidentSeverity(cfg["severity"]),
+        title=title,
+        note=note,
+        now=ctx.now,
+        source=f"workflow '{ctx.run.workflow_name}'",
+    )
+    ctx.incident = incident
+    ctx.run.incident_id = incident.id
+    ctx.audit("incident.opened_by_workflow", incident_id=str(incident.id), created=created)
+    output = {"id": str(incident.id), "title": incident.title, "severity": str(incident.severity)}
+    ctx.record_result(node.id, output)
+    if created:
+        return NodeResult("opened", output, f"Opened incident: {incident.title}")
+    return NodeResult("already_open", output, f"Already open: {incident.title}")
+
+
 def _incident_update(ctx: NodeContext, node: Node) -> NodeResult:
-    incident = ctx.incident
+    incident = ctx.the_incident
     operation = node.config["operation"]
     note = render(node.config["note"] or "", ctx.render_values()).strip() or None
 
@@ -1647,6 +1895,165 @@ def _notify(ctx: NodeContext, node: Node) -> NodeResult:
         return NodeResult("next", {"channel": "webhook", "host": host}, "Webhook delivered")
     ctx.event("notify_failed", channel="webhook", host=host, error=error)
     return NodeResult("next", {"channel": "webhook", "error": error}, f"Webhook failed: {error}")
+
+
+# ---------------------------------------------------------------------- HTTP request
+
+_MAX_HTTP_BODY_CHARS = 64 * 1024
+
+
+def _http_headers(text: str) -> dict[str, str]:
+    headers = {}
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        name, sep, value = line.partition(":")
+        if not sep or not name.strip():
+            raise NodeError(f"Header line '{line.strip()[:60]}' must look like 'Name: value'")
+        headers[name.strip()] = value.strip()
+    return headers
+
+
+def _http_request(ctx: NodeContext, node: Node) -> NodeResult:
+    cfg = node.config
+    values = ctx.render_values()
+    method = cfg["method"]
+    url = render(cfg["url"], values).strip()
+    if not url.startswith(("http://", "https://")):
+        raise NodeError(f"The URL must start with http:// or https:// (got '{url[:80]}')")
+    headers = _http_headers(render(cfg["headers"] or "", values))
+    body = render(cfg["body"] or "", values) if method != "GET" else ""
+
+    def execute() -> dict[str, Any]:
+        if not _host_allowed(url, ctx.settings.AUTOMATION_WEBHOOK_ALLOWED_HOSTS):
+            raise ActionFailed(f"{urlsplit(url).hostname} is not an allowed host")
+        try:
+            with httpx.Client(
+                timeout=cfg["timeout_seconds"], follow_redirects=False, transport=webhook_transport
+            ) as client:
+                response = client.request(
+                    method, url, headers=headers, content=body.encode() if body else None
+                )
+        except httpx.HTTPError as exc:
+            raise ActionFailed(f"{type(exc).__name__}: {exc}"[:300]) from exc
+        text = response.text[:_MAX_HTTP_BODY_CHARS]
+        try:
+            parsed: Any = json.loads(text) if text.strip() else ""
+        except ValueError:
+            parsed = text
+        result = {"status": response.status_code, "body": parsed}
+        ctx.record_result(node.id, result)
+        if not response.is_success:
+            raise ActionFailed(f"HTTP {response.status_code}")
+        return result
+
+    # A GET only reads: no approval, whatever the target environment.
+    environment = "" if method == "GET" else cfg["environment"]
+    return _run_action(ctx, node, f"{method} {url}", execute, {"url": url}, environment=environment)
+
+
+# ---------------------------------------------------------------------- other workflows
+
+# Set by the automation service: (db, parent run, workflow id, input) -> child run. Kept as a
+# hook because the service imports this module.
+start_child_run: Callable[[Session, WorkflowRun, str, dict[str, Any]], WorkflowRun] | None = None
+_CHILD_DONE = {"COMPLETED": "success", "FAILED": "failed", "CANCELLED": "failed"}
+
+
+def _child(ctx: NodeContext, workflow_id: str, body: dict[str, Any]) -> WorkflowRun:
+    if start_child_run is None:  # pragma: no cover - the service always sets it
+        raise NodeError("Workflows cannot be started from here")
+    return start_child_run(ctx.db, ctx.run, workflow_id, body)
+
+
+def _poll_interval(ctx: NodeContext) -> datetime:
+    return ctx.now + timedelta(seconds=ctx.settings.AUTOMATION_VERIFY_POLL_SECONDS)
+
+
+def _call_workflow(ctx: NodeContext, node: Node) -> NodeResult:
+    cfg = node.config
+    state = ctx.node_state(node.id)
+    if "child" not in state:
+        text = render(cfg["input"] or "{}", ctx.render_values())
+        try:
+            body = json.loads(text) if text.strip() else {}
+        except ValueError as exc:
+            raise NodeError(f"The input is not valid JSON: {exc}") from exc
+        if not isinstance(body, dict):
+            raise NodeError('The input must be a JSON object, e.g. {"date": "2026-01-31"}')
+        child = _child(ctx, cfg["workflow_id"], body)
+        state = {
+            "child": str(child.id),
+            "deadline": (ctx.now + timedelta(minutes=cfg["timeout_minutes"])).isoformat(),
+        }
+        ctx.set_node_state(node.id, state)
+        ctx.record_result(node.id, {"run_id": str(child.id), "status": child.status.value})
+        if not cfg["wait"]:
+            return NodeResult("success", {"run_id": str(child.id)}, "Started the workflow")
+    child = ctx.db.get(WorkflowRun, _uuid(state["child"]))
+    if child is None:
+        raise NodeError("The started run no longer exists")
+    output = {"run_id": str(child.id), "status": child.status.value}
+    ctx.record_result(node.id, output)
+    port = _CHILD_DONE.get(child.status.value)
+    if port is not None:
+        if port == "failed":
+            ctx.set_context("last_error", f"'{child.workflow_name}' {child.status.value.lower()}")
+        return NodeResult(port, output, f"'{child.workflow_name}' {child.status.value.lower()}")
+    deadline = datetime.fromisoformat(state["deadline"])
+    if ctx.now >= deadline:
+        ctx.set_context("last_error", f"'{child.workflow_name}' did not finish in time")
+        return NodeResult("failed", output, "Timed out waiting for the workflow")
+    return NodeResult(
+        message=f"Waiting for '{child.workflow_name}'",
+        wait_until=min(_poll_interval(ctx), deadline),
+    )
+
+
+def _for_each(ctx: NodeContext, node: Node) -> NodeResult:
+    cfg = node.config
+    state = ctx.node_state(node.id)
+    if "rows" not in state:
+        conn = ctx.database_connection(cfg["connection_id"])
+        try:
+            result = _query(
+                conn, cfg["sql"], read_only=True, timeout_seconds=60, max_rows=cfg["max_rows"]
+            )
+        except ActionFailed as exc:
+            ctx.set_context("last_error", f"For each row: the query failed: {exc}")
+            return NodeResult("failed", {"error": str(exc)}, f"Query failed: {exc}")
+        # One input per row: {column: value} (values are JSON-safe already).
+        rows = [dict(zip(result.columns, row, strict=False)) for row in result.rows][
+            : cfg["max_rows"]
+        ]
+        state = {"rows": rows, "index": 0, "child": None, "failed": 0}
+    rows, index = state["rows"], state["index"]
+    if state.get("child"):
+        child = ctx.db.get(WorkflowRun, _uuid(state["child"]))
+        if child is not None and not child.status.is_terminal:
+            ctx.set_node_state(node.id, state)
+            return NodeResult(
+                message=f"Row {index + 1} of {len(rows)}: waiting",
+                wait_until=_poll_interval(ctx),
+            )
+        if child is None or child.status.value != "COMPLETED":
+            state["failed"] += 1
+        state["index"] = index = index + 1
+        state["child"] = None
+    if index < len(rows):
+        child = _child(ctx, cfg["workflow_id"], rows[index])
+        state["child"] = str(child.id)
+        ctx.set_node_state(node.id, state)
+        return NodeResult(
+            message=f"Row {index + 1} of {len(rows)}: started", wait_until=_poll_interval(ctx)
+        )
+    output = {"rows": len(rows), "failed": state["failed"]}
+    ctx.set_node_state(node.id, state)
+    ctx.record_result(node.id, output)
+    if state["failed"]:
+        ctx.set_context("last_error", f"{state['failed']} of {len(rows)} runs failed")
+        return NodeResult("failed", output, f"{state['failed']} of {len(rows)} runs failed")
+    return NodeResult("done", output, f"Ran the workflow for {len(rows)} row(s)")
 
 
 # ---------------------------------------------------------------------- orchestration
@@ -2213,10 +2620,17 @@ def _data_check_incident(
 EXECUTORS: dict[str, Callable[[NodeContext, Node], NodeResult]] = {
     "trigger.incident": _trigger,
     "trigger.incident_stale": _trigger,
-    "trigger.dag_watch": _trigger,
     "trigger.manual": _trigger,
     "trigger.schedule": _trigger,
-    "trigger.dag_run": _trigger,
+    "trigger.dag": _trigger,
+    "trigger.webhook": _trigger,
+    "logic.if": _if,
+    "http.request": _http_request,
+    "flow.call_workflow": _call_workflow,
+    "flow.for_each": _for_each,
+    "logic.switch": _switch,
+    "logic.join": _join,
+    "logic.set": _set_value,
     "flow.wait": _wait,
     "pipeline.run_dag": _run_dag,
     "pipeline.wait_for_dag": _wait_for_dag,
@@ -2234,6 +2648,7 @@ EXECUTORS: dict[str, Callable[[NodeContext, Node], NodeResult]] = {
     "action.trigger_dag_run": _trigger_dag_run,
     "action.set_dag_paused": _set_dag_paused,
     "verify.run_success": _verify,
+    "incident.open": _open_incident,
     "incident.update": _incident_update,
     "notify": _notify,
     "check.record": _record_check,

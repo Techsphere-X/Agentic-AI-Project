@@ -9,19 +9,22 @@ import { NODE_LABELS, describeConfig, nodeIcon, stageOf } from './automationText
  * per port when the block branches.
  *
  * data: { nodeType, name, config, def (catalog entry), problems?: string[], warnings?: string[],
- *         run?: {tone, label}, dimmed?, dropTarget? }
- * "Watch selected DAGs" has one output per watched DAG (`portsOf`).
+ *         run?: {tone, label}, dimmed? }
+ * "When this DAG runs" shows its DAG as the title. Blocks whose outputs follow their settings
+ * get them from `portsOf`.
  */
 function BlockNode({ data, selected }) {
   const def = data.def
-  const ports = portsOf(def, data.config)
-  const dynamic = Boolean(def?.dynamic_ports)
+  const ports = portsOf(def, data.config, data.settings)
+  const retries = data.settings?.retries ?? 0
   const category = def?.category ?? data.nodeType.split('.')[0]
   const stage = stageOf(def ?? category)
   const problems = data.problems ?? []
   const warnings = data.warnings ?? []
   const kind = def?.label ?? NODE_LABELS[data.nodeType] ?? data.nodeType
-  const title = data.name || kind
+  // "When this DAG runs": the DAG is what the block is about.
+  const dagTitle = data.nodeType === 'trigger.dag' ? data.config?.dag_id || 'Choose a DAG' : null
+  const title = data.name || dagTitle || kind
   const summary = describeConfig(data.nodeType, data.config)
   const classes = [
     'block',
@@ -30,7 +33,6 @@ function BlockNode({ data, selected }) {
     problems.length > 0 && 'block-problem',
     data.run && `block-run-${data.run.tone}`,
     data.dimmed && 'block-dimmed',
-    data.dropTarget && 'block-drop-target',
   ]
     .filter(Boolean)
     .join(' ')
@@ -40,7 +42,7 @@ function BlockNode({ data, selected }) {
       {category !== 'trigger' && <Handle type="target" position={Position.Left} className="block-handle-in" />}
       <div className="block-band">
         <span className="block-stage">{stage.label}</span>
-        {data.name && <span className="block-kind">{kind}</span>}
+        {title !== kind && <span className="block-kind">{kind}</span>}
         {def?.is_action && (
           <span className="block-badge-action" title="Changes something in Airflow or a database. On PROD it needs an approval first.">
             changes things
@@ -54,6 +56,11 @@ function BlockNode({ data, selected }) {
         <div className="block-title">{title}</div>
       </div>
       {summary && <div className="block-summary">{summary}</div>}
+      {retries > 0 && (
+        <div className="block-summary muted">
+          retries {retries}× every {data.settings.retry_delay_seconds ?? 60} s
+        </div>
+      )}
       {problems.map((message) => (
         <div key={message} className="block-error">
           {message}
@@ -65,15 +72,14 @@ function BlockNode({ data, selected }) {
         </div>
       ))}
       {data.run?.label && <div className="block-run-label">{data.run.label}</div>}
-      {dynamic && ports.length === 0 && <div className="block-drop-hint">Drop DAGs here</div>}
-      {ports.length === 1 && !dynamic && (
+      {ports.length === 1 && (
         <Handle type="source" position={Position.Right} id={ports[0]} className="block-handle-out" />
       )}
-      {(ports.length > 1 || (dynamic && ports.length === 1)) && (
+      {ports.length > 1 && (
         <div className="block-ports">
           {ports.map((port) => (
             <div key={port} className={`block-port block-port-${{ good: 'ok', bad: 'bad', neutral: 'neutral' }[portTone(def, port)]}`}>
-              <span className={`block-port-label ${dynamic ? 'mono' : ''}`}>{portName(def, port, data.config)}</span>
+              <span className="block-port-label">{portName(def, port, data.config)}</span>
               <Handle type="source" position={Position.Right} id={port} className="block-handle-out" />
             </div>
           ))}

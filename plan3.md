@@ -86,7 +86,7 @@ frontend/src/
  Toolbar: name · description · Auto-layout · Validate · Save · enabled/mode
 ```
 
-- **Palette**: grouped by category from the node-type catalog. Drag onto the canvas or click to add. Only one trigger is allowed: the trigger group is disabled once the graph has one.
+- **Palette**: grouped by stage from the node-type catalog. Drag onto the canvas or click to add. A workflow has one trigger: picking another trigger replaces it in place (same id and links). *(Since Plan 5: "Start when…" lists "When this DAG runs" with the real DAGs under it, then "Incidents (catch-all)" and "Orchestration"; a new workflow first asks "How should this workflow start?".)*
 - **Block**: category colour and icon, title (custom name or type label), config summary, one input handle (not on triggers), and one labelled output handle per port (`true`/`false`, `approved`/`rejected`, `success`/`failed`, …).
 - **Connecting**: drag from an output port to a block.
   - A port can have only one outgoing edge; a new connection replaces the old one.

@@ -98,6 +98,13 @@ export const automationApi = {
   previewTemplate: (key, template_parameters) =>
     api.post(`/automation/templates/${key}/preview`, { template_parameters }),
   listWorkflows: () => api.get('/automation/workflows'),
+  getWebhook: (id) => api.get(`/automation/workflows/${id}/webhook`),
+  listVersions: (id) => api.get(`/automation/workflows/${id}/versions`),
+  getVersion: (id, version) => api.get(`/automation/workflows/${id}/versions/${version}`),
+  restoreVersion: (id, version) => api.post(`/automation/workflows/${id}/versions/${version}/restore`),
+  testNode: (data) => api.post('/automation/workflows/test-node', data),
+  rotateWebhook: (id) => api.post(`/automation/workflows/${id}/webhook/rotate`),
+  schedulePreview: (cron, timezone) => api.get('/automation/schedule-preview', { cron, timezone, count: 3 }),
   getWorkflow: (id) => api.get(`/automation/workflows/${id}`),
   createWorkflow: (data) => api.post('/automation/workflows', data),
   runWorkflow: (id, data = {}) => api.post(`/automation/workflows/${id}/run`, data),

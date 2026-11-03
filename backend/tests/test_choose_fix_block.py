@@ -142,7 +142,7 @@ def test_catalog_entry() -> None:
     assert entry["label"] == "Choose a fix automatically"
     assert entry["category"] == "logic"
     assert tuple(entry["ports"]) == FIXES
-    assert entry["needs_incident"] is True
+    assert entry["needs_target"] is True
     assert {"max_attempts", "pause_on_bad_data", "check_dag_state"} <= set(
         entry["config_schema"]["properties"]
     )
