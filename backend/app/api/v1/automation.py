@@ -253,6 +253,13 @@ def latest_run_checks(db: DbSession, _: ViewerUser) -> list[DagRunCheckRead]:
     return [DagRunCheckRead.model_validate(c) for c in checks]
 
 
+@router.delete("/run-checks/{check_id}", status_code=204)
+def delete_run_check(
+    check_id: uuid.UUID, db: DbSession, admin: AdminUser, ip: ClientIp
+) -> None:
+    automation_service.delete_run_check(db, check_id, actor=admin, ip_address=ip)
+
+
 @router.post("/workflows/{workflow_id}/run", response_model=WorkflowRunDetail, status_code=201)
 def run_workflow(
     workflow_id: uuid.UUID,
@@ -379,6 +386,13 @@ def reject(
     return _decide(approval_id, body, db, operator, ip, approve=False)
 
 
+@router.delete("/approvals/{approval_id}", status_code=204)
+def delete_approval(
+    approval_id: uuid.UUID, db: DbSession, admin: AdminUser, ip: ClientIp
+) -> None:
+    automation_service.delete_approval(db, approval_id, actor=admin, ip_address=ip)
+
+
 # ---------------------------------------------------------------------- notifications & summary
 
 
@@ -400,6 +414,13 @@ def list_notifications(
 @router.post("/notifications/read-all", response_model=MarkedRead)
 def read_all(db: DbSession, _: ViewerUser) -> MarkedRead:
     return MarkedRead(updated=automation_service.mark_all_read(db))
+
+
+@router.delete("/notifications/{notification_id}", status_code=204)
+def delete_notification(
+    notification_id: uuid.UUID, db: DbSession, admin: AdminUser, ip: ClientIp
+) -> None:
+    automation_service.delete_notification(db, notification_id, actor=admin, ip_address=ip)
 
 
 @router.get("/summary", response_model=AutomationSummary)
