@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { Button, Card, EmptyState } from '../../components/ui'
+import { ActionMenu, ActionMenuItem, Button, Card, ConfirmDialog, EmptyState } from '../../components/ui'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { formatRelative } from '../../format'
@@ -17,23 +17,56 @@ const STATUS_FILTERS = {
   CANCELLED: ['CANCELLED'],
 }
 
-export function RunTable({ runs, showIncident = true }) {
+const isActive = (run) => STATUS_FILTERS.active.includes(run.status)
+
+/**
+ * Runs as a table. With `selected` (a Set of run ids) and `onSelect(ids, checked)`, finished
+ * runs get a checkbox (active runs must be cancelled before they can be deleted).
+ */
+export function RunTable({ runs, showIncident = true, selected, onSelect, onDelete }) {
+  const selectable = Boolean(selected && onSelect)
+  const finished = runs.filter((r) => !isActive(r))
+  const allChecked = finished.length > 0 && finished.every((r) => selected?.has(r.id))
   return (
     <div className="table-wrap">
       <table className="table">
         <thead>
           <tr>
+            {selectable && (
+              <th className="cell-check">
+                <input
+                  type="checkbox"
+                  aria-label="Select all finished runs on this page"
+                  checked={allChecked}
+                  disabled={finished.length === 0}
+                  onChange={(e) => onSelect(finished.map((r) => r.id), e.target.checked)}
+                />
+              </th>
+            )}
             <th>Status</th>
             <th>Workflow</th>
             {showIncident && <th>Incident</th>}
             <th>Trigger</th>
             <th>Started</th>
             <th>Took</th>
+            {selectable && <th aria-label="Actions" />}
           </tr>
         </thead>
         <tbody>
           {runs.map((r) => (
             <tr key={r.id}>
+              {selectable && (
+                <td className="cell-check">
+                  <input
+                    type="checkbox"
+                    aria-label={`Select run of ${r.workflow_name}`}
+                    title={isActive(r) ? 'Cancel the run before deleting it' : undefined}
+                    disabled={isActive(r)}
+                    checked={selected.has(r.id)}
+                    onChange={(e) => onSelect([r.id], e.target.checked)}
+                  />
+                </td>
+              )}
               <td>
                 <RunStatusBadge run={r} />
               </td>
@@ -55,6 +88,35 @@ export function RunTable({ runs, showIncident = true }) {
               <td className="small">{triggerText(r.trigger_event)}</td>
               <td className="small">{formatRelative(r.started_at ?? r.created_at)}</td>
               <td className="small">{duration(r)}</td>
+              {selectable && (
+                <td>
+                  <ActionMenu label={`Actions for ${r.workflow_name}`}>
+                    {(close) => (
+                      <>
+                        <ActionMenuItem
+                          disabled={isActive(r)}
+                          onClick={() => {
+                            onSelect([r.id], true)
+                            close()
+                          }}
+                        >
+                          Select for deletion
+                        </ActionMenuItem>
+                        <ActionMenuItem
+                          tone="danger"
+                          disabled={isActive(r)}
+                          onClick={() => {
+                            close()
+                                    onDelete(r)
+                          }}
+                        >
+                          Delete
+                        </ActionMenuItem>
+                      </>
+                    )}
+                  </ActionMenu>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -70,6 +132,10 @@ export default function RunList() {
   const [offset, setOffset] = useState(0)
   const [page, setPage] = useState(null)
   const [ticking, setTicking] = useState(false)
+  const [selected, setSelected] = useState(() => new Set())
+  const [deleting, setDeleting] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const canDelete = hasRole('ADMIN')
   const [error, setError] = useState(null)
   const [params, setParams] = useSearchParams()
   const workflowId = params.get('workflow_id')
@@ -77,6 +143,7 @@ export default function RunList() {
   const load = useCallback(async () => {
     setError(null)
     try {
+      setSelected(new Set())
       setPage(
         await automationApi.listRuns({
           status: STATUS_FILTERS[status],
@@ -96,6 +163,42 @@ export default function RunList() {
     // eslint-disable-next-line react/set-state-in-effect -- fetch on mount/filter change; state is set after await
     load()
   }, [load])
+
+  function onSelect(ids, checked) {
+    setSelected((current) => {
+      const next = new Set(current)
+      ids.forEach((runId) => (checked ? next.add(runId) : next.delete(runId)))
+      return next
+    })
+  }
+
+  async function onDelete() {
+    const count = selected.size
+    setDeleteTarget({ kind: 'selected', count })
+  }
+
+  async function confirmDelete() {
+    setDeleting(true)
+    try {
+      const { deleted } = deleteTarget.kind === 'selected'
+        ? await automationApi.deleteRuns([...selected])
+        : await automationApi.deleteRun(deleteTarget.run.id).then(() => ({ deleted: 1 }))
+      toast.success(`Deleted ${deleted} run${deleted === 1 ? '' : 's'}`)
+      setDeleteTarget(null)
+      // Stay on a page that still has rows.
+      const remaining = page.total - deleted
+      if (offset >= remaining && offset > 0) setOffset(Math.max(0, offset - PAGE_SIZE))
+      else await load()
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  async function onDeleteSingle(run) {
+    setDeleteTarget({ kind: 'single', run })
+  }
 
   async function onTick() {
     setTicking(true)
@@ -117,7 +220,6 @@ export default function RunList() {
       <div className="page-header">
         <div>
           <h1>Automation runs</h1>
-          <p className="muted">Every time a workflow ran, step by step.</p>
         </div>
         {hasRole('ADMIN', 'OPERATOR') && (
           <Button onClick={onTick} loading={ticking} title="Advance waiting runs now instead of on the next cycle">
@@ -141,6 +243,22 @@ export default function RunList() {
             <option value="FAILED">Failed</option>
             <option value="CANCELLED">Cancelled</option>
           </select>
+          {canDelete && selected.size > 0 && (
+            <ActionMenu label="Actions for selected runs">
+              {(close) => (
+                <ActionMenuItem
+                  tone="danger"
+                  disabled={deleting}
+                  onClick={() => {
+                    close()
+                    onDelete()
+                  }}
+                >
+                  Delete selected ({selected.size})
+                </ActionMenuItem>
+              )}
+            </ActionMenu>
+          )}
           {workflowId && (
             <span className="small">
               One workflow only ·{' '}
@@ -160,10 +278,15 @@ export default function RunList() {
         ) : !page ? (
           <p className="muted">Loading…</p>
         ) : page.total === 0 ? (
-          <EmptyState title="No runs yet">Runs appear when you press Run now, on a schedule, or when an incident starts a workflow.</EmptyState>
+          <EmptyState title="No runs yet" />
         ) : (
           <>
-            <RunTable runs={page.items} />
+            <RunTable
+              runs={page.items}
+              selected={canDelete ? selected : null}
+              onSelect={onSelect}
+              onDelete={onDeleteSingle}
+            />
             <div className="pager">
               <span className="muted small">
                 {offset + 1}–{Math.min(offset + PAGE_SIZE, page.total)} of {page.total}
@@ -178,6 +301,20 @@ export default function RunList() {
           </>
         )}
       </Card>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Delete run?"
+        message={
+          deleteTarget?.kind === 'selected'
+            ? `Delete ${deleteTarget.count} selected run${deleteTarget.count === 1 ? '' : 's'}? This cannot be undone.`
+            : deleteTarget
+              ? `Delete this run of "${deleteTarget.run.workflow_name}"? This cannot be undone.`
+              : ''
+        }
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        loading={deleting}
+      />
     </div>
   )
 }

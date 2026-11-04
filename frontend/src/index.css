@@ -290,6 +290,13 @@ a:focus-visible {
   border-bottom: 1px solid var(--border);
 }
 
+.health-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
 .user-menu {
   display: flex;
   align-items: center;
@@ -465,6 +472,36 @@ a:focus-visible {
   line-height: 1.1;
 }
 
+.skeleton {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: middle;
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--border) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  border-radius: 4px;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  to { background-position: -200% 0; }
+}
+
+.error-state {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.75rem 1rem;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border: 1px solid color-mix(in srgb, var(--danger) 25%, transparent);
+  border-radius: 8px;
+}
+
+.error-state strong {
+  margin-right: auto;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -540,6 +577,72 @@ a:focus-visible {
   cursor: pointer;
   background: none;
   border: none;
+}
+
+.action-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.action-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: 1.5rem;
+  border-radius: 6px;
+}
+
+.action-menu-trigger:hover,
+.action-menu-trigger[aria-expanded='true'] {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.action-menu-popover {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 10rem;
+  padding: 0.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+}
+
+.action-menu-item {
+  padding: 0.45rem 0.65rem;
+  color: var(--text);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+}
+
+.action-menu-item:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.action-menu-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.action-menu-item-danger {
+  color: var(--danger);
+}
+
+.notification-row-header .action-menu {
+  margin-left: auto;
 }
 
 .spinner {
@@ -717,6 +820,23 @@ a:focus-visible {
   border-collapse: collapse;
 }
 
+.table-sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.table-sort-button:hover {
+  color: var(--accent);
+}
+
 .table th {
   padding: 0.5rem 0.6rem;
   color: var(--text-muted);
@@ -732,6 +852,12 @@ a:focus-visible {
   padding: 0.6rem;
   vertical-align: middle;
   border-bottom: 1px solid var(--border);
+}
+
+/* Row selection checkboxes (e.g. deleting runs). */
+.table .cell-check {
+  width: 32px;
+  padding-right: 0;
 }
 
 .table tr:last-child td {
@@ -1699,6 +1825,21 @@ input.sla-input {
   box-shadow: var(--shadow);
 }
 
+.kpi-health { order: 1; }
+.kpi-incidents { order: 2; }
+.kpi-automation { order: 3; }
+.kpi-ecosystem { order: 4; }
+.kpi-detection { order: 5; }
+
+.kpi-critical {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger), var(--shadow);
+}
+
+.dashboard-updated {
+  margin: -0.5rem 0 0;
+}
+
 .kpi-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
@@ -1742,6 +1883,17 @@ input.sla-input {
   list-style: none;
 }
 
+.notification-row-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.notification-row-header .btn {
+  margin-left: auto;
+}
+
 .activity-card {
   display: flex;
   align-items: center;
@@ -1761,6 +1913,17 @@ input.sla-input {
   border-color: var(--accent);
   transform: translateX(3px);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 .activity-meta {
@@ -2979,4 +3142,3 @@ input.sla-input {
     margin-top: 1rem;
   }
 }
-

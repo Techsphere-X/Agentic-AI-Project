@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { Badge, Button, Card, EmptyState } from '../../components/ui'
+import { ActionMenu, ActionMenuItem, Badge, Button, Card, ConfirmDialog, EmptyState } from '../../components/ui'
+import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { formatRelative } from '../../format'
 import { automationApi } from '../../services/endpoints'
@@ -10,6 +11,7 @@ const PAGE_SIZE = 50
 
 /** Every finished DAG run a "When a DAG run finishes" workflow checked, and how it came out. */
 export default function RunChecks() {
+  const { hasRole } = useAuth()
   const toast = useToast()
   const [params, setParams] = useSearchParams()
   const dagId = params.get('dag_id')
@@ -17,6 +19,10 @@ export default function RunChecks() {
   const [offset, setOffset] = useState(0)
   const [page, setPage] = useState(null)
   const [error, setError] = useState(null)
+  const canDelete = hasRole('ADMIN')
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+  const [selected, setSelected] = useState(() => new Set())
 
   const load = useCallback(async () => {
     setError(null)
@@ -40,6 +46,31 @@ export default function RunChecks() {
     // eslint-disable-next-line react/set-state-in-effect -- fetch on mount/filter change; state is set after await
     load()
   }, [load])
+
+  async function confirmDelete() {
+    setDeleting(true)
+    try {
+      const ids = deleteTarget.ids ?? [deleteTarget.id]
+      await Promise.all(ids.map((id) => automationApi.deleteRunCheck(id)))
+      toast.success(`${ids.length} run check${ids.length === 1 ? '' : 's'} deleted`)
+      setDeleteTarget(null)
+      setSelected(new Set())
+      await load()
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const toggleSelected = (id) => {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   return (
     <div className="page">
@@ -76,6 +107,11 @@ export default function RunChecks() {
               </button>
             </span>
           )}
+          {canDelete && selected.size > 0 && (
+            <Button size="sm" variant="danger" onClick={() => setDeleteTarget({ ids: [...selected], count: selected.size })}>
+              Delete selected ({selected.size})
+            </Button>
+          )}
         </div>
         {error && !page ? (
           <div role="alert">
@@ -97,6 +133,7 @@ export default function RunChecks() {
               <table className="table">
                 <thead>
                   <tr>
+                    {canDelete && <th aria-label="Select" />}
                     <th>Check</th>
                     <th>DAG</th>
                     <th>Run</th>
@@ -104,6 +141,7 @@ export default function RunChecks() {
                     <th>Details</th>
                     <th>Workflow</th>
                     <th>Finished</th>
+                    {canDelete && <th aria-label="Actions" />}
                   </tr>
                 </thead>
                 <tbody>
@@ -111,6 +149,11 @@ export default function RunChecks() {
                     const s = checkStatus(c.status)
                     return (
                       <tr key={c.id}>
+                        {canDelete && (
+                          <td>
+                            <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelected(c.id)} aria-label={`Select ${c.dag_id} run check for deletion`} />
+                          </td>
+                        )}
                         <td>
                           <Badge tone={s.tone}>{s.label}</Badge>
                         </td>
@@ -124,6 +167,33 @@ export default function RunChecks() {
                           <Link to={`/automation/runs/${c.workflow_run_id}`}>{c.workflow_name}</Link>
                         </td>
                         <td className="small">{formatRelative(c.checked_at ?? c.created_at)}</td>
+                        {canDelete && (
+                          <td>
+                            <ActionMenu label={`Actions for ${c.dag_id} run check`}>
+                              {(close) => (
+                                <>
+                                <ActionMenuItem
+                                  onClick={() => {
+                                    close()
+                                    toggleSelected(c.id)
+                                  }}
+                                >
+                                  {selected.has(c.id) ? 'Remove from deletion' : 'Select for deletion'}
+                                </ActionMenuItem>
+                                <ActionMenuItem
+                                  tone="danger"
+                                  onClick={() => {
+                                    close()
+                                    setDeleteTarget(c)
+                                  }}
+                                >
+                                  Delete
+                                </ActionMenuItem>
+                                </>
+                              )}
+                            </ActionMenu>
+                          </td>
+                        )}
                       </tr>
                     )
                   })}
@@ -144,6 +214,14 @@ export default function RunChecks() {
           </>
         )}
       </Card>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Delete run check?"
+        message={deleteTarget?.ids ? `Delete ${deleteTarget.count} selected run checks? This cannot be undone.` : deleteTarget ? `Delete the run check for ${deleteTarget.dag_id}? This cannot be undone.` : ''}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        loading={deleting}
+      />
     </div>
   )
 }

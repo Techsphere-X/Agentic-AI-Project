@@ -92,6 +92,7 @@ export default function AppLayout() {
   const [incidentSummary, setIncidentSummary] = useState(null)
   const [automationSummary, setAutomationSummary] = useState(null)
   const [collapsed, setCollapsed] = useState(readCollapsed)
+  const [lastHealthUpdate, setLastHealthUpdate] = useState(null)
 
   const toggleSidebar = useCallback(() => {
     setCollapsed((c) => {
@@ -126,6 +127,7 @@ export default function AppLayout() {
     if (healthResult.status === 'fulfilled') {
       setHealth(healthResult.value)
       setHealthError(null)
+      setLastHealthUpdate(new Date())
     } else {
       setHealthError(healthResult.reason.message)
     }
@@ -136,8 +138,17 @@ export default function AppLayout() {
   useEffect(() => {
     // eslint-disable-next-line react/set-state-in-effect -- initial fetch; state is set after await
     refreshHealth()
-    const timer = setInterval(refreshHealth, HEALTH_POLL_MS)
-    return () => clearInterval(timer)
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') refreshHealth()
+    }, HEALTH_POLL_MS)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refreshHealth()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
   }, [refreshHealth])
 
   const navClass = ({ isActive }) => `nav-link ${isActive ? 'active' : ''}`
@@ -191,7 +202,14 @@ export default function AppLayout() {
 
       <div className="main">
         <header className="topbar">
-          <HealthIndicator health={health} error={healthError} />
+          <div className="health-summary">
+            <HealthIndicator health={health} error={healthError} />
+            {lastHealthUpdate && (
+              <span className="muted small" aria-live="polite">
+                Updated {lastHealthUpdate.toLocaleTimeString()}
+              </span>
+            )}
+          </div>
           <div className="user-menu">
             <div className="user-meta">
               <span className="user-name">{user.full_name}</span>

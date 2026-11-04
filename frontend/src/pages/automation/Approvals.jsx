@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useOutletContext } from 'react-router'
-import { Badge, Button, Card, EmptyState } from '../../components/ui'
+import { ActionMenu, ActionMenuItem, Badge, Button, Card, ConfirmDialog, EmptyState } from '../../components/ui'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { formatDateTime, formatRelative } from '../../format'
@@ -15,7 +15,7 @@ function timeLeft(expiresAt) {
   return `${Math.round(minutes / 60)} h left`
 }
 
-export function ApprovalCard({ approval, canDecide, onDecided }) {
+export function ApprovalCard({ approval, canDecide, canDelete, selected, onToggle, onDecided, onDelete }) {
   const toast = useToast()
   const [deciding, setDeciding] = useState(null) // 'approve' | 'reject'
   const env = approval.proposed_action?.environment
@@ -55,6 +55,33 @@ export function ApprovalCard({ approval, canDecide, onDecided }) {
           </Button>
         </div>
       )}
+      {canDelete && (
+        <ActionMenu label={`Actions for ${approval.title}`}>
+          {(close) => (
+            <>
+              <ActionMenuItem
+                disabled={approval.status === 'PENDING'}
+                onClick={() => {
+                  close()
+                  onToggle(approval.id)
+                }}
+              >
+                {selected ? 'Remove from deletion' : 'Select for deletion'}
+              </ActionMenuItem>
+              <ActionMenuItem
+                tone="danger"
+                disabled={approval.status === 'PENDING'}
+                onClick={() => {
+                  close()
+                  onDelete(approval)
+                }}
+              >
+                Delete
+              </ActionMenuItem>
+            </>
+          )}
+        </ActionMenu>
+      )}
       {deciding && (
         <DecisionModal
           approval={approval}
@@ -74,6 +101,10 @@ export default function Approvals() {
   const [tab, setTab] = useState('PENDING')
   const [page, setPage] = useState(null)
   const canDecide = hasRole('ADMIN', 'OPERATOR')
+  const canDelete = hasRole('ADMIN')
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+  const [selected, setSelected] = useState(() => new Set())
 
   const load = useCallback(async () => {
     try {
@@ -94,6 +125,35 @@ export default function Approvals() {
     refreshHealth()
   }
 
+  async function onDelete(approval) {
+    setDeleteTarget(approval)
+  }
+
+  const toggleSelected = (id) => {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function confirmDelete() {
+    setDeleting(true)
+    try {
+      const ids = deleteTarget.ids ?? [deleteTarget.id]
+      await Promise.all(ids.map((id) => automationApi.deleteApproval(id)))
+      toast.success(`${ids.length} approval${ids.length === 1 ? '' : 's'} deleted`)
+      setDeleteTarget(null)
+      setSelected(new Set())
+      await onDecided()
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <div className="page">
       <div className="page-header">
@@ -106,6 +166,13 @@ export default function Approvals() {
       </div>
 
       <Card>
+        {canDelete && selected.size > 0 && (
+          <div className="toolbar">
+            <Button size="sm" variant="danger" onClick={() => setDeleteTarget({ ids: [...selected], count: selected.size })}>
+              Delete selected ({selected.size})
+            </Button>
+          </div>
+        )}
         <div className="tabs" role="tablist">
           {[
             ['PENDING', 'Waiting for you'],
@@ -136,7 +203,16 @@ export default function Approvals() {
         ) : tab === 'PENDING' ? (
           <div className="approval-list">
             {page.items.map((a) => (
-              <ApprovalCard key={a.id} approval={a} canDecide={canDecide} onDecided={onDecided} />
+              <ApprovalCard
+                key={a.id}
+                approval={a}
+                canDecide={canDecide}
+                canDelete={canDelete}
+                selected={selected.has(a.id)}
+                onToggle={toggleSelected}
+                onDecided={onDecided}
+                onDelete={onDelete}
+              />
             ))}
           </div>
         ) : (
@@ -144,15 +220,18 @@ export default function Approvals() {
             <table className="table">
               <thead>
                 <tr>
+                  {canDelete && <th aria-label="Select" />}
                   <th>Decision</th>
                   <th>Action</th>
                   <th>By</th>
                   <th>When</th>
+                  {canDelete && <th aria-label="Actions" />}
                 </tr>
               </thead>
               <tbody>
                 {page.items.map((a) => (
                   <tr key={a.id}>
+                    {canDelete && <td><input type="checkbox" checked={selected.has(a.id)} onChange={() => toggleSelected(a.id)} aria-label={`Select ${a.title} for deletion`} /></td>}
                     <td>
                       <ApprovalStatusBadge status={a.status} />
                     </td>
@@ -165,6 +244,33 @@ export default function Approvals() {
                     </td>
                     <td className="small">{a.decided_by_name ?? (a.status === 'EXPIRED' ? 'Timed out' : '—')}</td>
                     <td className="small">{formatDateTime(a.decided_at)}</td>
+                    {canDelete && (
+                      <td>
+                        <ActionMenu label={`Actions for ${a.title}`}>
+                          {(close) => (
+                            <>
+                            <ActionMenuItem
+                              onClick={() => {
+                                close()
+                                toggleSelected(a.id)
+                              }}
+                            >
+                              {selected.has(a.id) ? 'Remove from deletion' : 'Select for deletion'}
+                            </ActionMenuItem>
+                            <ActionMenuItem
+                              tone="danger"
+                              onClick={() => {
+                                close()
+                                onDelete(a)
+                              }}
+                            >
+                              Delete
+                            </ActionMenuItem>
+                            </>
+                          )}
+                        </ActionMenu>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -172,6 +278,14 @@ export default function Approvals() {
           </div>
         )}
       </Card>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Delete approval?"
+        message={deleteTarget?.ids ? `Delete ${deleteTarget.count} selected approvals? This cannot be undone.` : deleteTarget ? `Delete "${deleteTarget.title}"? This cannot be undone.` : ''}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        loading={deleting}
+      />
     </div>
   )
 }

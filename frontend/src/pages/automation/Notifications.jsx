@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useOutletContext } from 'react-router'
-import { Button, Card, EmptyState } from '../../components/ui'
+import { ActionMenu, ActionMenuItem, Button, Card, ConfirmDialog, EmptyState } from '../../components/ui'
+import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { formatRelative } from '../../format'
 import { automationApi } from '../../services/endpoints'
@@ -9,12 +10,17 @@ import { LevelBadge } from './automationUi'
 const PAGE_SIZE = 50
 
 export default function Notifications() {
+  const { hasRole } = useAuth()
   const { refreshHealth } = useOutletContext()
   const toast = useToast()
   const [unreadOnly, setUnreadOnly] = useState(false)
   const [offset, setOffset] = useState(0)
   const [page, setPage] = useState(null)
   const [marking, setMarking] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+  const [selected, setSelected] = useState(() => new Set())
+  const canDelete = hasRole('ADMIN')
 
   const load = useCallback(async () => {
     try {
@@ -38,6 +44,35 @@ export default function Notifications() {
       toast.error(err.message)
     } finally {
       setMarking(false)
+    }
+  }
+
+  async function deleteNotification(notification) {
+    setDeleteTarget(notification)
+  }
+
+  const toggleSelected = (id) => {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function confirmDelete() {
+    setDeleting(true)
+    try {
+      const ids = deleteTarget.ids ?? [deleteTarget.id]
+      await Promise.all(ids.map((id) => automationApi.deleteNotification(id)))
+      toast.success(`${ids.length} notification${ids.length === 1 ? '' : 's'} deleted`)
+      setDeleteTarget(null)
+      setSelected(new Set())
+      await Promise.all([load(), refreshHealth()])
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -67,6 +102,11 @@ export default function Notifications() {
             />
             Unread only
           </label>
+          {canDelete && selected.size > 0 && (
+            <Button size="sm" variant="danger" onClick={() => setDeleteTarget({ ids: [...selected], count: selected.size })}>
+              Delete selected ({selected.size})
+            </Button>
+          )}
         </div>
         {!page ? (
           <p className="muted">Loading…</p>
@@ -77,10 +117,47 @@ export default function Notifications() {
             <ul className="notification-list">
               {page.items.map((n) => (
                 <li key={n.id} className={n.read_at ? 'notification-read' : 'notification-unread'}>
-                  <div className="cell-title">
+                  <div className="cell-title notification-row-header">
+                    {canDelete && (
+                      <input
+                        type="checkbox"
+                        checked={selected.has(n.id)}
+                        disabled={!n.read_at}
+                        onChange={() => toggleSelected(n.id)}
+                        aria-label={`Select ${n.title} for deletion`}
+                        title={!n.read_at ? 'Mark as read before deleting' : undefined}
+                      />
+                    )}
                     <LevelBadge level={n.level} />
                     <strong>{n.title}</strong>
                     <span className="muted small">{formatRelative(n.created_at)}</span>
+                    {canDelete && (
+                      <ActionMenu label={`Actions for ${n.title}`}>
+                        {(close) => (
+                          <>
+                          <ActionMenuItem
+                            disabled={!n.read_at}
+                            onClick={() => {
+                              close()
+                              toggleSelected(n.id)
+                            }}
+                          >
+                            {selected.has(n.id) ? 'Remove from deletion' : 'Select for deletion'}
+                          </ActionMenuItem>
+                          <ActionMenuItem
+                            tone="danger"
+                            disabled={!n.read_at}
+                            onClick={() => {
+                              close()
+                              deleteNotification(n)
+                            }}
+                          >
+                            Delete
+                          </ActionMenuItem>
+                          </>
+                        )}
+                      </ActionMenu>
+                    )}
                   </div>
                   {n.body && <p className="small">{n.body}</p>}
                   <div className="small">
@@ -105,6 +182,14 @@ export default function Notifications() {
           </>
         )}
       </Card>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Delete notification?"
+        message={deleteTarget?.ids ? `Delete ${deleteTarget.count} selected notifications? This cannot be undone.` : deleteTarget ? `Delete "${deleteTarget.title}"? This cannot be undone.` : ''}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        loading={deleting}
+      />
     </div>
   )
 }

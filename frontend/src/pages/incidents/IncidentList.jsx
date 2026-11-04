@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useOutletContext, useSearchParams } from 'react-router'
-import { Button, Card, EmptyState } from '../../components/ui'
+import { ActionMenu, ActionMenuItem, Button, Card, ConfirmDialog, EmptyState } from '../../components/ui'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { formatRelative } from '../../format'
@@ -23,7 +23,7 @@ export default function IncidentList() {
   const toast = useToast()
   const [page, setPage] = useState(null)
   const [connections, setConnections] = useState([])
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [filters, setFilters] = useState(() => ({
     status: 'active',
     severity: '',
@@ -31,8 +31,12 @@ export default function IncidentList() {
     connection_id: '',
     search: searchParams.get('search') ?? '',
   }))
+  const [occurrencesOrder, setOccurrencesOrder] = useState(searchParams.get('order') ?? '')
   const [offset, setOffset] = useState(0)
   const [running, setRunning] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+  const [selected, setSelected] = useState(() => new Set())
 
   const canOperate = hasRole('ADMIN', 'OPERATOR')
   const connectionName = (id) => connections.find((c) => c.id === id)?.name ?? '—'
@@ -53,6 +57,8 @@ export default function IncidentList() {
           type: filters.type,
           connection_id: filters.connection_id,
           search: filters.search.trim(),
+          sort: occurrencesOrder ? 'occurrences' : undefined,
+          order: occurrencesOrder || undefined,
           limit: PAGE_SIZE,
           offset,
         }),
@@ -60,7 +66,7 @@ export default function IncidentList() {
     } catch (err) {
       toast.error(err.message)
     }
-  }, [filters, offset, toast])
+  }, [filters, occurrencesOrder, offset, toast])
 
   useEffect(() => {
     const timer = setTimeout(load, 200) // debounce search typing
@@ -69,8 +75,44 @@ export default function IncidentList() {
 
   const setFilter = (key) => (e) => {
     setOffset(0)
-    setFilters((f) => ({ ...f, [key]: e.target.value }))
+    const value = e.target.value
+    setFilters((f) => {
+      const next = { ...f, [key]: value }
+      const params = new URLSearchParams()
+      Object.entries(next).forEach(([name, item]) => {
+        if (item && !(name === 'status' && item === 'active')) params.set(name, item)
+      })
+      setSearchParams(params, { replace: true })
+      return next
+    })
   }
+
+  const toggleSelected = (id) => {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleOccurrencesSort() {
+    setOffset(0)
+    const next = occurrencesOrder === 'asc' ? 'desc' : 'asc'
+    setOccurrencesOrder(next)
+    const params = new URLSearchParams(searchParams)
+    params.set('sort', 'occurrences')
+    params.set('order', next)
+    setSearchParams(params, { replace: true })
+  }
+
+  const displayedItems = page
+    ? [...page.items].sort((a, b) => {
+        if (!occurrencesOrder) return 0
+        const difference = a.occurrence_count - b.occurrence_count
+        return occurrencesOrder === 'asc' ? difference : -difference
+      })
+    : []
 
   async function onRunDetection() {
     setRunning(true)
@@ -82,6 +124,22 @@ export default function IncidentList() {
       toast.error(err.message)
     } finally {
       setRunning(false)
+    }
+  }
+
+  async function confirmDelete() {
+    setDeleting(true)
+    try {
+      const ids = deleteTarget.ids ?? [deleteTarget.id]
+      await Promise.all(ids.map((id) => incidentsApi.delete(id)))
+      toast.success(`${ids.length} incident${ids.length === 1 ? '' : 's'} deleted`)
+      setSelected(new Set())
+      setDeleteTarget(null)
+      await Promise.all([load(), refreshHealth()])
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -139,6 +197,11 @@ export default function IncidentList() {
             onChange={setFilter('search')}
             aria-label="Search incidents"
           />
+          {hasRole('ADMIN') && selected.size > 0 && (
+            <Button size="sm" variant="danger" onClick={() => setDeleteTarget({ ids: [...selected], count: selected.size })}>
+              Delete selected ({selected.size})
+            </Button>
+          )}
         </div>
 
         {!page ? (
@@ -153,17 +216,33 @@ export default function IncidentList() {
               <table className="table">
                 <thead>
                   <tr>
+                    {hasRole('ADMIN') && <th aria-label="Select" />}
                     <th>Severity</th>
                     <th>Incident</th>
                     <th>Type</th>
                     <th>Status</th>
-                    <th>Occurrences</th>
+                    <th aria-sort={occurrencesOrder ? (occurrencesOrder === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                      <button
+                        type="button"
+                        className="table-sort-button"
+                        onClick={toggleOccurrencesSort}
+                        aria-label={`Sort by occurrences ${occurrencesOrder === 'asc' ? 'descending' : 'ascending'}`}
+                      >
+                        Occurrences {occurrencesOrder === 'asc' ? '↑' : occurrencesOrder === 'desc' ? '↓' : '↕'}
+                      </button>
+                    </th>
                     <th>Last seen</th>
+                    {hasRole('ADMIN') && <th aria-label="Actions" />}
                   </tr>
                 </thead>
                 <tbody>
-                  {page.items.map((i) => (
+                  {displayedItems.map((i) => (
                     <tr key={i.id} className={i.status === 'RESOLVED' ? 'row-muted' : ''}>
+                      {hasRole('ADMIN') && (
+                        <td>
+                          <input type="checkbox" checked={selected.has(i.id)} onChange={() => toggleSelected(i.id)} aria-label={`Select ${i.title} for deletion`} />
+                        </td>
+                      )}
                       <td>
                         <SeverityBadge severity={i.severity} />
                       </td>
@@ -181,6 +260,33 @@ export default function IncidentList() {
                       </td>
                       <td className="small">{i.occurrence_count}×</td>
                       <td className="small">{formatRelative(i.last_seen_at)}</td>
+                      {hasRole('ADMIN') && (
+                        <td>
+                          <ActionMenu label={`Actions for ${i.title}`}>
+                            {(close) => (
+                              <>
+                              <ActionMenuItem
+                                onClick={() => {
+                                  close()
+                                  toggleSelected(i.id)
+                                }}
+                              >
+                                {selected.has(i.id) ? 'Remove from deletion' : 'Select for deletion'}
+                              </ActionMenuItem>
+                              <ActionMenuItem
+                                tone="danger"
+                                onClick={() => {
+                                  close()
+                                  setDeleteTarget(i)
+                                }}
+                              >
+                                Delete
+                              </ActionMenuItem>
+                              </>
+                            )}
+                          </ActionMenu>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -200,6 +306,14 @@ export default function IncidentList() {
           </>
         )}
       </Card>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Delete incident?"
+        message={deleteTarget?.ids ? `Delete ${deleteTarget.count} selected incidents? This cannot be undone.` : deleteTarget ? `Delete "${deleteTarget.title}"? This cannot be undone.` : ''}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        loading={deleting}
+      />
     </div>
   )
 }

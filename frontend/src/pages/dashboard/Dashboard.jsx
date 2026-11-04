@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useOutletContext } from 'react-router'
-import { Badge, Button, Card, StatusPill } from '../../components/ui'
+import { Badge, Button, Card, ErrorState, Skeleton, StatusPill } from '../../components/ui'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { formatRelative } from '../../format'
@@ -62,86 +62,140 @@ export default function Dashboard() {
   const [connectorMetrics, setConnectorMetrics] = useState(null)
   const [runningDetection, setRunningDetection] = useState(false)
   const [error, setError] = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState(null)
+  const mountedRef = useRef(false)
+  const refreshInFlightRef = useRef(false)
 
   const loadDashboardData = useCallback(async () => {
+    if (!mountedRef.current || refreshInFlightRef.current) return
+    refreshInFlightRef.current = true
+    setRefreshing(true)
     try {
-      detectionApi
-        .status()
-        .then((d) => setDetection(d))
-        .catch(() => {})
+      const failures = []
+      const read = async (promise, onSuccess, label) => {
+        try {
+          const value = await promise
+          if (!mountedRef.current) return value
+          const processed = await onSuccess(value)
+          return processed ?? value
+        } catch (err) {
+          failures.push(`${label}: ${err.message}`)
+          return null
+        }
+      }
 
-      healthApi
-        .connectorMetrics()
-        .then((m) => setConnectorMetrics(m))
-        .catch(() => {})
+      const airflowPromise = read(
+        airflowApi.listConnections(),
+        async ({ items }) => {
+          const stale = items.filter(
+            (connection) =>
+              connection.last_health_status === 'UNKNOWN' || connection.status_stale,
+          )
+          if (stale.length === 0) {
+            setConnections(items)
+            return
+          }
 
-      databaseApi
-        .listConnections()
-        .then(({ items }) => setDatabases(items))
-        .catch(() => setDatabases([]))
+          const refreshed = await Promise.all(
+            stale.map(async (connection) => {
+              try {
+                return await airflowApi.refreshConnection(connection.id)
+              } catch (err) {
+                failures.push(`${connection.name}: ${err.message}`)
+                return connection
+              }
+            }),
+          )
+          const refreshedById = new Map(refreshed.map((connection) => [connection.id, connection]))
+          const refreshedItems = items.map(
+            (connection) => refreshedById.get(connection.id) ?? connection,
+          )
+          setConnections(refreshedItems)
+          return { items: refreshedItems }
+        },
+        'Connections',
+      )
+      const databasePromise = read(
+        databaseApi.listConnections(),
+        ({ items }) => setDatabases(items),
+        'Databases',
+      )
+      const channelsPromise = read(
+        channelsApi.listConnections(),
+        ({ items }) => setChannels(items),
+        'Notification channels',
+      )
+      const metricsPromise = read(
+        healthApi.connectorMetrics(),
+        (metrics) => setConnectorMetrics(metrics),
+        'Workflow statistics',
+      )
+      read(detectionApi.status(), setDetection, 'Detection status')
+      read(
+        incidentsApi.list({ limit: 5 }),
+        (result) => setRecentIncidents(result.items ?? []),
+        'Incidents',
+      )
+      read(
+        automationApi.listRuns({ limit: 5 }),
+        (result) => setRecentRuns(result.items ?? []),
+        'Workflow runs',
+      )
 
-      channelsApi
-        .listConnections()
-        .then(({ items }) => setChannels(items))
-        .catch(() => setChannels([]))
+      const airflowResult = await airflowPromise
+      if (airflowResult) {
+        const liveConns = airflowResult.items.filter((c) => c.is_live)
+        if (liveConns.length > 0) {
+          const stats = await Promise.all(
+            liveConns.map(async (c) => {
+              const [all, monitored] = await Promise.all([
+                airflowApi.listDags(c.id, { limit: 1 }),
+                airflowApi.listDags(c.id, { limit: 1, monitored: true }),
+              ])
+              return { synced: all.total, monitored: monitored.total }
+            }),
+          )
+          if (mountedRef.current) {
+            setDagStats(
+              stats.reduce(
+                (acc, s) => ({ synced: acc.synced + s.synced, monitored: acc.monitored + s.monitored }),
+                { synced: 0, monitored: 0, live: stats.length },
+              ),
+            )
+          }
+        } else if (mountedRef.current) {
+          setDagStats({ synced: 0, monitored: 0, live: 0 })
+        }
+      }
 
-      incidentsApi
-        .list({ limit: 5 })
-        .then((res) => setRecentIncidents(res.items ?? []))
-        .catch(() => setRecentIncidents([]))
-
-      automationApi
-        .listRuns({ limit: 5 })
-        .then((res) => setRecentRuns(res.items ?? []))
-        .catch(() => setRecentRuns([]))
-
-      const { items } = await airflowApi.listConnections()
-      setConnections(items)
-
-      const liveConns = items.filter((c) => c.is_live)
-      if (liveConns.length > 0) {
-        const stats = await Promise.all(
-          liveConns.map(async (c) => {
-            const [all, monitored] = await Promise.all([
-              airflowApi.listDags(c.id, { limit: 1 }),
-              airflowApi.listDags(c.id, { limit: 1, monitored: true }),
-            ])
-            return { synced: all.total, monitored: monitored.total }
-          }),
-        )
-        setDagStats(
-          stats.reduce(
-            (acc, s) => ({ synced: acc.synced + s.synced, monitored: acc.monitored + s.monitored }),
-            { synced: 0, monitored: 0, live: stats.length },
-          ),
-        )
-      } else {
-        setDagStats({ synced: 0, monitored: 0, live: 0 })
+      await Promise.allSettled([databasePromise, channelsPromise, metricsPromise])
+      if (mountedRef.current) {
+        setError(failures.length ? failures.join('; ') : null)
+        setLastUpdated(new Date())
       }
     } catch (err) {
-      setError(err.message)
+      if (mountedRef.current) setError(err.message)
+    } finally {
+      refreshInFlightRef.current = false
+      if (mountedRef.current) setRefreshing(false)
     }
   }, [])
 
   useEffect(() => {
-    let cancelled = false
-    async function load() {
-      if (!cancelled) {
-        await loadDashboardData()
-      }
-    }
-    load()
-    const metricsTimer = setInterval(async () => {
-      try {
-        const metrics = await healthApi.connectorMetrics()
-        if (!cancelled) setConnectorMetrics(metrics)
-      } catch (err) {
-        if (!cancelled) setError(err.message)
-      }
+    mountedRef.current = true
+    loadDashboardData()
+    const dashboardTimer = setInterval(() => {
+      if (document.visibilityState === 'visible') loadDashboardData()
     }, 15000)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') loadDashboardData()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
     return () => {
-      cancelled = true
-      clearInterval(metricsTimer)
+      mountedRef.current = false
+      clearInterval(dashboardTimer)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   }, [loadDashboardData])
 
@@ -206,10 +260,18 @@ export default function Dashboard() {
           >
             ▶ Run Detection Now
           </Button>
+          <Button size="sm" onClick={loadDashboardData} loading={refreshing} title="Refresh dashboard data">
+            Refresh
+          </Button>
         </div>
       </div>
 
-      {error && <p className="field-error">{error}</p>}
+      {lastUpdated && (
+        <p className="muted small dashboard-updated" aria-live="polite">
+          Last updated {lastUpdated.toLocaleTimeString()}
+        </p>
+      )}
+      {error && <ErrorState message={error} onRetry={loadDashboardData} />}
 
       {/* ----------------- Pending Approvals Alert ----------------- */}
       {automationSummary?.pending_approvals > 0 && (
@@ -229,16 +291,18 @@ export default function Dashboard() {
       {/* ----------------- KPI Cards Grid ----------------- */}
       <div className="stat-grid">
         {/* Card 1: Platform Database */}
-        <div className="kpi-card">
+        <div className="kpi-card kpi-health">
           <div className="kpi-header">
             <span className="kpi-title">Platform Database</span>
-            <StatusPill
-              status={health ? health.database.status : 'UNKNOWN'}
-              label={health?.database.status === 'ok' ? 'Online' : 'Checking…'}
-            />
+            {health ? (
+              <StatusPill
+                status={health.database.status}
+                label={health.database.status === 'ok' ? 'Online' : 'Checking…'}
+              />
+            ) : <Skeleton width="5rem" height="1.5rem" />}
           </div>
           <div className="stat-value">
-            {health?.database.status === 'ok' ? 'Healthy' : 'Degraded'}
+            {health ? (health.database.status === 'ok' ? 'Healthy' : 'Degraded') : <Skeleton width="7rem" height="2.2rem" />}
           </div>
           <p className="muted small" style={{ margin: 0 }}>
             {health?.database.latency_ms != null
@@ -248,7 +312,7 @@ export default function Dashboard() {
         </div>
 
         {/* Card 2: Pipelines & Connections */}
-        <div className="kpi-card">
+        <div className="kpi-card kpi-ecosystem">
           <div className="kpi-header">
             <span className="kpi-title">Pipeline Ecosystem</span>
             <Link to="/connections/airflow" className="small">
@@ -256,7 +320,7 @@ export default function Dashboard() {
             </Link>
           </div>
           <div className="stat-value">
-            {connections && databases ? connections.length + databases.length : '—'}
+            {connections && databases ? connections.length + databases.length : <Skeleton width="4rem" height="2.2rem" />}
           </div>
           <p className="muted small" style={{ margin: 0 }}>
             {connections?.length ?? 0} Airflow · {databases?.length ?? 0} DB
@@ -269,14 +333,14 @@ export default function Dashboard() {
         </div>
 
         {/* Card 3: Open Incidents */}
-        <div className="kpi-card">
+        <div className={`kpi-card kpi-incidents ${crit > 0 ? 'kpi-critical' : ''}`}>
           <div className="kpi-header">
             <span className="kpi-title">Open Incidents</span>
             <Link to="/incidents" className="small">
               View all
             </Link>
           </div>
-          <div className="stat-value">{totalOpenIncidents}</div>
+          <div className="stat-value">{incidentSummary ? totalOpenIncidents : <Skeleton width="4rem" height="2.2rem" />}</div>
           {totalOpenIncidents > 0 ? (
             <>
               <div className="severity-meter">
@@ -327,14 +391,14 @@ export default function Dashboard() {
         </div>
 
         {/* Card 4: Autonomous Automation */}
-        <div className="kpi-card">
+        <div className="kpi-card kpi-automation">
           <div className="kpi-header">
             <span className="kpi-title">Automation Engine</span>
             <Link to="/automation/workflows" className="small">
               Workflows
             </Link>
           </div>
-          <div className="stat-value">{automationSummary?.active_runs ?? 0}</div>
+          <div className="stat-value">{automationSummary ? automationSummary.active_runs : <Skeleton width="4rem" height="2.2rem" />}</div>
           <p className="muted small" style={{ margin: 0 }}>
             Active execution(s) right now
           </p>
@@ -346,7 +410,7 @@ export default function Dashboard() {
         </div>
 
         {/* Card 5: Detection Engine */}
-        <div className="kpi-card">
+        <div className="kpi-card kpi-detection">
           <div className="kpi-header">
             <span className="kpi-title">Failure Detection</span>
             <Link to="/incidents" className="small">
@@ -354,11 +418,13 @@ export default function Dashboard() {
             </Link>
           </div>
           <div style={{ marginTop: '0.2rem', marginBottom: '0.4rem' }}>
-            <StatusPill
-              status={detection?.enabled ? (detection.last_error ? 'degraded' : 'ok') : 'UNKNOWN'}
-              label={detection?.enabled ? `Scanning (${Math.round(detection.interval_seconds / 60)}m)` : 'Disabled'}
-              title={detection?.last_error ?? ''}
-            />
+            {detection ? (
+              <StatusPill
+                status={detection.enabled ? (detection.last_error ? 'degraded' : 'ok') : 'UNKNOWN'}
+                label={detection.enabled ? `Scanning (${Math.round(detection.interval_seconds / 60)}m)` : 'Disabled'}
+                title={detection.last_error ?? ''}
+              />
+            ) : <Skeleton width="7rem" height="1.5rem" />}
           </div>
           <p className="muted small" style={{ margin: 0 }}>
             {detection?.last_cycle

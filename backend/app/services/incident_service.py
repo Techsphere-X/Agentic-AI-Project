@@ -79,6 +79,8 @@ def list_incidents(
     search: str | None,
     limit: int,
     offset: int,
+    sort_occurrences: str | None = None,
+    sort_order: str = "desc",
 ) -> tuple[list[Incident], int]:
     query = select(Incident)
     if statuses:
@@ -97,8 +99,17 @@ def list_incidents(
             or_(func.lower(Incident.title).like(pattern), func.lower(Incident.dag_id).like(pattern))
         )
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    if sort_occurrences == "occurrences":
+        occurrence_order = (
+            Incident.occurrence_count.asc()
+            if sort_order == "asc"
+            else Incident.occurrence_count.desc()
+        )
+        order_by = [occurrence_order, Incident.id]
+    else:
+        order_by = [Incident.last_seen_at.desc(), Incident.id]
     items = db.scalars(
-        query.order_by(Incident.last_seen_at.desc(), Incident.id).limit(limit).offset(offset)
+        query.order_by(*order_by).limit(limit).offset(offset)
     ).all()
     return list(items), total
 

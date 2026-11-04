@@ -1,10 +1,11 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
-import { Link, useOutletContext, useParams } from 'react-router'
-import { Alert, Badge, Button, Card, EmptyState } from '../../components/ui'
+import { Link, useNavigate, useOutletContext, useParams } from 'react-router'
+import { ActionMenu, ActionMenuItem, Alert, Badge, Button, Card, ConfirmDialog, EmptyState } from '../../components/ui'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { formatDateTime, formatRelative } from '../../format'
 import { automationApi } from '../../services/endpoints'
+import { BAD_PORTS } from '../../components/flow/graph'
 import { ApprovalCard } from './Approvals'
 import { NODE_LABELS, describeConfig, duration, nodeIcon, triggerText } from './automationText'
 import { ApprovalStatusBadge, RunStatusBadge } from './automationUi'
@@ -13,7 +14,6 @@ import { ApprovalStatusBadge, RunStatusBadge } from './automationUi'
 const RunCanvas = lazy(() => import('./RunCanvas'))
 
 const STEP_TONES = { COMPLETED: 'success', WAITING: 'warning', FAILED: 'danger', RUNNING: 'info', SKIPPED: 'neutral' }
-const BAD_PORTS = new Set(['failed', 'rejected', 'false'])
 
 function StepItem({ step, node }) {
   const [open, setOpen] = useState(false)
@@ -51,7 +51,11 @@ export default function RunDetail() {
   const [run, setRun] = useState(null)
   const [error, setError] = useState(null)
   const [cancelling, setCancelling] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const navigate = useNavigate()
   const canOperate = hasRole('ADMIN', 'OPERATOR')
+  const canDelete = hasRole('ADMIN')
 
   const load = useCallback(async () => {
     try {
@@ -77,6 +81,19 @@ export default function RunDetail() {
       toast.error(err.message)
     } finally {
       setCancelling(false)
+    }
+  }
+
+  async function remove() {
+    setDeleting(true)
+    try {
+      await automationApi.deleteRun(id)
+      toast.success('Run deleted')
+      setConfirmingDelete(false)
+      navigate('/automation/runs')
+    } catch (err) {
+      toast.error(err.message)
+      setDeleting(false)
     }
   }
 
@@ -115,9 +132,33 @@ export default function RunDetail() {
             Cancel run
           </Button>
         )}
+        {canDelete && !active && (
+          <ActionMenu label={`Actions for ${run.workflow_name}`}>
+            {(close) => (
+              <ActionMenuItem
+                tone="danger"
+                disabled={deleting}
+                onClick={() => {
+                  close()
+                  setConfirmingDelete(true)
+                }}
+              >
+                Delete run
+              </ActionMenuItem>
+            )}
+          </ActionMenu>
+        )}
       </div>
 
       {run.error && <Alert tone="danger">{run.error}</Alert>}
+      <ConfirmDialog
+        open={confirmingDelete}
+        title="Delete run?"
+        message={`Delete this run of "${run.workflow_name}"? Its steps and approvals are deleted too. This cannot be undone.`}
+        onCancel={() => setConfirmingDelete(false)}
+        onConfirm={remove}
+        loading={deleting}
+      />
       {pending.map((a) => (
         <ApprovalCard
           key={a.id}
