@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useOutletContext } from 'react-router'
-import { Button, Card, EmptyState } from '../../components/ui'
+import { Button, Card, EmptyState, LoadError } from '../../components/ui'
 import { useToast } from '../../context/ToastContext'
 import { formatRelative } from '../../format'
 import { automationApi } from '../../services/endpoints'
@@ -16,10 +16,14 @@ export default function Notifications() {
   const [page, setPage] = useState(null)
   const [marking, setMarking] = useState(false)
 
+  const [loadError, setLoadError] = useState(null)
+
   const load = useCallback(async () => {
+    setLoadError(null)
     try {
       setPage(await automationApi.listNotifications({ unread_only: unreadOnly || undefined, limit: PAGE_SIZE, offset }))
     } catch (err) {
+      setLoadError(err.message)
       toast.error(err.message)
     }
   }, [unreadOnly, offset, toast])
@@ -67,7 +71,9 @@ export default function Notifications() {
             Unread only
           </label>
         </div>
-        {!page ? (
+        {loadError && !page ? (
+          <LoadError message={loadError} onRetry={load} />
+        ) : !page ? (
           <p className="muted">Loading…</p>
         ) : page.total === 0 ? (
           <EmptyState title="No notifications" />

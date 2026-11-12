@@ -118,6 +118,7 @@ export default function RunDetail() {
       <div className="page">
         <Link to="/automation/runs">← Automation runs</Link>
         <Alert tone="danger">{error}</Alert>
+        <Button size="sm" onClick={() => { setError(null); load() }}>Retry</Button>
       </div>
     )
   }

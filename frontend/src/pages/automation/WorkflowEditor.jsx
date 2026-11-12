@@ -1045,6 +1045,7 @@ function Editor() {
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(null)
   const [error, setError] = useState(null)
+  const [reloadKey, setReloadKey] = useState(0)
   const [showDetails, setShowDetails] = useState(false)
   // Block whose settings popover is open: set by clicking a block, not by adding or dragging one.
   const [popover, setPopover] = useState(null)
@@ -1119,7 +1120,7 @@ function Editor() {
     return () => {
       cancelled = true
     }
-  }, [id, isNew, fromId, setNodes, setEdges, fitView])
+  }, [id, isNew, fromId, setNodes, setEdges, fitView, reloadKey])
 
   useEffect(() => {
     if (!canEdit) return undefined
@@ -1492,6 +1493,7 @@ function Editor() {
       <div className="page">
         <Link to="/automation/workflows">← Workflows</Link>
         <Alert tone="danger">{error}</Alert>
+        <Button size="sm" onClick={() => { setError(null); setReloadKey((k) => k + 1) }}>Retry</Button>
       </div>
     )
   }

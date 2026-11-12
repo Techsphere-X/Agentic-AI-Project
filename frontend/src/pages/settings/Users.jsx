@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Alert, Badge, Button, Card, Field, Modal } from '../../components/ui'
+import { Alert, Badge, Button, Card, Field, LoadError, Modal } from '../../components/ui'
 import { formatRelative } from '../../format'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
@@ -78,10 +78,14 @@ export default function Users() {
   const [users, setUsers] = useState(null)
   const [creating, setCreating] = useState(false)
 
+  const [loadError, setLoadError] = useState(null)
+
   const load = useCallback(async () => {
+    setLoadError(null)
     try {
       setUsers((await usersApi.list({ limit: 200 })).items)
     } catch (err) {
+      setLoadError(err.message)
       toast.error(err.message)
     }
   }, [toast])
@@ -114,7 +118,9 @@ export default function Users() {
       </div>
 
       <Card>
-        {!users ? (
+        {loadError && !users ? (
+          <LoadError message={loadError} onRetry={load} />
+        ) : !users ? (
           <p className="muted">Loading…</p>
         ) : (
           <div className="table-wrap">

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { Badge, Button, Card, EmptyState, Toggle } from '../../components/ui'
+import { Badge, Button, Card, EmptyState, LoadError, Toggle } from '../../components/ui'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { formatRelative } from '../../format'
@@ -190,10 +190,14 @@ export default function Workflows() {
   const canEdit = hasRole('ADMIN')
   const canRun = hasRole('ADMIN', 'OPERATOR')
 
+  const [loadError, setLoadError] = useState(null)
+
   const load = useCallback(async () => {
+    setLoadError(null)
     try {
       setWorkflows(await automationApi.listWorkflows())
     } catch (err) {
+      setLoadError(err.message)
       toast.error(err.message)
     }
   }, [toast])
@@ -260,7 +264,9 @@ export default function Workflows() {
           </div>
         )}
       </div>
-      {!workflows ? (
+      {loadError && !workflows ? (
+        <LoadError message={loadError} onRetry={load} />
+      ) : !workflows ? (
         <p className="muted">Loading…</p>
       ) : workflows.length === 0 ? (
         <EmptyState title="No workflows" />

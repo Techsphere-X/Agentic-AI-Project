@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useOutletContext } from 'react-router'
-import { Badge, Button, Card, EmptyState } from '../../components/ui'
+import { Badge, Button, Card, EmptyState, LoadError } from '../../components/ui'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { formatDateTime, formatRelative } from '../../format'
@@ -75,11 +75,15 @@ export default function Approvals() {
   const [page, setPage] = useState(null)
   const canDecide = hasRole('ADMIN', 'OPERATOR')
 
+  const [loadError, setLoadError] = useState(null)
+
   const load = useCallback(async () => {
+    setLoadError(null)
     try {
       const status = tab === 'PENDING' ? ['PENDING'] : ['APPROVED', 'REJECTED', 'EXPIRED']
       setPage(await automationApi.listApprovals({ status, limit: 100 }))
     } catch (err) {
+      setLoadError(err.message)
       toast.error(err.message)
     }
   }, [tab, toast])
@@ -124,7 +128,9 @@ export default function Approvals() {
           ))}
         </div>
 
-        {!page ? (
+        {loadError && !page ? (
+          <LoadError message={loadError} onRetry={load} />
+        ) : !page ? (
           <p className="muted">Loading…</p>
         ) : page.total === 0 ? (
           <EmptyState title={tab === 'PENDING' ? 'Nothing waiting for approval' : 'No decisions yet'} />

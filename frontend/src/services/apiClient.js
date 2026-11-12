@@ -6,6 +6,8 @@
  */
 
 const API_BASE = '/api/v1'
+const REQUEST_TIMEOUT_MS = 30000
+const CONNECTION_FAILED = "Connection failed – can't reach the server"
 
 let accessToken = null
 let refreshPromise = null
@@ -41,7 +43,15 @@ async function parseBody(res) {
 
 function toApiError(res, body) {
   const err = body?.error
-  if (!err) return new ApiError(res.status, `http_${res.status}`, res.statusText || 'Request failed')
+  if (!err) {
+    // Gateways answer 502/503/504 when the backend is down; the Vite dev proxy answers an
+    // empty-body 500. Anything else (e.g. a plain-text 500 crash) is a real server error.
+    const gateway = [502, 503, 504].includes(res.status)
+    const emptyProxy500 = res.status === 500 && (body === null || body === undefined)
+    if (gateway || emptyProxy500) return new ApiError(res.status, 'network_error', CONNECTION_FAILED)
+    if (res.status >= 500) return new ApiError(res.status, `http_${res.status}`, `Server error (HTTP ${res.status})${res.statusText ? `: ${res.statusText}` : ''}`)
+    return new ApiError(res.status, `http_${res.status}`, res.statusText || 'Request failed')
+  }
   let message = err.message
   const first = err.details?.errors?.[0]
   if (err.code === 'validation_error' && first) {
@@ -81,12 +91,27 @@ export async function request(path, { method = 'GET', body, query, retry = true 
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`
 
-  const res = await fetch(url, {
-    method,
-    headers,
-    credentials: 'same-origin',
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
+  // Only reads time out: aborting a mutation could leave it half-done on the server.
+  const controller = new AbortController()
+  const timer = method === 'GET' ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS) : null
+  let res
+  try {
+    res = await fetch(url, {
+      method,
+      headers,
+      credentials: 'same-origin',
+      signal: controller.signal,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+  } catch (err) {
+    // Network down / backend off: fetch rejects with a raw TypeError; timeouts are AbortError.
+    if (err?.name === 'AbortError') {
+      throw new ApiError(0, 'timeout', 'Request timed out – the server is taking too long')
+    }
+    throw new ApiError(0, 'network_error', CONNECTION_FAILED)
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 
   if (res.status === 401 && retry && !path.startsWith('/auth/')) {
     try {

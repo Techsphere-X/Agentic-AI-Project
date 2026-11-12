@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useOutletContext, useSearchParams } from 'react-router'
-import { Button, Card, EmptyState } from '../../components/ui'
+import { Button, Card, EmptyState, LoadError } from '../../components/ui'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { formatRelative } from '../../format'
@@ -44,7 +44,10 @@ export default function IncidentList() {
       .catch(() => {})
   }, [])
 
+  const [loadError, setLoadError] = useState(null)
+
   const load = useCallback(async () => {
+    setLoadError(null)
     try {
       setPage(
         await incidentsApi.list({
@@ -58,6 +61,7 @@ export default function IncidentList() {
         }),
       )
     } catch (err) {
+      setLoadError(err.message)
       toast.error(err.message)
     }
   }, [filters, offset, toast])
@@ -140,7 +144,9 @@ export default function IncidentList() {
           />
         </div>
 
-        {!page ? (
+        {loadError && !page ? (
+          <LoadError message={loadError} onRetry={load} />
+        ) : !page ? (
           <p className="muted">Loading…</p>
         ) : page.total === 0 ? (
           <EmptyState title={filters.status === 'active' ? 'No open incidents' : 'No incidents match the filters'}>

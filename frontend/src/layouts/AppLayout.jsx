@@ -12,6 +12,29 @@ const COLLAPSED_KEY = 'sidebar-collapsed'
 // from non-admins.
 const NAV = [
   {
+    title: 'Pipelines',
+    items: [
+      { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
+      {
+        to: '/incidents',
+        label: 'Incidents',
+        icon: 'incidents',
+        badge: ({ incidents }) => incidents?.open_total,
+        badgeTitle: 'Open incidents',
+      },
+      { to: '/automation/run-checks', label: 'Run checks', icon: 'checks' },
+      { to: '/diagnosis/analyzer', label: 'Log analyzer', icon: 'analyzer' },
+    ],
+  },
+  {
+    title: 'Connections',
+    items: [
+      { to: '/connections/airflow', label: 'Airflow', icon: 'airflow' },
+      { to: '/connections/databases', label: 'Databases', icon: 'database' },
+      { to: '/connections/channels', label: 'Channels', icon: 'channel' },
+    ],
+  },
+  {
     title: 'Build',
     items: [{ to: '/automation/workflows', label: 'Workflows', icon: 'workflows' }],
   },
@@ -35,29 +58,6 @@ const NAV = [
         tone: 'neutral',
         badgeTitle: 'Unread',
       },
-    ],
-  },
-  {
-    title: 'Pipelines',
-    items: [
-      { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
-      {
-        to: '/incidents',
-        label: 'Incidents',
-        icon: 'incidents',
-        badge: ({ incidents }) => incidents?.open_total,
-        badgeTitle: 'Open incidents',
-      },
-      { to: '/automation/run-checks', label: 'Run checks', icon: 'checks' },
-      { to: '/diagnosis/analyzer', label: 'Log analyzer', icon: 'analyzer' },
-    ],
-  },
-  {
-    title: 'Connections',
-    items: [
-      { to: '/connections/airflow', label: 'Airflow', icon: 'airflow' },
-      { to: '/connections/databases', label: 'Databases', icon: 'database' },
-      { to: '/connections/channels', label: 'Channels', icon: 'channel' },
     ],
   },
   { title: 'Settings', admin: true, items: [{ to: '/settings/users', label: 'Users', icon: 'users' }] },
