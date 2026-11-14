@@ -239,6 +239,7 @@ def update_workflow(
                 _save_version(db, workflow, actor)
             workflow.graph = graph
     if workflow.enabled:
+        _monitor_watched_dags(db, workflow.graph, actor=actor, ip_address=ip_address)
         _monitor_trigger_dag(db, workflow.graph, actor=actor, ip_address=ip_address)
     if changed:
         audit_service.record(
@@ -252,6 +253,54 @@ def update_workflow(
         )
     db.commit()
     return workflow
+
+
+def _watched_dags(graph: dict[str, Any]) -> list[dict[str, Any]]:
+    trigger = next(
+        (n for n in graph.get("nodes", []) if n.get("type") == "trigger.dag_watch"), None
+    )
+    return list((trigger or {}).get("config", {}).get("dags") or [])
+
+
+def _monitor_watched_dags(
+    db: Session, graph: dict[str, Any], *, actor: User, ip_address: str | None
+) -> None:
+    """'Watch selected DAGs': incidents only open for monitored DAGs, so switch them on."""
+    for watched in _watched_dags(graph):
+        try:
+            connection_id = uuid.UUID(watched["connection_id"])
+        except ValueError:
+            connection_id = None
+        dag = connection_id and db.scalar(
+            select(MonitoredDag).where(
+                MonitoredDag.connection_id == connection_id,
+                MonitoredDag.dag_id == watched["dag_id"],
+            )
+        )
+        if not dag:
+            raise BadRequestError(
+                f"DAG '{watched['dag_id']}' is not in the synced DAG list of its Airflow "
+                "connection; sync the connection or remove the DAG from the trigger"
+            )
+        if dag.is_monitored and dag.detect_failures:
+            continue
+        dag.is_monitored = True
+        dag.detect_failures = True
+        audit_service.record(
+            db,
+            action="monitored_dag.toggle",
+            entity_type="monitored_dag",
+            entity_id=dag.id,
+            actor=actor,
+            details={
+                "connection_id": str(dag.connection_id),
+                "dag_id": dag.dag_id,
+                "is_monitored": True,
+                "detect_failures": True,
+                "reason": "watched by an enabled workflow",
+            },
+            ip_address=ip_address,
+        )
 
 
 def _trigger_dag(graph: dict[str, Any]) -> dict[str, Any] | None:
@@ -299,8 +348,6 @@ def _monitor_trigger_dag(
         },
         ip_address=ip_address,
     )
-
-
 def dag_trigger_states(db: Session) -> dict[tuple[uuid.UUID, str], set[str]]:
     """(connection id, DAG id) -> the events enabled 'When this DAG runs' workflows start on.
 
@@ -497,10 +544,16 @@ def delete_workflow(
 
 def _incident_matches(trigger: Any, incident: Incident) -> bool:
     """Whether an incident (whatever the event) is one this incident trigger reacts to."""
-    if trigger.type == "trigger.incident":
+    if trigger.type in ("trigger.incident", "trigger.dag_watch"):
         types = trigger.config["incident_types"]
         if types and incident.type not in types:
             return False
+    if trigger.type == "trigger.dag_watch":
+        return any(
+            dag.get("dag_id") == incident.dag_id
+            and str(dag.get("connection_id")) == str(incident.connection_id)
+            for dag in (trigger.config.get("dags") or [])
+        )
     return True
 
 
@@ -512,7 +565,7 @@ def _trigger_matches(
     except GraphError:
         logger.warning("Workflow %s has an invalid graph; skipped", workflow.id)
         return False
-    if trigger.type == "trigger.incident":
+    if trigger.type in ("trigger.incident", "trigger.dag_watch"):
         return event.value in trigger.config["events"] and _incident_matches(trigger, incident)
     if trigger.type == "trigger.incident_stale" and event == TriggerEvent.STALE:
         return incident.first_seen_at <= now - timedelta(minutes=trigger.config["minutes"])
@@ -1738,6 +1791,11 @@ def delete_notification(
     notification = db.get(Notification, notification_id)
     if notification is None:
         raise NotFoundError("Notification not found")
+    if notification.read_at is None:
+        raise ConflictError(
+            "Unread notifications must be marked as read before deletion",
+            code="notification_unread",
+        )
     audit_service.record(
         db,
         action="automation.notification_deleted",

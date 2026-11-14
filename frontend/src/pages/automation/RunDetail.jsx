@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useOutletContext, useParams } from 'react-router'
-import { Alert, Badge, Button, Card, EmptyState } from '../../components/ui'
+import { ActionMenu, ActionMenuItem, Alert, Badge, Button, Card, ConfirmDialog, EmptyState } from '../../components/ui'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { formatDateTime, formatRelative } from '../../format'
@@ -52,6 +52,7 @@ export default function RunDetail() {
   const [error, setError] = useState(null)
   const [cancelling, setCancelling] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [rerunning, setRerunning] = useState(false)
   const navigate = useNavigate()
   const canOperate = hasRole('ADMIN', 'OPERATOR')
@@ -101,11 +102,11 @@ export default function RunDetail() {
   }
 
   async function remove() {
-    if (!window.confirm(`Delete this run of “${run.workflow_name}”? Its steps and approvals are deleted too. This cannot be undone.`)) return
     setDeleting(true)
     try {
       await automationApi.deleteRun(id)
       toast.success('Run deleted')
+      setConfirmingDelete(false)
       navigate('/automation/runs')
     } catch (err) {
       toast.error(err.message)
@@ -149,19 +150,38 @@ export default function RunDetail() {
             Cancel run
           </Button>
         )}
+        {canDelete && !active && (
+          <ActionMenu label={`Actions for ${run.workflow_name}`}>
+            {(close) => (
+              <ActionMenuItem
+                tone="danger"
+                disabled={deleting}
+                onClick={() => {
+                  close()
+                  setConfirmingDelete(true)
+                }}
+              >
+                Delete run
+              </ActionMenuItem>
+            )}
+          </ActionMenu>
+        )}
         {canRerun && !active && (
           <Button onClick={rerun} loading={rerunning} title={input ? 'Same input as this run' : undefined}>
             Run again{input ? ' with the same input' : ''}
           </Button>
         )}
-        {canDelete && !active && (
-          <Button variant="danger" onClick={remove} loading={deleting}>
-            Delete run
-          </Button>
-        )}
       </div>
 
       {run.error && <Alert tone="danger">{run.error}</Alert>}
+      <ConfirmDialog
+        open={confirmingDelete}
+        title="Delete run?"
+        message={`Delete this run of "${run.workflow_name}"? Its steps and approvals are deleted too. This cannot be undone.`}
+        onCancel={() => setConfirmingDelete(false)}
+        onConfirm={remove}
+        loading={deleting}
+      />
       {pending.map((a) => (
         <ApprovalCard
           key={a.id}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useOutletContext } from 'react-router'
-import { Badge, Button, Card, StatusPill } from '../../components/ui'
+import { Badge, Button, Card, ErrorState, Skeleton, StatusPill } from '../../components/ui'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { formatRelative } from '../../format'
@@ -62,12 +62,15 @@ export default function Dashboard() {
   const [connectorMetrics, setConnectorMetrics] = useState(null)
   const [runningDetection, setRunningDetection] = useState(false)
   const [error, setError] = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState(null)
   const mountedRef = useRef(false)
   const refreshInFlightRef = useRef(false)
 
   const loadDashboardData = useCallback(async () => {
     if (!mountedRef.current || refreshInFlightRef.current) return
     refreshInFlightRef.current = true
+    setRefreshing(true)
     try {
       const failures = []
       const read = async (promise, onSuccess, label) => {
@@ -80,6 +83,7 @@ export default function Dashboard() {
           failures.push(`${label}: ${err.message}`)
           return null
         }
+      }
       }
 
       const airflowPromise = read(
@@ -167,21 +171,32 @@ export default function Dashboard() {
       }
 
       await Promise.allSettled([databasePromise, channelsPromise, metricsPromise])
-      if (mountedRef.current) setError(failures.length ? failures.join('; ') : null)
+      if (mountedRef.current) {
+        setError(failures.length ? failures.join('; ') : null)
+        setLastUpdated(new Date())
+      }
     } catch (err) {
       if (mountedRef.current) setError(err.message)
     } finally {
       refreshInFlightRef.current = false
+      if (mountedRef.current) setRefreshing(false)
     }
   }, [])
 
   useEffect(() => {
     mountedRef.current = true
     loadDashboardData()
-    const dashboardTimer = setInterval(loadDashboardData, 15000)
+    const dashboardTimer = setInterval(() => {
+      if (document.visibilityState === 'visible') loadDashboardData()
+    }, 15000)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') loadDashboardData()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
     return () => {
       mountedRef.current = false
       clearInterval(dashboardTimer)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   }, [loadDashboardData])
 
@@ -246,10 +261,18 @@ export default function Dashboard() {
           >
             ▶ Run Detection Now
           </Button>
+          <Button size="sm" onClick={loadDashboardData} loading={refreshing} title="Refresh dashboard data">
+            Refresh
+          </Button>
         </div>
       </div>
 
-      {error && <p className="field-error">{error}</p>}
+      {lastUpdated && (
+        <p className="muted small dashboard-updated" aria-live="polite">
+          Last updated {lastUpdated.toLocaleTimeString()}
+        </p>
+      )}
+      {error && <ErrorState message={error} onRetry={loadDashboardData} />}
 
       {/* ----------------- Pending Approvals Alert ----------------- */}
       {automationSummary?.pending_approvals > 0 && (
@@ -269,16 +292,18 @@ export default function Dashboard() {
       {/* ----------------- KPI Cards Grid ----------------- */}
       <div className="stat-grid">
         {/* Card 1: Platform Database */}
-        <div className="kpi-card">
+        <div className="kpi-card kpi-health">
           <div className="kpi-header">
             <span className="kpi-title">Platform Database</span>
-            <StatusPill
-              status={health ? health.database.status : 'UNKNOWN'}
-              label={health?.database.status === 'ok' ? 'Online' : 'Checking…'}
-            />
+            {health ? (
+              <StatusPill
+                status={health.database.status}
+                label={health.database.status === 'ok' ? 'Online' : 'Checking…'}
+              />
+            ) : <Skeleton width="5rem" height="1.5rem" />}
           </div>
           <div className="stat-value">
-            {health?.database.status === 'ok' ? 'Healthy' : 'Degraded'}
+            {health ? (health.database.status === 'ok' ? 'Healthy' : 'Degraded') : <Skeleton width="7rem" height="2.2rem" />}
           </div>
           <p className="muted small" style={{ margin: 0 }}>
             {health?.database.latency_ms != null
@@ -288,7 +313,7 @@ export default function Dashboard() {
         </div>
 
         {/* Card 2: Pipelines & Connections */}
-        <div className="kpi-card">
+        <div className="kpi-card kpi-ecosystem">
           <div className="kpi-header">
             <span className="kpi-title">Pipeline Ecosystem</span>
             <Link to="/connections/airflow" className="small">
@@ -296,7 +321,7 @@ export default function Dashboard() {
             </Link>
           </div>
           <div className="stat-value">
-            {connections && databases ? connections.length + databases.length : '—'}
+            {connections && databases ? connections.length + databases.length : <Skeleton width="4rem" height="2.2rem" />}
           </div>
           <p className="muted small" style={{ margin: 0 }}>
             {connections?.length ?? 0} Airflow · {databases?.length ?? 0} DB
@@ -309,14 +334,14 @@ export default function Dashboard() {
         </div>
 
         {/* Card 3: Open Incidents */}
-        <div className="kpi-card">
+        <div className={`kpi-card kpi-incidents ${crit > 0 ? 'kpi-critical' : ''}`}>
           <div className="kpi-header">
             <span className="kpi-title">Open Incidents</span>
             <Link to="/incidents" className="small">
               View all
             </Link>
           </div>
-          <div className="stat-value">{totalOpenIncidents}</div>
+          <div className="stat-value">{incidentSummary ? totalOpenIncidents : <Skeleton width="4rem" height="2.2rem" />}</div>
           {totalOpenIncidents > 0 ? (
             <>
               <div className="severity-meter">
@@ -367,14 +392,14 @@ export default function Dashboard() {
         </div>
 
         {/* Card 4: Autonomous Automation */}
-        <div className="kpi-card">
+        <div className="kpi-card kpi-automation">
           <div className="kpi-header">
             <span className="kpi-title">Automation Engine</span>
             <Link to="/automation/workflows" className="small">
               Workflows
             </Link>
           </div>
-          <div className="stat-value">{automationSummary?.active_runs ?? 0}</div>
+          <div className="stat-value">{automationSummary ? automationSummary.active_runs : <Skeleton width="4rem" height="2.2rem" />}</div>
           <p className="muted small" style={{ margin: 0 }}>
             Active execution(s) right now
           </p>
@@ -386,7 +411,7 @@ export default function Dashboard() {
         </div>
 
         {/* Card 5: Detection Engine */}
-        <div className="kpi-card">
+        <div className="kpi-card kpi-detection">
           <div className="kpi-header">
             <span className="kpi-title">Failure Detection</span>
             <Link to="/incidents" className="small">
@@ -394,11 +419,13 @@ export default function Dashboard() {
             </Link>
           </div>
           <div style={{ marginTop: '0.2rem', marginBottom: '0.4rem' }}>
-            <StatusPill
-              status={detection?.enabled ? (detection.last_error ? 'degraded' : 'ok') : 'UNKNOWN'}
-              label={detection?.enabled ? `Scanning (${Math.round(detection.interval_seconds / 60)}m)` : 'Disabled'}
-              title={detection?.last_error ?? ''}
-            />
+            {detection ? (
+              <StatusPill
+                status={detection.enabled ? (detection.last_error ? 'degraded' : 'ok') : 'UNKNOWN'}
+                label={detection.enabled ? `Scanning (${Math.round(detection.interval_seconds / 60)}m)` : 'Disabled'}
+                title={detection.last_error ?? ''}
+              />
+            ) : <Skeleton width="7rem" height="1.5rem" />}
           </div>
           <p className="muted small" style={{ margin: 0 }}>
             {detection?.last_cycle

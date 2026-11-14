@@ -1,5 +1,5 @@
 import uuid
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query
 
@@ -45,6 +45,8 @@ def list_incidents(
     connection_id: uuid.UUID | None = None,
     dag_id: str | None = None,
     search: str | None = None,
+    sort: Literal["occurrences"] | None = None,
+    order: Literal["asc", "desc"] = "desc",
 ) -> Page[IncidentRead]:
     items, total = incident_service.list_incidents(
         db,
@@ -54,6 +56,8 @@ def list_incidents(
         connection_id=connection_id,
         dag_id=dag_id,
         search=search,
+        sort_occurrences=sort,
+        sort_order=order,
         limit=page.limit,
         offset=page.offset,
     )
