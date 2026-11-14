@@ -242,6 +242,20 @@ export function EmptyState({ title, children }) {
   )
 }
 
+export function LoadError({ message, onRetry, title = 'Connection failed' }) {
+  return (
+    <div className="empty" role="alert">
+      <strong>{title}</strong>
+      {message && <div className="muted">{message}</div>}
+      {onRetry && (
+        <div style={{ marginTop: 12 }}>
+          <Button size="sm" onClick={onRetry}>Retry</Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function Alert({ tone = 'info', children }) {
   return <div className={`alert alert-${tone}`}>{children}</div>
 }

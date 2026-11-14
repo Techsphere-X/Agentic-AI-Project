@@ -27,12 +27,16 @@ async function dragBetween(page, from, to) {
 
 const node = (page, id) => page.locator(`.react-flow__node[data-id="${id}"]`)
 
-/** New workflows react to incidents; switch the trigger to "Run on demand" for "Run now" flows. */
+/** A new workflow first asks what starts it: pick one of the choices. */
+async function chooseStart(page, title) {
+  const dialog = page.getByRole('dialog', { name: 'How should this workflow start?' })
+  await dialog.getByRole('button', { name: new RegExp(`^${title}`) }).click()
+}
+
+/** "Run now" flows start by hand. */
 async function startByHand(page) {
-  const palette = page.locator('.editor-palette')
-  await palette.locator('.palette-sub-title', { hasText: 'Orchestration' }).click()
-  await palette.getByRole('button', { name: 'Run on demand' }).click()
-  await expect(node(page, 'trigger')).toContainText('Run on demand')
+  await chooseStart(page, 'Run manually')
+  await expect(node(page, 'trigger')).toContainText('When run manually')
 }
 
 test.beforeEach(async ({ page }) => {
@@ -41,15 +45,16 @@ test.beforeEach(async ({ page }) => {
 
 test('workflow editor: build, save, reload, validate', async ({ page }) => {
   await page.goto('/automation/workflows/new')
+  await chooseStart(page, 'Any DAG has an incident')
   await expect(node(page, 'trigger')).toBeVisible()
 
   // Monitoring first: a new workflow starts from an incident, so the incident blocks are usable.
-  await expect(node(page, 'trigger')).toContainText('When an incident opens or recurs')
+  await expect(node(page, 'trigger')).toContainText('When any DAG has an incident')
   await expect(page.getByRole('button', { name: 'Retry failed tasks' })).toBeEnabled()
 
-  // Drag "Tell someone" from the palette onto the canvas.
+  // Drag "Send a notification" from the palette onto the canvas.
   const canvas = page.locator('.editor-canvas')
-  await page.getByRole('button', { name: 'Tell someone' }).dragTo(canvas, { targetPosition: { x: 470, y: 80 } })
+  await page.getByRole('button', { name: 'Send a notification' }).dragTo(canvas, { targetPosition: { x: 470, y: 80 } })
   await expect(node(page, 'notify_1')).toBeVisible()
 
   // Wire trigger.next -> notify_1.
@@ -61,7 +66,7 @@ test('workflow editor: build, save, reload, validate', async ({ page }) => {
   await expect(page.getByTestId('rf__edge-trigger:next->notify_1')).toBeAttached()
 
   // The same output can also lead to a second block; both run, top to bottom.
-  await page.getByRole('button', { name: 'Tell someone' }).click()
+  await page.getByRole('button', { name: 'Send a notification' }).click()
   await expect(node(page, 'notify_2')).toBeVisible()
   await dragBetween(
     page,
@@ -112,7 +117,7 @@ test('workflow editor opens a template read from the server', async ({ page }) =
     .getByRole('link', { name: 'Edit on canvas' })
     .click()
   await expect(node(page, 'retry')).toBeVisible()
-  await expect(node(page, 'approval')).toContainText('Ask a human')
+  await expect(node(page, 'approval')).toContainText('Ask for approval')
   await expect(page.locator('.react-flow__edge')).toHaveCount(10)
   await page.screenshot({ path: `${SHOTS}/workflow-template.png` })
 })
@@ -191,27 +196,29 @@ test('run replay shows the path a real run took', async ({ page }) => {
 })
 
 test('orchestration: drag a real DAG from the palette and run it now', async ({ page }) => {
+  // daily_customer_etl: the e2e server pins the mock clock just after a 5-minute slot starts, when
+  // orders_pipeline is mid-run and a trigger would (rightly) be skipped as a duplicate.
   await page.goto('/automation/workflows/new')
   await startByHand(page)
 
-  // The palette lists the actual DAGs of the live connection; the generic block is gone.
+  // The palette lists the actual DAGs of the live connection next to the generic "Run a DAG" block.
   const palette = page.locator('.editor-palette')
-  const account = palette.locator('.palette-account', { hasText: 'mock-dev' })
+  const account = palette.locator('.palette-stage.stage-act .palette-account', { hasText: 'mock-dev' })
   await expect(account.locator('.palette-account-head')).toContainText('DEV')
-  await expect(account.getByRole('button', { name: 'orders_pipeline', exact: true })).toBeVisible()
-  await expect(palette.getByRole('button', { name: 'Run a DAG' })).toHaveCount(0)
-  const dagItem = palette.getByRole('button', { name: 'orders_pipeline', exact: true })
+  await expect(account.getByRole('button', { name: 'daily_customer_etl', exact: true })).toBeVisible()
+  await expect(palette.getByRole('button', { name: 'Run a DAG', exact: true })).toHaveCount(1)
+  const dagItem = account.getByRole('button', { name: 'daily_customer_etl', exact: true })
   await dagItem.dragTo(page.locator('.editor-canvas'), { targetPosition: { x: 470, y: 80 } })
 
-  const block = node(page, 'orders_pipeline_1')
-  await expect(block).toContainText('orders_pipeline')
+  const block = node(page, 'daily_customer_etl_1')
+  await expect(block).toContainText('daily_customer_etl')
   await expect(block).toContainText('Run a DAG')
   await dragBetween(
     page,
     page.locator('.react-flow__handle[data-nodeid="trigger"][data-handleid="next"]'),
-    page.locator('.react-flow__handle.target[data-nodeid="orders_pipeline_1"]'),
+    page.locator('.react-flow__handle.target[data-nodeid="daily_customer_etl_1"]'),
   )
-  await expect(page.getByTestId('rf__edge-trigger:next->orders_pipeline_1')).toBeAttached()
+  await expect(page.getByTestId('rf__edge-trigger:next->daily_customer_etl_1')).toBeAttached()
 
   // Incident-only blocks are greyed out under a Run-on-demand trigger.
   await expect(page.getByRole('button', { name: 'Retry failed tasks' })).toBeDisabled()
@@ -219,16 +226,16 @@ test('orchestration: drag a real DAG from the palette and run it now', async ({ 
   // Connection and DAG are already filled in; the block can be switched to "wait for it".
   await block.click()
   await expect(page.getByLabel('Airflow connection')).toHaveValue(/[0-9a-f-]{36}/)
-  await expect(page.getByLabel('DAG', { exact: true })).toHaveValue('orders_pipeline')
+  await expect(page.getByLabel('DAG', { exact: true })).toHaveValue('daily_customer_etl')
   await page.getByRole('button', { name: 'Wait for it to succeed' }).click()
-  await expect(block).toContainText('Wait for a DAG')
-  await expect(block.locator('.block-port-label')).toContainText(['it succeeded', 'gave up'])
+  await expect(block).toContainText('Wait for a DAG run')
+  await expect(block.locator('.block-port-label')).toContainText(['succeeded', 'timed out'])
   await page.getByRole('button', { name: 'Run this DAG' }).click()
   await expect(block).toContainText('Run a DAG')
-  await expect(page.getByLabel('DAG', { exact: true })).toHaveValue('orders_pipeline')
+  await expect(page.getByLabel('DAG', { exact: true })).toHaveValue('daily_customer_etl')
 
   await page.getByLabel('Wait until the run finishes').click({ force: true })
-  await expect(block).toContainText("orders_pipeline · don't wait")
+  await expect(block).toContainText("daily_customer_etl · don't wait")
   await page.screenshot({ path: `${SHOTS}/orchestration-palette.png` })
 
   await page.getByLabel('Workflow name').fill('E2E orchestration')
@@ -237,7 +244,7 @@ test('orchestration: drag a real DAG from the palette and run it now', async ({ 
 
   await page.getByRole('button', { name: /Run now/ }).click()
   await expect(page).toHaveURL(/\/automation\/runs\/[0-9a-f-]{36}$/)
-  await expect(page.getByText('Done: run orders_pipeline')).toBeVisible()
+  await expect(page.getByText('Done: run daily_customer_etl')).toBeVisible()
   await expect(page.getByText('Run now', { exact: true })).toBeVisible()
   await page.screenshot({ path: `${SHOTS}/orchestration-run.png`, fullPage: true })
 })
@@ -272,7 +279,7 @@ test('notification channel: test message and a workflow that sends through it', 
     await expect(row).toContainText('Working')
     expect(received.at(-1).title).toBe('Test message from Agentic Ops')
 
-    // The channel is a palette component; dropping it gives a "Tell someone" that sends out.
+    // The channel is a palette component; dropping it gives a "Send a notification" that sends out.
     await page.goto('/automation/workflows/new')
     await startByHand(page)
     await page
@@ -294,7 +301,7 @@ test('notification channel: test message and a workflow that sends through it', 
     await page.getByRole('button', { name: 'Create workflow' }).click()
     await expect(page).toHaveURL(/\/automation\/workflows\/[0-9a-f-]{36}$/)
     await page.getByRole('button', { name: /Run now/ }).click()
-    await expect(page.getByText('Sent via E2E hook: Sent to E2E hook')).toBeVisible()
+    await expect(page.getByRole('list').getByText('Sent via E2E hook: Sent to E2E hook')).toBeVisible()
     await page.screenshot({ path: `${SHOTS}/notify-run.png`, fullPage: true })
 
     const message = received.at(-1)
@@ -334,6 +341,7 @@ test('workflow assistant: propose, apply and undo (model mocked)', async ({ page
   })
 
   await page.goto('/automation/workflows/new')
+  await chooseStart(page, 'Any DAG has an incident')
   await expect(node(page, 'trigger')).toBeVisible()
   await page.getByRole('button', { name: '✨ Assistant' }).click()
   const panel = page.getByRole('complementary', { name: 'Workflow assistant' })
@@ -353,4 +361,261 @@ test('workflow assistant: propose, apply and undo (model mocked)', async ({ page
   await panel.getByRole('button', { name: 'Undo apply' }).click()
   await expect(node(page, 'tell')).toHaveCount(0)
   await expect(node(page, 'trigger')).toBeVisible()
+})
+
+test('"When this DAG runs": pick a DAG, one output per event', async ({ page }) => {
+  await page.goto('/automation/workflows/new')
+  const trigger = node(page, 'trigger')
+
+  // "How should this workflow start?" → When this DAG runs → which DAG.
+  await chooseStart(page, 'When this DAG runs')
+  await page.getByRole('dialog', { name: 'Which DAG?' }).getByRole('button', { name: /^orders_pipeline/ }).click()
+  await expect(trigger).toContainText('orders_pipeline')
+  await expect(trigger).toContainText('When this DAG runs')
+  await expect(trigger.locator('.block-port-label')).toHaveText(['in progress', 'succeeded', 'failed'])
+  // Picking another DAG under "Start when…" switches the trigger's DAG.
+  const startWhen = page.locator('.editor-palette .palette-stage.stage-when')
+  await startWhen.getByRole('button', { name: /^partner_api_sync/ }).click()
+  await expect(trigger).toContainText('partner_api_sync')
+  await startWhen.getByRole('button', { name: /^orders_pipeline/ }).click()
+  await expect(trigger).toContainText('orders_pipeline')
+
+  // Fix blocks work on the DAG's own run: no incident trigger needed.
+  await expect(page.getByRole('button', { name: 'Retry failed tasks' })).toBeEnabled()
+
+  // Different steps per outcome.
+  const canvas = page.locator('.editor-canvas')
+  await page.getByRole('button', { name: 'Send a notification' }).dragTo(canvas, { targetPosition: { x: 200, y: 120 } })
+  await page.getByRole('button', { name: 'Send a notification' }).dragTo(canvas, { targetPosition: { x: 200, y: 520 } })
+  await dragBetween(
+    page,
+    page.locator('.react-flow__handle[data-nodeid="trigger"][data-handleid="failed"]'),
+    page.locator('.react-flow__handle.target[data-nodeid="notify_1"]'),
+  )
+  await dragBetween(
+    page,
+    page.locator('.react-flow__handle[data-nodeid="trigger"][data-handleid="success"]'),
+    page.locator('.react-flow__handle.target[data-nodeid="notify_2"]'),
+  )
+  await expect(page.getByTestId('rf__edge-trigger:failed->notify_1')).toBeAttached()
+  await expect(page.getByTestId('rf__edge-trigger:success->notify_2')).toBeAttached()
+  await page.screenshot({ path: `${SHOTS}/dag-trigger.png` })
+
+  await page.getByLabel('Workflow name').fill('E2E orders')
+  await page.getByRole('button', { name: 'Create workflow' }).click()
+  await expect(page).toHaveURL(/\/automation\/workflows\/[0-9a-f-]{36}$/)
+
+  await page.goto('/automation/workflows')
+  await page.getByLabel('Enable E2E orders').click({ force: true })
+  await expect(page.getByText('“E2E orders” is on')).toBeVisible()
+})
+
+test('delete runs from the run page and from the list', async ({ page }) => {
+  // A "Run now" workflow with one notification; each run finishes at once.
+  await page.goto('/automation/workflows/new')
+  await startByHand(page)
+  await page.getByRole('button', { name: 'Send a notification' }).dragTo(page.locator('.editor-canvas'), {
+    targetPosition: { x: 470, y: 80 },
+  })
+  await dragBetween(
+    page,
+    page.locator('.react-flow__handle[data-nodeid="trigger"][data-handleid="next"]'),
+    page.locator('.react-flow__handle.target[data-nodeid="notify_1"]'),
+  )
+  await page.getByLabel('Workflow name').fill('E2E delete runs')
+  await page.getByRole('button', { name: 'Create workflow' }).click()
+  await expect(page).toHaveURL(/\/automation\/workflows\/[0-9a-f-]{36}$/)
+  const editorUrl = page.url()
+  for (let i = 0; i < 2; i += 1) {
+    await page.goto(editorUrl)
+    await page.getByRole('button', { name: /Run now/ }).click()
+    await expect(page).toHaveURL(/\/automation\/runs\/[0-9a-f-]{36}$/)
+  }
+
+  // From the run page.
+  page.once('dialog', (dialog) => dialog.accept())
+  await page.getByRole('button', { name: 'Delete run' }).click()
+  await expect(page).toHaveURL(/\/automation\/runs$/)
+  await expect(page.getByText('Run deleted')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'E2E delete runs' })).toHaveCount(1)
+
+  // From the list: tick the remaining run and delete it.
+  await page.getByRole('checkbox', { name: 'Select run of E2E delete runs' }).check()
+  page.once('dialog', (dialog) => dialog.accept())
+  await page.getByRole('button', { name: 'Delete selected (1)' }).click()
+  await expect(page.getByText('Deleted 1 run')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'E2E delete runs' })).toHaveCount(0)
+})
+
+test('logic: an If block branches on a value', async ({ page }) => {
+  await page.goto('/automation/workflows/new')
+  await startByHand(page)
+  const canvas = page.locator('.editor-canvas')
+  await page.getByRole('button', { name: 'If', exact: true }).dragTo(canvas, { targetPosition: { x: 250, y: 120 } })
+  await expect(node(page, 'if_1')).toBeVisible()
+  await dragBetween(
+    page,
+    page.locator('.react-flow__handle[data-nodeid="trigger"][data-handleid="next"]'),
+    page.locator('.react-flow__handle.target[data-nodeid="if_1"]'),
+  )
+  await node(page, 'if_1').click()
+  await page.getByLabel('Value', { exact: true }).fill('{{workflow.name}}')
+  await page.getByLabel('Is', { exact: true }).selectOption('contains')
+  await page.getByLabel('Compared with').fill('E2E')
+  await expect(node(page, 'if_1')).toContainText('{{workflow.name}} contains E2E')
+
+  await page.getByRole('button', { name: 'Send a notification' }).dragTo(canvas, { targetPosition: { x: 250, y: 520 } })
+  await dragBetween(
+    page,
+    page.locator('.react-flow__handle[data-nodeid="if_1"][data-handleid="true"]'),
+    page.locator('.react-flow__handle.target[data-nodeid="notify_1"]'),
+  )
+  await expect(page.getByTestId('rf__edge-if_1:true->notify_1')).toBeAttached()
+
+  await page.getByLabel('Workflow name').fill('E2E logic')
+  await page.getByRole('button', { name: 'Create workflow' }).click()
+  await expect(page).toHaveURL(/\/automation\/workflows\/[0-9a-f-]{36}$/)
+  await page.getByRole('button', { name: /Run now/ }).click()
+  await expect(page).toHaveURL(/\/automation\/runs\/[0-9a-f-]{36}$/)
+  await expect(page.getByText("'E2E logic' contains 'E2E': True")).toBeVisible()
+})
+
+test('triggers: a webhook starts the workflow with its JSON body; cron shows its next runs', async ({ page }) => {
+  await page.goto('/automation/workflows/new')
+  await chooseStart(page, 'When a webhook is called')
+  const trigger = node(page, 'trigger')
+  await expect(trigger).toContainText('When a webhook is called')
+
+  const canvas = page.locator('.editor-canvas')
+  await page.getByRole('button', { name: 'Send a notification' }).dragTo(canvas, { targetPosition: { x: 250, y: 520 } })
+  await dragBetween(
+    page,
+    page.locator('.react-flow__handle[data-nodeid="trigger"][data-handleid="next"]'),
+    page.locator('.react-flow__handle.target[data-nodeid="notify_1"]'),
+  )
+  await node(page, 'notify_1').click()
+  await page.getByLabel('Title').fill('Deploy {{trigger.body.version}}')
+  await page.getByLabel('Workflow name').fill('E2E webhook')
+  await page.getByRole('button', { name: 'Create workflow' }).click()
+  await expect(page).toHaveURL(/\/automation\/workflows\/[0-9a-f-]{36}$/)
+  const editorUrl = page.url()
+
+  await page.goto('/automation/workflows')
+  await page.getByLabel('Enable E2E webhook').click({ force: true })
+  await expect(page.getByText('“E2E webhook” is on')).toBeVisible()
+
+  // The secret URL is in the trigger's settings; calling it starts a run.
+  await page.goto(editorUrl)
+  await node(page, 'trigger').click()
+  const url = page.getByLabel('Webhook URL (POST, JSON body)')
+  await expect(url).toHaveValue(/\/api\/v1\/hooks\//)
+  const response = await page.request.post(await url.inputValue(), { data: { version: '1.4.2' } })
+  expect(response.status()).toBe(202)
+
+  await page.goto('/automation/runs')
+  await page.getByRole('button', { name: 'Check runs now' }).click()
+  await page.getByRole('link', { name: 'E2E webhook' }).first().click()
+  await expect(page.getByText('Started by a webhook call')).toBeVisible()
+
+  // Cron: the schedule form previews the next times.
+  await page.goto('/automation/workflows/new')
+  await chooseStart(page, 'On a schedule')
+  await node(page, 'trigger').click()
+  await page.getByLabel('Repeat').selectOption('cron')
+  await page.getByLabel('Cron schedule').fill('0 6 * * 1-5')
+  await expect(page.locator('.cron-next')).toContainText('Next:')
+  await expect(page.getByLabel('Every (minutes)')).toHaveCount(0)
+})
+
+test('builder: test a block, versions, export and import, run again', async ({ page }) => {
+  await page.goto('/automation/workflows/new')
+  await startByHand(page)
+  const canvas = page.locator('.editor-canvas')
+  await page.getByRole('button', { name: 'Send a notification' }).dragTo(canvas, { targetPosition: { x: 250, y: 520 } })
+  await dragBetween(
+    page,
+    page.locator('.react-flow__handle[data-nodeid="trigger"][data-handleid="next"]'),
+    page.locator('.react-flow__handle.target[data-nodeid="notify_1"]'),
+  )
+  await node(page, 'notify_1').click()
+  await page.getByLabel('Title').fill('Hello {{trigger.body.who}}')
+
+  // Test this block: a dry run with typed input.
+  await page.locator('.test-block summary').click()
+  await page.getByLabel('Test input (JSON)').fill('{"trigger": {"body": {"who": "Ann"}}}')
+  await page.getByRole('button', { name: 'Test', exact: true }).click()
+  await expect(page.locator('.test-result')).toContainText('Continues on next')
+
+  await page.getByLabel('Workflow name').fill('E2E builder')
+  await page.getByRole('button', { name: 'Create workflow' }).click()
+  await expect(page).toHaveURL(/\/automation\/workflows\/[0-9a-f-]{36}$/)
+
+  // A change is a new version; compare and restore the old one.
+  await expect(page.locator('.editor-header, .page-header, body').getByText('v1', { exact: true }).first()).toBeVisible()
+  await node(page, 'notify_1').click()
+  await page.getByLabel('Title').fill('Hi {{trigger.body.who}}')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByText('v2')).toBeVisible()
+  await page.getByRole('button', { name: 'Versions' }).click()
+  const versions = page.getByRole('dialog', { name: 'Versions of E2E builder' })
+  await versions.getByRole('row', { name: /v1/ }).getByRole('button', { name: 'Compare' }).click()
+  await expect(versions).toContainText('1 changed (notify_1)')
+  page.once('dialog', (dialog) => dialog.accept())
+  await versions.getByRole('row', { name: /v1/ }).getByRole('button', { name: 'Restore' }).click()
+  await expect(page.getByText('Version restored as v3')).toBeVisible()
+  await expect(node(page, 'notify_1')).toContainText('Send a notification')
+
+  // Export, then import as a new workflow.
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export' }).click()
+  const file = await (await download).path()
+  await page.goto('/automation/workflows')
+  await page.locator('input[type=file]').setInputFiles(file)
+  await expect(page.getByText('Imported “E2E builder” (turned off)')).toBeVisible()
+  await expect(page.getByLabel('Workflow name')).toHaveValue('E2E builder')
+
+  // Run now, then run again from the run's page.
+  await page.getByRole('button', { name: /Run now/ }).click()
+  await expect(page).toHaveURL(/\/automation\/runs\/[0-9a-f-]{36}$/)
+  await page.getByRole('button', { name: /^Run again/ }).click()
+  await expect(page.getByText('Run started again')).toBeVisible()
+})
+
+test('integration: run another workflow and see its run', async ({ page }) => {
+  // The workflow to call: starts by hand, sends a notification with its input.
+  await page.goto('/automation/workflows/new')
+  await startByHand(page)
+  const canvas = page.locator('.editor-canvas')
+  await page.getByRole('button', { name: 'Send a notification' }).dragTo(canvas, { targetPosition: { x: 250, y: 520 } })
+  await dragBetween(
+    page,
+    page.locator('.react-flow__handle[data-nodeid="trigger"][data-handleid="next"]'),
+    page.locator('.react-flow__handle.target[data-nodeid="notify_1"]'),
+  )
+  await page.getByLabel('Workflow name').fill('E2E child')
+  await page.getByRole('button', { name: 'Create workflow' }).click()
+  await expect(page).toHaveURL(/\/automation\/workflows\/[0-9a-f-]{36}$/)
+
+  // The caller.
+  await page.goto('/automation/workflows/new')
+  await startByHand(page)
+  await expect(page.getByRole('button', { name: 'HTTP request' })).toBeVisible()
+  await page.getByRole('button', { name: 'Run another workflow' }).dragTo(canvas, { targetPosition: { x: 250, y: 520 } })
+  await dragBetween(
+    page,
+    page.locator('.react-flow__handle[data-nodeid="trigger"][data-handleid="next"]'),
+    page.locator('.react-flow__handle.target[data-nodeid="call_workflow_1"]'),
+  )
+  await node(page, 'call_workflow_1').click()
+  await page.getByLabel('Workflow to run').selectOption({ label: 'E2E child' })
+  await page.getByLabel('Wait until it finishes').click({ force: true })
+  await page.getByLabel('Workflow name').fill('E2E caller')
+  await page.getByRole('button', { name: 'Create workflow' }).click()
+  await expect(page).toHaveURL(/\/automation\/workflows\/[0-9a-f-]{36}$/)
+  await page.getByRole('button', { name: /Run now/ }).click()
+  await expect(page.getByText('Started the workflow')).toBeVisible()
+
+  await page.goto('/automation/runs')
+  await page.getByLabel('Started by').selectOption('called')
+  await expect(page.getByRole('link', { name: 'E2E child' })).toBeVisible()
 })

@@ -9,6 +9,7 @@ from app.api.v1 import (
     detection,
     diagnosis,
     health,
+    hooks,
     incidents,
     users,
 )
@@ -24,3 +25,4 @@ api_router.include_router(incidents.router)
 api_router.include_router(detection.router)
 api_router.include_router(diagnosis.router)
 api_router.include_router(automation.router)
+api_router.include_router(hooks.router)

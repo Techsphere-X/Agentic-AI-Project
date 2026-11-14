@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useOutletContext, useSearchParams } from 'react-router'
-import { ActionMenu, ActionMenuItem, Button, Card, ConfirmDialog, EmptyState } from '../../components/ui'
+import { ActionMenu, ActionMenuItem, Button, Card, ConfirmDialog, EmptyState, LoadError } from '../../components/ui'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { formatRelative } from '../../format'
@@ -48,7 +48,10 @@ export default function IncidentList() {
       .catch(() => {})
   }, [])
 
+  const [loadError, setLoadError] = useState(null)
+
   const load = useCallback(async () => {
+    setLoadError(null)
     try {
       setPage(
         await incidentsApi.list({
@@ -64,6 +67,7 @@ export default function IncidentList() {
         }),
       )
     } catch (err) {
+      setLoadError(err.message)
       toast.error(err.message)
     }
   }, [filters, occurrencesOrder, offset, toast])
@@ -148,7 +152,6 @@ export default function IncidentList() {
       <div className="page-header">
         <div>
           <h1>Incidents</h1>
-          <p className="muted">Failed runs and SLA breaches detected on monitored DAGs.</p>
         </div>
         {canOperate && (
           <Button variant="primary" onClick={onRunDetection} loading={running}>
@@ -204,11 +207,13 @@ export default function IncidentList() {
           )}
         </div>
 
-        {!page ? (
+        {loadError && !page ? (
+          <LoadError message={loadError} onRetry={load} />
+        ) : !page ? (
           <p className="muted">Loading…</p>
         ) : page.total === 0 ? (
           <EmptyState title={filters.status === 'active' ? 'No open incidents' : 'No incidents match the filters'}>
-            {filters.status === 'active' && 'Monitored DAGs are healthy. Detection runs automatically.'}
+            {filters.status === 'active' && 'Monitored DAGs are healthy.'}
           </EmptyState>
         ) : (
           <>

@@ -53,6 +53,7 @@ export default function RunDetail() {
   const [cancelling, setCancelling] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [rerunning, setRerunning] = useState(false)
   const navigate = useNavigate()
   const canOperate = hasRole('ADMIN', 'OPERATOR')
   const canDelete = hasRole('ADMIN')
@@ -84,6 +85,22 @@ export default function RunDetail() {
     }
   }
 
+  // Runs started by hand or by a webhook can be started again with the same input.
+  const input = run?.context?.trigger?.body
+  const canRerun = canOperate && ['manual', 'webhook'].includes(run?.trigger_event)
+  async function rerun() {
+    setRerunning(true)
+    try {
+      const again = await automationApi.runWorkflow(run.workflow_id, input ? { input } : {})
+      toast.success('Run started again')
+      navigate(`/automation/runs/${again.id}`)
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setRerunning(false)
+    }
+  }
+
   async function remove() {
     setDeleting(true)
     try {
@@ -102,6 +119,7 @@ export default function RunDetail() {
       <div className="page">
         <Link to="/automation/runs">← Automation runs</Link>
         <Alert tone="danger">{error}</Alert>
+        <Button size="sm" onClick={() => { setError(null); load() }}>Retry</Button>
       </div>
     )
   }
@@ -147,6 +165,11 @@ export default function RunDetail() {
               </ActionMenuItem>
             )}
           </ActionMenu>
+        )}
+        {canRerun && !active && (
+          <Button onClick={rerun} loading={rerunning} title={input ? 'Same input as this run' : undefined}>
+            Run again{input ? ' with the same input' : ''}
+          </Button>
         )}
       </div>
 

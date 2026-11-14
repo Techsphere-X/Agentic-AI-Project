@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { Badge, Button, Card, EmptyState, Toggle } from '../../components/ui'
+import { Badge, Button, Card, EmptyState, LoadError, Toggle } from '../../components/ui'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { formatRelative } from '../../format'
@@ -185,14 +185,19 @@ function WorkflowCard({ workflow, canEdit, canRun, onChange, onDelete }) {
 export default function Workflows() {
   const { hasRole } = useAuth()
   const toast = useToast()
+  const navigate = useNavigate()
   const [workflows, setWorkflows] = useState(null)
   const canEdit = hasRole('ADMIN')
   const canRun = hasRole('ADMIN', 'OPERATOR')
 
+  const [loadError, setLoadError] = useState(null)
+
   const load = useCallback(async () => {
+    setLoadError(null)
     try {
       setWorkflows(await automationApi.listWorkflows())
     } catch (err) {
+      setLoadError(err.message)
       toast.error(err.message)
     }
   }, [toast])
@@ -207,6 +212,26 @@ export default function Workflows() {
     setWorkflows((list) =>
       list.map((w) => (w.id === updated.id ? { ...updated, run_count: w.run_count, last_run_at: w.last_run_at } : w)),
     )
+  }
+
+  /** A workflow exported from the editor: created (turned off) and opened. */
+  async function onImport(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    try {
+      const data = JSON.parse(await file.text())
+      if (!data?.graph?.nodes) throw new Error('This file is not an exported workflow')
+      const created = await automationApi.createWorkflow({
+        name: data.name || file.name.replace(/\.json$/i, ''),
+        description: data.description ?? null,
+        graph: data.graph,
+      })
+      toast.success(`Imported “${created.name}” (turned off)`)
+      navigate(`/automation/workflows/${created.id}`)
+    } catch (err) {
+      toast.error(err.message === 'Unexpected end of JSON input' ? 'The file is not valid JSON' : err.message)
+    }
   }
 
   async function onDelete(workflow) {
@@ -225,22 +250,26 @@ export default function Workflows() {
       <div className="page-header">
         <div>
           <h1>Workflows</h1>
-          <p className="muted">
-            Orchestrate pipelines and databases on demand or on a schedule, or respond to incidents: figure out why, ask a
-            human if needed, fix it, and check it worked.
-            {!canEdit && ' Only admins can change workflows.'}
-          </p>
+          {!canEdit && <p className="muted">Only admins can change workflows.</p>}
         </div>
         {canEdit && (
-          <Link className="btn btn-primary" to="/automation/workflows/new">
-            New workflow
-          </Link>
+          <div className="card-actions">
+            <label className="btn btn-secondary file-btn">
+              Import…
+              <input type="file" accept="application/json,.json" hidden onChange={onImport} />
+            </label>
+            <Link className="btn btn-primary" to="/automation/workflows/new">
+              New workflow
+            </Link>
+          </div>
         )}
       </div>
-      {!workflows ? (
+      {loadError && !workflows ? (
+        <LoadError message={loadError} onRetry={load} />
+      ) : !workflows ? (
         <p className="muted">Loading…</p>
       ) : workflows.length === 0 ? (
-        <EmptyState title="No workflows">The built-in workflows are added when the server starts.</EmptyState>
+        <EmptyState title="No workflows" />
       ) : (
         <div className="workflow-list">
           {workflows.map((w) => (

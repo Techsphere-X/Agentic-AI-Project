@@ -23,21 +23,18 @@ const TYPES = {
 const PAGE_COPY = {
   airflow: {
     title: 'Airflow connections',
-    description: 'Airflow instances connected to this platform. Open a connection to choose which DAGs are monitored.',
     addLabel: 'Add Airflow',
-    emptyAdmin: 'Add an Airflow instance to start monitoring DAGs. Use the Mock Airflow type if none is running locally.',
+    emptyAdmin: 'Add an Airflow instance to start monitoring DAGs.',
   },
   database: {
     title: 'Database connections',
-    description: 'Databases available to workflows for checks, queries, and automated actions.',
     addLabel: 'Add database',
-    emptyAdmin: 'Add a database connection to make it available to workflows.',
+    emptyAdmin: 'Add a database to use it in workflows.',
   },
   channel: {
     title: 'Notification channels',
-    description: 'Email, Slack, and Teams destinations used by workflows to notify people.',
     addLabel: 'Add channel',
-    emptyAdmin: 'Add an email, Slack, or Teams channel to make it available to workflows.',
+    emptyAdmin: 'Add an email, Slack or Teams channel.',
   },
 }
 
@@ -160,7 +157,6 @@ export default function Catalog({ type }) {
       <div className="page-header">
         <div>
           <h1>{page.title}</h1>
-          <p className="muted">{page.description}</p>
         </div>
         {isAdmin && (
           <div className="header-actions">

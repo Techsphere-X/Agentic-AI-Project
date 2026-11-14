@@ -2,17 +2,17 @@ import { Background, Controls, MarkerType, ReactFlow, ReactFlowProvider } from '
 import '@xyflow/react/dist/style.css'
 import '../../components/flow/FlowCanvas.css'
 import { useEffect, useMemo, useState } from 'react'
-import { BAD_PORTS, BLOCK, toFlow } from '../../components/flow/graph'
+import { BLOCK, portTone, toFlow } from '../../components/flow/graph'
 import { automationApi } from '../../services/endpoints'
 import BlockNode from './BlockNode'
 
 const NODE_TYPES = { [BLOCK]: BlockNode }
 
-function stepTone(step) {
+function stepTone(step, def) {
   if (step.status === 'FAILED') return 'danger'
   if (step.status === 'WAITING' || step.status === 'RUNNING') return 'waiting'
   if (step.status === 'SKIPPED') return 'skipped'
-  return BAD_PORTS.has(step.port) ? 'warning' : 'success'
+  return portTone(def, step.port) === 'bad' ? 'warning' : 'success'
 }
 
 /** Read-only replay of a run on its graph snapshot: executed blocks coloured, taken edges lit. */
@@ -36,7 +36,7 @@ export default function RunCanvas({ run }) {
       return {
         def: defs[n.type],
         dimmed: !step,
-        run: step ? { tone: stepTone(step), label: step.message } : null,
+        run: step ? { tone: stepTone(step, defs[n.type]), label: step.message } : null,
       }
     })
     // A link is lit when its output was taken and the block it leads to ran.

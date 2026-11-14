@@ -67,7 +67,7 @@ def run_and_titles(db: Session, clock: Clock) -> tuple[WorkflowRun, list[str]]:
 
 def test_catalog_entry_has_outcome_outputs_and_settings() -> None:
     entry = {e["type"]: e for e in catalog()}["diagnose.classify_log"]
-    assert entry["label"] == "Diagnose failure"
+    assert entry["label"] == "Classify the failure"
     assert entry["ports"] == ["retryable", "needs_fix", "unknown", "next"]
     assert entry["port_labels"]["needs_fix"] == "needs a fix"
     assert {"min_confidence_pct", "refresh"} <= set(entry["config_schema"]["properties"])
@@ -77,7 +77,7 @@ def test_old_and_new_wiring_validate() -> None:
     assert validate_graph(graph()).nodes["c"].config == {"min_confidence_pct": None,
                                                           "refresh": False}
     assert validate_graph(graph(wired=("next",))).next_nodes("c", "next") == ["n_next"]
-    with pytest.raises(Exception, match="min_confidence_pct"):
+    with pytest.raises(Exception, match=r"Minimum confidence \(%\)"):
         validate_graph(graph({"min_confidence_pct": 150}))
 
 

@@ -4,6 +4,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
+import anyio
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -22,6 +23,22 @@ from app.schemas.connector_metrics import (
 from app.services.airflow_service import adapter_for
 
 logger = logging.getLogger(__name__)
+
+
+async def _list_dag_runs(adapter, dags):
+    results = {}
+
+    async def fetch(dag):
+        try:
+            results[dag.dag_id] = await adapter.list_dag_runs(dag.dag_id, limit=25)
+        except Exception as exc:
+            logger.debug("Failed to list DAG runs for %s: %s", dag.dag_id, exc)
+            results[dag.dag_id] = []
+
+    async with anyio.create_task_group() as task_group:
+        for dag in dags:
+            task_group.start_soon(fetch, dag)
+    return results
 
 
 def _rate(success: int, total: int) -> float:
@@ -71,11 +88,12 @@ def get_connector_metrics(db: Session) -> ConnectorMetricsResponse:
 
         try:
             adapter = adapter_for(conn)
+            runs_by_dag = run_async(
+                lambda adapter=adapter, dags=dags: _list_dag_runs(adapter, dags)
+            )
             for dag in dags:
                 try:
-                    runs = run_async(
-                        lambda d_id=dag.dag_id: adapter.list_dag_runs(d_id, limit=25)
-                    )
+                    runs = runs_by_dag.get(dag.dag_id, [])
                     for r in runs:
                         if r.state == "success":
                             success_runs += 1
@@ -84,7 +102,12 @@ def get_connector_metrics(db: Session) -> ConnectorMetricsResponse:
                         if r.end_date and (last_run_at is None or r.end_date > last_run_at):
                             last_run_at = r.end_date
                 except Exception as dag_err:
-                    logger.debug("Failed to list DAG runs for %s on %s: %s", dag.dag_id, conn.name, dag_err)
+                    logger.debug(
+                        "Could not process DAG runs for %s on %s: %s",
+                        dag.dag_id,
+                        conn.name,
+                        dag_err,
+                    )
         except Exception as conn_err:
             logger.debug("Could not initialize adapter for %s: %s", conn.name, conn_err)
 

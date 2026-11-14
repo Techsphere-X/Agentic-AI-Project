@@ -100,9 +100,13 @@ def test_diagnostic_llm_success_parses_json() -> None:
         "message": {
             "content": json.dumps(
                 {
+                    "evidence_line": (
+                        "psycopg2.OperationalError: FATAL: remaining connection slots reserved"
+                    ),
+                    "category": "RESOURCE",
                     "summary": "Database connection pool exhausted.",
                     "root_cause": "Max connections reached on postgres instance.",
-                    "failed_location": "backend/app/db/session.py:42",
+                    "failed_location": "session.py:42",
                     "suggested_fix": "Increase DB_POOL_SIZE or release leaked connections.",
                     "retry_safe": True,
                     "confidence": 0.95,
@@ -118,12 +122,18 @@ def test_diagnostic_llm_success_parses_json() -> None:
         return httpx.Response(200, json=sample_response)
 
     llm = make_diagnostic_llm(handler)
-    result = llm.analyze("psycopg2.OperationalError: FATAL: remaining connection slots reserved")
+    result = llm.analyze(
+        'File "/app/db/session.py", line 42\n'
+        "psycopg2.OperationalError: FATAL: remaining connection slots reserved"
+    )
 
     assert result is not None
     assert result["summary"] == "Database connection pool exhausted."
     assert result["root_cause"] == "Max connections reached on postgres instance."
-    assert result["failed_location"] == "backend/app/db/session.py:42"
+    assert result["category"] == "RESOURCE"
+    assert result["label"] == "Out of memory or disk"
+    assert result["evidence_line"].startswith("psycopg2.OperationalError")
+    assert result["failed_location"] == "session.py:42"
     assert result["suggested_fix"] == "Increase DB_POOL_SIZE or release leaked connections."
     assert result["retry_safe"] is True
     assert result["confidence"] == 0.95
@@ -137,6 +147,10 @@ def test_diagnostic_llm_success_parses_json() -> None:
     assert body["think"] is False
     assert body["stream"] is False
     assert "remaining connection slots" in body["messages"][1]["content"]
+    assert body["options"]["num_ctx"] == get_settings().DIAGNOSTIC_LLM_NUM_CTX
+    assert body["options"]["num_predict"] == get_settings().DIAGNOSTIC_LLM_MAX_TOKENS
+    assert "CODE_BUG" in body["format"]["properties"]["category"]["enum"]
+    assert list(body["format"]["properties"])[0] == "evidence_line"
 
 
 def test_diagnostic_llm_clamps_confidence() -> None:
@@ -144,6 +158,7 @@ def test_diagnostic_llm_clamps_confidence() -> None:
         "message": {
             "content": json.dumps(
                 {
+                    "evidence_line": "OSError: [Errno 28] No space left on device",
                     "summary": "Disk full",
                     "root_cause": "No space left on device",
                     "suggested_fix": "Clean tmp files",
@@ -226,8 +241,12 @@ def test_api_classify_with_llm(
     monkeypatch.setattr(get_settings(), "DIAGNOSTIC_LLM_ENABLED", True)
 
     class FakeDiagLLM:
-        def analyze(self, log_text: str) -> dict[str, Any]:
+        def analyze(self, log_text: str, hint: Any = None) -> dict[str, Any]:
             return {
+                "category": "RESOURCE",
+                "label": "Out of memory or disk",
+                "evidence_line": "Task exited with return code -9 (OOMKilled)",
+                "window": "Task exited with return code -9 (OOMKilled)",
                 "summary": "Memory limit exceeded during sorting.",
                 "root_cause": "Worker killed by OOM killer.",
                 "failed_location": "dags/etl_orders.py:120",
@@ -255,6 +274,17 @@ def test_api_classify_with_llm(
     assert llm["suggested_fix"] == "Allocate more memory in Kubernetes pod spec."
     assert llm["retry_safe"] is False
     assert llm["model"] == "qwen3:4b"
+    # Qwen's answer is the final diagnosis; DistilBERT is not consulted.
+    assert data["model"] is None
+    assert data["ml_status"] == "used"
+    assert data["window"] == "Task exited with return code -9 (OOMKilled)"
+    final = data["final"]
+    assert (final["category"], final["source"], final["model_version"]) == (
+        "RESOURCE",
+        "model",
+        "qwen3:4b",
+    )
+    assert final["matched_line"] == "Task exited with return code -9 (OOMKilled)"
 
 
 def test_api_classify_skip_llm_when_use_llm_false(
@@ -287,7 +317,7 @@ def test_api_classify_graceful_when_llm_throws(
     monkeypatch.setattr(get_settings(), "DIAGNOSTIC_LLM_ENABLED", True)
 
     class CrashingLLM:
-        def analyze(self, _log: str) -> dict[str, Any]:
+        def analyze(self, _log: str, _hint: Any = None) -> dict[str, Any]:
             raise RuntimeError("Ollama connection failed unexpectedly")
 
     monkeypatch.setattr(diagnosis_api, "get_diagnostic_llm", lambda: CrashingLLM())
@@ -302,3 +332,108 @@ def test_api_classify_graceful_when_llm_throws(
     # API succeeded and safely defaulted llm_analysis to None
     assert data["llm_analysis"] is None
     assert data["regex"]["category"] == "DATA_INTEGRITY"
+    # Falls back to the pattern rules when Qwen is unavailable
+    assert data["ml_status"] == "unavailable"
+    assert data["final"]["category"] == "DATA_INTEGRITY"
+    assert data["final"]["source"] == "regex"
+
+
+def test_api_classify_never_calls_ml_service(
+    client: TestClient,
+    viewer_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services import diagnosis_service
+
+    monkeypatch.setattr(get_settings(), "ML_SERVICE_ENABLED", True)
+
+    def boom() -> None:
+        raise AssertionError("Log Analyzer must not call the DistilBERT ML service")
+
+    monkeypatch.setattr(diagnosis_service, "model_client", boom)
+    response = client.post(
+        "/api/v1/diagnosis/classify",
+        json={"log": "KeyError: 'order_total'"},
+        headers=viewer_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["model"] is None
+
+
+# ------------------------------------------------------------------ Context, prompt, grounding
+
+
+def answering(answer: dict[str, Any], sent: list[httpx.Request] | None = None) -> DiagnosticLLM:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if sent is not None:
+            sent.append(request)
+        return httpx.Response(200, json={"message": {"content": json.dumps(answer)}})
+
+    return make_diagnostic_llm(handler)
+
+
+def test_prepare_log_context_keeps_first_traceback_and_tail() -> None:
+    lines = [
+        f"[2026-10-01, 12:00:{i % 60:02d} UTC] {{taskinstance.py:1}} INFO - step {i}"
+        for i in range(300)
+    ]
+    lines[50] = "Traceback (most recent call last):"
+    lines[52] = "KeyError: 'order_total'"
+    scrubbed = _prepare_log_context("\n".join(lines))
+    assert "Traceback (most recent call last):" in scrubbed
+    assert "KeyError: 'order_total'" in scrubbed
+    assert "INFO - step 299" in scrubbed
+    assert "lines omitted" in scrubbed
+    assert "INFO - step 0" not in scrubbed
+    assert "taskinstance.py" not in scrubbed  # Airflow prefix stripped
+    assert len(scrubbed.splitlines()) <= MAX_PROMPT_LOG_LINES
+
+
+def test_prompt_includes_regex_hint_and_task_ids() -> None:
+    from app.diagnosis.log_classifier import classify
+
+    sent: list[httpx.Request] = []
+    log = "dag_id=orders task_id=load\nKeyError: 'order_total'"
+    answering({"category": "CODE_BUG", "evidence_line": "KeyError: 'order_total'"}, sent).analyze(
+        log, classify(log)
+    )
+    body = json.loads(sent[0].content)
+    user = body["messages"][1]["content"]
+    assert "Pattern-rule hint: CODE_BUG" in user
+    assert "dag_id=orders" in user and "task_id=load" in user
+    assert "UPSTREAM_MISSING" in body["messages"][0]["content"]
+
+
+def test_invalid_category_becomes_unknown() -> None:
+    result = answering({"category": "COSMIC_RAYS", "confidence": 0.9}).analyze("boom")
+    assert result is not None
+    assert (result["category"], result["label"]) == ("UNKNOWN", "Unknown")
+
+
+def test_invented_evidence_and_location_are_dropped() -> None:
+    result = answering(
+        {
+            "category": "CODE_BUG",
+            "evidence_line": "TypeError: something the log never said",
+            "failed_location": "dags/made_up.py:12",
+            "confidence": 0.95,
+        }
+    ).analyze("KeyError: 'order_total'")
+    assert result is not None
+    assert result["evidence_line"] is None
+    assert result["failed_location"] is None
+    assert result["confidence"] == 0.5
+
+
+def test_retry_safe_forced_off_for_code_bug() -> None:
+    result = answering(
+        {
+            "category": "CODE_BUG",
+            "evidence_line": "KeyError: 'order_total'",
+            "retry_safe": True,
+            "confidence": 0.9,
+        }
+    ).analyze("KeyError: 'order_total'")
+    assert result is not None
+    assert result["retry_safe"] is False
+    assert result["confidence"] == 0.9

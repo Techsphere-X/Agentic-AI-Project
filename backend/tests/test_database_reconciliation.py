@@ -73,7 +73,7 @@ def run_reconciliation(
 
 def test_catalog_and_graph_validation_for_reconciliation() -> None:
     entry = next(item for item in catalog() if item["type"] == "database.reconcile")
-    assert entry["label"] == "Reconcile databases"
+    assert entry["label"] == "Compare two databases"
     assert entry["ports"] == ["matched", "mismatched", "failed"]
     graph = {
         "nodes": [

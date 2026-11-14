@@ -2,11 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { Badge, Button } from '../../components/ui'
 import { automationApi } from '../../services/endpoints'
 
-const STARTERS = [
-  'When a DAG run fails, analyze the task logs, ask for approval on PROD, then retry the failed tasks and check it worked.',
-  'Every morning at 7, run a data check on the orders table and notify the team if it fails.',
-  'When an incident recurs more than 3 times, escalate it and send a critical notification.',
-]
 const CHANGE_SIGN = { added: '+', changed: '~', removed: '−' }
 
 function ChangeSummary({ changes }) {
@@ -145,19 +140,6 @@ export default function AssistantPanel({ status, getGraph, problems, fixRequest,
       </div>
 
       <div className="assistant-messages" ref={listRef} aria-live="polite">
-        {messages.length === 0 && (
-          <div className="assistant-empty">
-            <p className="muted small">
-              Describe what the workflow should do. I propose a graph; you review it, apply it to the canvas and save
-              as usual.
-            </p>
-            {STARTERS.map((text) => (
-              <button key={text} type="button" className="assistant-starter" disabled={busy} onClick={() => send('chat', text)}>
-                {text}
-              </button>
-            ))}
-          </div>
-        )}
         {messages.map((m, i) => (
           <div key={i} className={`assistant-msg assistant-${m.role} ${m.error ? 'assistant-error' : ''}`}>
             <div className="assistant-text">{m.content}</div>
@@ -180,7 +162,7 @@ export default function AssistantPanel({ status, getGraph, problems, fixRequest,
         <textarea
           rows={3}
           value={draft}
-          placeholder="e.g. Add an approval step before retrying"
+          placeholder="Describe the workflow…"
           aria-label="Message the assistant"
           maxLength={4000}
           onChange={(e) => setDraft(e.target.value)}

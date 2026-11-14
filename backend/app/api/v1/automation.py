@@ -5,7 +5,8 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Request
 
 from app.automation import assistant
-from app.automation.graph import catalog
+from app.automation import cron as cron_schedule
+from app.automation.graph import catalog, graph_warnings, validate_graph
 from app.automation.templates import ALL_TEMPLATES
 from app.automation.types import ApprovalStatus, DagRunCheckStatus, RunStatus
 from app.connectors.assistant_llm import AssistantUnavailable, get_assistant_llm, model_name
@@ -19,6 +20,7 @@ from app.core.dependencies import (
     ViewerUser,
 )
 from app.core.exceptions import AppError, BadRequestError
+from app.db.base import utcnow
 from app.models.automation import Workflow
 from app.schemas.automation import (
     ApprovalRead,
@@ -30,10 +32,14 @@ from app.schemas.automation import (
     AutomationSummary,
     DagRunCheckRead,
     DecisionRequest,
+    DeleteRunsRequest,
+    DeleteRunsResult,
     GraphCheck,
     GraphCheckResult,
     ManualRunRequest,
     MarkedRead,
+    NodeTestRequest,
+    NodeTestResult,
     NodeTypeRead,
     NotificationRead,
     TemplatePreview,
@@ -44,6 +50,8 @@ from app.schemas.automation import (
     WorkflowRunDetail,
     WorkflowRunRead,
     WorkflowUpdate,
+    WorkflowVersionDetail,
+    WorkflowVersionRead,
 )
 from app.schemas.common import Page
 from app.services import automation_service
@@ -124,7 +132,8 @@ def create_workflow(
 @router.post("/workflows/validate", response_model=GraphCheckResult)
 def validate_workflow_graph(body: GraphCheck, _: ViewerUser) -> GraphCheckResult:
     graph, problems = automation_service.check_graph(body.graph)
-    return GraphCheckResult(valid=not problems, problems=problems, graph=graph)
+    warnings = graph_warnings(validate_graph(graph)) if graph is not None else []
+    return GraphCheckResult(valid=not problems, problems=problems, warnings=warnings, graph=graph)
 
 
 # -------------------------------------------------------------------- assistant
@@ -198,6 +207,73 @@ def update_workflow(
 # ---------------------------------------------------------------------- runs
 
 
+@router.get("/workflows/{workflow_id}/webhook")
+def get_webhook(workflow_id: uuid.UUID, db: DbSession, admin: AdminUser) -> dict[str, str]:
+    """The secret URL path of a 'When a webhook is called' workflow (made on first use)."""
+    token = automation_service.webhook_token(db, workflow_id, actor=admin)
+    return {"path": f"{get_settings().API_V1_STR}/hooks/{workflow_id}/{token}"}
+
+
+@router.post("/workflows/{workflow_id}/webhook/rotate")
+def rotate_webhook(workflow_id: uuid.UUID, db: DbSession, admin: AdminUser) -> dict[str, str]:
+    """A new secret URL; the old one stops working."""
+    token = automation_service.webhook_token(db, workflow_id, actor=admin, rotate=True)
+    return {"path": f"{get_settings().API_V1_STR}/hooks/{workflow_id}/{token}"}
+
+
+@router.get("/workflows/{workflow_id}/versions", response_model=list[WorkflowVersionRead])
+def list_versions(
+    workflow_id: uuid.UUID, db: DbSession, _: ViewerUser
+) -> list[WorkflowVersionRead]:
+    return [
+        WorkflowVersionRead.model_validate(v)
+        for v in automation_service.list_versions(db, workflow_id)
+    ]
+
+
+@router.get("/workflows/{workflow_id}/versions/{version}", response_model=WorkflowVersionDetail)
+def get_version(
+    workflow_id: uuid.UUID, version: int, db: DbSession, _: ViewerUser
+) -> WorkflowVersionDetail:
+    return WorkflowVersionDetail.model_validate(
+        automation_service.get_version(db, workflow_id, version)
+    )
+
+
+@router.post("/workflows/{workflow_id}/versions/{version}/restore", response_model=WorkflowRead)
+def restore_version(
+    workflow_id: uuid.UUID, version: int, db: DbSession, admin: AdminUser, ip: ClientIp
+) -> WorkflowRead:
+    """Make an older version the current one again (as a new version)."""
+    automation_service.restore_version(db, workflow_id, version, actor=admin, ip_address=ip)
+    return _workflow(automation_service.get_workflow(db, workflow_id))
+
+
+@router.post("/workflows/test-node", response_model=NodeTestResult)
+def test_node(body: NodeTestRequest, db: DbSession, _: OperatorUser) -> NodeTestResult:
+    """Run one block as a dry run (nothing is changed or kept) to see what it would do."""
+    return NodeTestResult(
+        **automation_service.test_node(
+            db, body.graph, body.node_id, workflow_id=body.workflow_id, input=body.input
+        )
+    )
+
+
+@router.get("/schedule-preview")
+def schedule_preview(
+    _: ViewerUser,
+    cron: str,
+    timezone: str = "UTC",
+    count: Annotated[int, Query(ge=1, le=10)] = 3,
+) -> dict[str, list[str]]:
+    """The next times a cron schedule fires (for the schedule form)."""
+    try:
+        times = cron_schedule.next_times(cron, timezone, utcnow(), count)
+    except cron_schedule.CronError as exc:
+        raise BadRequestError(str(exc)) from exc
+    return {"next": [t.isoformat() for t in times]}
+
+
 @router.get("/runs", response_model=Page[WorkflowRunRead])
 def list_runs(
     db: DbSession,
@@ -206,12 +282,14 @@ def list_runs(
     status: Annotated[list[RunStatus] | None, Query()] = None,
     workflow_id: uuid.UUID | None = None,
     incident_id: uuid.UUID | None = None,
+    trigger: Annotated[list[str] | None, Query()] = None,
 ) -> Page[WorkflowRunRead]:
     items, total = automation_service.list_runs(
         db,
         statuses=status,
         workflow_id=workflow_id,
         incident_id=incident_id,
+        trigger_events=trigger,
         limit=page.limit,
         offset=page.offset,
     )
@@ -250,6 +328,13 @@ def latest_run_checks(db: DbSession, _: ViewerUser) -> list[DagRunCheckRead]:
     return [DagRunCheckRead.model_validate(c) for c in checks]
 
 
+@router.delete("/run-checks/{check_id}", status_code=204)
+def delete_run_check(
+    check_id: uuid.UUID, db: DbSession, admin: AdminUser, ip: ClientIp
+) -> None:
+    automation_service.delete_run_check(db, check_id, actor=admin, ip_address=ip)
+
+
 @router.post("/workflows/{workflow_id}/run", response_model=WorkflowRunDetail, status_code=201)
 def run_workflow(
     workflow_id: uuid.UUID,
@@ -259,7 +344,11 @@ def run_workflow(
 ) -> WorkflowRunDetail:
     """Run now, for workflows started on demand or on a schedule."""
     run = automation_service.start_manual_run(
-        db, workflow_id, actor=operator, dry_run=body.dry_run if body else None
+        db,
+        workflow_id,
+        actor=operator,
+        dry_run=body.dry_run if body else None,
+        input=body.input if body else None,
     )
     db.expire_all()
     return WorkflowRunDetail.model_validate(automation_service.get_run(db, run.id))
@@ -277,6 +366,21 @@ def cancel_run(
     automation_service.cancel_run(db, run_id, actor=operator, ip_address=ip)
     db.expire_all()
     return WorkflowRunDetail.model_validate(automation_service.get_run(db, run_id))
+
+
+@router.delete("/runs/{run_id}", status_code=204)
+def delete_run(run_id: uuid.UUID, db: DbSession, admin: AdminUser, ip: ClientIp) -> None:
+    """Delete a finished run (cancel an active one first)."""
+    automation_service.delete_runs(db, [run_id], actor=admin, ip_address=ip)
+
+
+@router.post("/runs/delete", response_model=DeleteRunsResult)
+def delete_runs(
+    body: DeleteRunsRequest, db: DbSession, admin: AdminUser, ip: ClientIp
+) -> DeleteRunsResult:
+    """Delete several finished runs at once (at most 200)."""
+    deleted = automation_service.delete_runs(db, body.run_ids, actor=admin, ip_address=ip)
+    return DeleteRunsResult(deleted=deleted)
 
 
 @router.get("/status", response_model=AutomationStatus)
@@ -361,6 +465,13 @@ def reject(
     return _decide(approval_id, body, db, operator, ip, approve=False)
 
 
+@router.delete("/approvals/{approval_id}", status_code=204)
+def delete_approval(
+    approval_id: uuid.UUID, db: DbSession, admin: AdminUser, ip: ClientIp
+) -> None:
+    automation_service.delete_approval(db, approval_id, actor=admin, ip_address=ip)
+
+
 # ---------------------------------------------------------------------- notifications & summary
 
 
@@ -382,6 +493,13 @@ def list_notifications(
 @router.post("/notifications/read-all", response_model=MarkedRead)
 def read_all(db: DbSession, _: ViewerUser) -> MarkedRead:
     return MarkedRead(updated=automation_service.mark_all_read(db))
+
+
+@router.delete("/notifications/{notification_id}", status_code=204)
+def delete_notification(
+    notification_id: uuid.UUID, db: DbSession, admin: AdminUser, ip: ClientIp
+) -> None:
+    automation_service.delete_notification(db, notification_id, actor=admin, ip_address=ip)
 
 
 @router.get("/summary", response_model=AutomationSummary)

@@ -20,17 +20,62 @@ class NodeTypeRead(BaseModel):
     label: str
     category: str
     description: str
+    summary: str  # one line for the editor; `description` has the details
     ports: list[str]
     port_labels: dict[str, str]
+    port_tones: dict[str, Literal["good", "bad", "neutral"]] = Field(default_factory=dict)
+    stage: str
     needs_incident: bool = False
+    needs_target: bool = False
     needs_dag_run: bool = False
+    is_action: bool = False
+    outputs: list[str] = Field(default_factory=list)
+    dynamic_ports: str | None = None  # "dags": one output per entry in config.dags
     config_schema: dict[str, Any]
 
 
+class DeleteRunsRequest(BaseModel):
+    run_ids: list[uuid.UUID] = Field(min_length=1, max_length=200)
+
+
+class DeleteRunsResult(BaseModel):
+    deleted: int
+
+
 class ManualRunRequest(BaseModel):
-    """Start a run now; `dry_run` None follows the workflow's mode."""
+    """Start a run now; `dry_run` None follows the workflow's mode. `input` is offered to the
+    run as {{trigger.body.*}} (e.g. to try a webhook workflow)."""
 
     dry_run: bool | None = None
+    input: dict[str, Any] | None = None
+
+
+class WorkflowVersionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    version: int
+    name: str
+    created_at: datetime
+    created_by_name: str | None = None
+
+
+class WorkflowVersionDetail(WorkflowVersionRead):
+    graph: dict[str, Any]
+
+
+class NodeTestRequest(BaseModel):
+    graph: dict[str, Any]
+    node_id: str = Field(min_length=1, max_length=100)
+    workflow_id: uuid.UUID | None = None  # use the context of this workflow's latest run
+    input: dict[str, Any] | None = None  # or this context, e.g. {"trigger": {"body": {...}}}
+
+
+class NodeTestResult(BaseModel):
+    port: str | None
+    output: dict[str, Any]
+    message: str | None
+    waits: bool = False
+    error: str | None = None
 
 
 class TemplateRead(BaseModel):
@@ -90,6 +135,8 @@ class TemplatePreview(BaseModel):
 class GraphCheckResult(BaseModel):
     valid: bool
     problems: list[dict[str, str]]
+    # Non-blocking, e.g. a {{placeholder}} no earlier block provides.
+    warnings: list[dict[str, str]] = Field(default_factory=list)
     graph: dict[str, Any] | None
 
 

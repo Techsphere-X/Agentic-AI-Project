@@ -58,6 +58,13 @@ def prod_partner(client: TestClient, admin_headers: dict) -> dict:
 def test_catalog_and_templates_are_readable(client: TestClient, viewer_headers: dict) -> None:
     types = client.get(f"{API}/node-types", headers=viewer_headers).json()
     assert {t["type"] for t in types} >= {"trigger.incident", "approval.request", "notify"}
+    # The editor groups, colours and marks blocks from these fields, so the API must send them.
+    by_type = {t["type"]: t for t in types}
+    assert by_type["flow.wait"]["stage"] == "decide"
+    assert by_type["flow.wait"]["summary"] == "Waits, then continues."
+    assert by_type["database.check"]["port_tones"] == {"pass": "good", "fail": "bad"}
+    assert by_type["pipeline.run_dag"]["is_action"] is True
+    assert "diagnosis.label" in by_type["diagnose.classify_log"]["outputs"]
     templates = client.get(f"{API}/templates", headers=viewer_headers).json()
     assert [t["key"] for t in templates] == [t.key for t in ALL_TEMPLATES]
     parameterized = next(t for t in templates if t["key"] == "run-verify-dag")

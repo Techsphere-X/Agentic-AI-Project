@@ -9,15 +9,16 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select, text
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import Session
 
 from app.automation.graph import GraphError, validate_graph
 from app.automation.types import ApprovalStatus, RunStatus, WorkflowMode
 from app.connectors import database as db_connector
-from app.core.exceptions import ConflictError
+from app.core.exceptions import BadRequestError, ConflictError
 from app.models.airflow import AirflowConnection, ConnectionKind, DeploymentEnvironment
-from app.models.automation import Approval, Notification, Workflow, WorkflowRun
+from app.models.audit_log import AuditLog
+from app.models.automation import Approval, Notification, Workflow, WorkflowRun, WorkflowStep
 from app.models.database_connection import DatabaseConnection, DatabaseEngine
 from app.models.user import User
 from app.orchestration.airflow import mock as mock_module
@@ -28,7 +29,10 @@ from app.services.automation_nodes import compare
 
 class Clock:
     def __init__(self) -> None:
-        self.now = datetime.now(UTC).replace(microsecond=0)
+        # The mock shows a scheduled run as "running" for the first 2 minutes of each 5-minute
+        # slot; start 3 minutes into a slot so no test finds a run already active by chance.
+        now = datetime.now(UTC).replace(second=0, microsecond=0)
+        self.now = now - timedelta(minutes=now.minute % 5) - timedelta(minutes=2)
 
     def __call__(self) -> datetime:
         return self.now
@@ -141,11 +145,11 @@ def steps(run: WorkflowRun) -> list[tuple[str, str | None]]:
 # ---------------------------------------------------------------------- validation
 
 
-def test_incident_blocks_need_an_incident_trigger() -> None:
+def test_dag_run_blocks_need_a_dag_or_incident_trigger() -> None:
     graph = chain({"id": "fix", "type": "action.clear_failed_tasks", "config": {}})
     with pytest.raises(GraphError) as exc:
         validate_graph(graph)
-    assert "needs an incident trigger" in exc.value.problems[0]["message"]
+    assert "works on a DAG run" in exc.value.problems[0]["message"]
 
 
 def test_targets_must_be_chosen_and_parameters_valid() -> None:
@@ -362,7 +366,7 @@ def test_check_gives_up_after_its_window(db: Session, admin: User, clock: Clock,
     tick(db, clock)
     run = db.get(WorkflowRun, run.id)
     assert steps(run)[-1] == ("ready", "fail")
-    assert run.context["last_error"] == "Data check failed: got 0, expected > 0."
+    assert run.context["last_error"] == "Data check 'ready' failed: got 0, expected > 0."
 
 
 def test_wait_for_dag_sees_a_recent_success(db: Session, admin: User, clock: Clock) -> None:
@@ -475,8 +479,9 @@ def test_run_now_rules(
 ) -> None:
     automation_service.seed_templates(db)
     incident_wf = db.scalars(select(Workflow).where(Workflow.key == "retry-transient")).one()
-    manual_run = automation_service.start_manual_run(db, incident_wf.id, actor=admin)
-    assert manual_run is not None
+    # An incident workflow needs an open incident its trigger reacts to.
+    with pytest.raises(BadRequestError, match="No open incident matches"):
+        automation_service.start_manual_run(db, incident_wf.id, actor=admin)
 
     wf = workflow(db, chain({"id": "pause", "type": "flow.wait", "config": {"minutes": 5}}))
     run = run_now(db, wf, admin, clock)
@@ -564,7 +569,7 @@ def test_orchestration_blocks_are_in_the_catalog(client: TestClient, viewer_head
     assert props["dag_id"]["x-widget"] == "dag"
     assert types["pipeline.run_dag"]["ports"] == ["success", "in_progress", "failed"]
     assert types["pipeline.run_dag"]["port_labels"]["in_progress"] == "in progress"
-    assert types["action.clear_failed_tasks"]["needs_incident"] is True
+    assert types["action.clear_failed_tasks"]["needs_target"] is True
     assert types["database.check"]["needs_incident"] is False
 
 
@@ -713,3 +718,49 @@ def test_one_approval_covers_every_linked_block(
         ("rerun", "success"),
     ]
     assert count(warehouse, "orders") == 1
+
+
+def test_delete_runs(
+    db: Session,
+    admin: User,
+    clock: Clock,
+    client: TestClient,
+    admin_headers: dict,
+    operator_headers: dict,
+) -> None:
+    done = workflow(db, chain({"id": "note", "type": "flow.wait", "config": {"minutes": 1}}))
+    first = run_now(db, done, admin, clock)
+    clock.advance(minutes=1)
+    tick(db, clock)
+    second = run_now(db, done, admin, clock)
+    first_id, second_id = first.id, second.id
+    url = f"/api/v1/automation/runs/{first_id}"
+    assert db.get(WorkflowRun, second_id).status == RunStatus.WAITING
+    assert db.scalar(select(func.count()).select_from(WorkflowStep)) > 0
+
+    # Active runs must be cancelled first; nothing is deleted when one of them is active.
+    with pytest.raises(ConflictError, match="still active"):
+        automation_service.delete_runs(db, [first_id, second_id], actor=admin)
+    assert db.get(WorkflowRun, first_id) is not None
+
+    # Only admins delete runs.
+    assert client.delete(url, headers=operator_headers).status_code == 403
+
+    response = client.delete(url, headers=admin_headers)
+    assert response.status_code == 204, response.text
+    db.expire_all()
+    assert db.get(WorkflowRun, first_id) is None
+    assert client.get(url, headers=admin_headers).status_code == 404
+    assert db.scalar(select(AuditLog).where(AuditLog.action == "automation.run_deleted"))
+
+    automation_service.cancel_run(db, second_id, actor=admin)
+    response = client.post(
+        "/api/v1/automation/runs/delete", json={"run_ids": [str(second_id)]}, headers=admin_headers
+    )
+    assert response.json() == {"deleted": 1}
+    db.expire_all()
+    assert db.scalar(select(func.count()).select_from(WorkflowRun)) == 0
+    assert db.scalar(select(func.count()).select_from(WorkflowStep)) == 0  # steps go with the run
+
+    missing = client.delete(url, headers=admin_headers)
+    assert missing.status_code == 404

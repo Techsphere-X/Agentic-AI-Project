@@ -44,7 +44,9 @@ export default function App() {
 
       <Route element={<RequireAuth />}>
         <Route element={<AppLayout />}>
-          <Route index element={<Dashboard />} />
+          {/* The builder is the home page; the pipelines dashboard has its own page. */}
+          <Route index element={<Navigate to="/automation/workflows" replace />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/incidents" element={<IncidentList />} />
           <Route path="/incidents/:id" element={<IncidentDetail />} />
           <Route path="/automation/approvals" element={<Approvals />} />

@@ -227,6 +227,33 @@ def test_retry_transient_in_dev_fixes_and_resolves(db: Session, partner_clock: C
     assert detect(db, partner_clock).automation_queued == 0
 
 
+def test_newer_failure_during_the_run_keeps_the_incident_open(
+    db: Session, partner_clock: Clock
+) -> None:
+    make_env(db, DeploymentEnvironment.DEV, "partner_api_sync")
+    enable(db, "retry-transient")
+    detect(db, partner_clock)
+    incident = only(db, Incident)
+    run = only(db, WorkflowRun)
+    tick(db, partner_clock)
+    assert run.status == RunStatus.WAITING  # retried, verifying
+
+    # The DAG fails again (another run) while the retry is being verified.
+    partner_clock.advance(seconds=10)
+    incident.occurrence_count += 1
+    incident.last_seen_at = partner_clock()
+    db.commit()
+
+    partner_clock.advance(seconds=mock_module.RERUN_SECONDS + 1)
+    tick(db, partner_clock)
+    assert run.status == RunStatus.COMPLETED
+    resolve = next(s for s in run.steps if s.node_id == "resolve")
+    assert resolve.output == {"skipped": True, "reason": "newer failure"}
+    assert incident.status == IncidentStatus.OPEN
+    assert incident.resolution is None
+    assert "automation_note" in events(incident)
+
+
 # ---------------------------------------------------------------------- approvals
 
 
@@ -655,7 +682,12 @@ def test_stale_escalation(db: Session, orders_clock: Clock) -> None:
     assert old.severity == IncidentSeverity.HIGH
     assert fresh.severity == acked.severity == IncidentSeverity.MEDIUM
     assert "Severity raised to HIGH" in only(db, Notification).body
-    assert tick(db, orders_clock).enqueued == 0  # once per incident
+    assert tick(db, orders_clock).enqueued == 0  # once per occurrence
+
+    # It happens again and is still ignored: the next tick reminds again.
+    old.occurrence_count += 1
+    db.commit()
+    assert tick(db, orders_clock).enqueued == 1
 
 
 # ---------------------------------------------------------------------- mechanics

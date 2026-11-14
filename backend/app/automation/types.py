@@ -52,6 +52,8 @@ class TriggerEvent(StrEnum):
     MANUAL = "manual"  # "Run now"
     SCHEDULE = "schedule"
     DAG_RUN = "dag_run"  # a monitored DAG run finished
+    WEBHOOK = "webhook"  # the workflow's secret URL was called
+    CALLED = "called"  # started by another workflow ('Run another workflow', 'For each row')
 
 
 class DagRunCheckStatus(StrEnum):

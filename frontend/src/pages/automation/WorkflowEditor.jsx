@@ -20,19 +20,23 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import SchemaForm from '../../components/flow/SchemaForm'
 import {
   BLOCK,
+  DEFAULT_RUN_SETTINGS,
   connect,
   connectionProblem,
   defaultConfig,
   fromFlow,
+  hasRunSettings,
   isTrigger,
   linkOrder,
   nextNodeId,
   parseBlockPayload,
+  prunePortEdges,
+  retargetTriggerEdges,
   retypeNode,
   toFlow,
 } from '../../components/flow/graph'
 import { layeredLayout } from '../../components/flow/layout'
-import { Alert, Badge, Button } from '../../components/ui'
+import { Alert, Badge, Button, Modal } from '../../components/ui'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { channelState, connectionState, databaseState } from '../../connectionState'
@@ -47,33 +51,60 @@ const EDGE_OPTIONS = { markerEnd: { type: MarkerType.ArrowClosed, width: 18, hei
 // Never zoom past 100% when fitting: a small graph at 2x makes new blocks cover existing ports.
 const FIT_VIEW = { padding: 0.2, maxZoom: 1 }
 const DRAG_TYPE = 'application/x-workflow-block'
-// Sub-headings inside a palette stage that holds several categories.
-const CATEGORY_TITLES = {
-  pipeline: 'Pipelines (Airflow)',
-  database: 'Databases',
-  logic: 'Decide & AI solution',
-  diagnosis: 'Diagnose & analyze logs',
-  approval: 'Ask a human',
-  action: "Fix the incident's DAG",
-  verify: 'Check',
-  output: 'Record & notify',
+const DAG_TRIGGER = 'trigger.dag'
+// Sub-headings inside a palette stage, per stage and block category.
+const SUB_TITLES = {
+  check: { logic: 'Incident & DAG', database: 'Data' },
+  decide: { logic: 'Decide', approval: 'People', pipeline: 'Other DAGs' },
+  act: {
+    pipeline: 'Pipelines (Airflow)',
+    database: 'Databases',
+    action: "The workflow's DAG",
+    integration: 'Other systems & workflows',
+  },
 }
+// Values every run offers to {{placeholders}}, by what started it (see render_values).
+const RUN_VARIABLES = ['workflow.name', 'workflow.trigger', 'environment', 'last_error', 'links.run', 'links.approvals']
+const INCIDENT_VARIABLES = [
+  'incident.title',
+  'incident.dag_id',
+  'incident.severity',
+  'incident.type',
+  'incident.status',
+  'incident.occurrence_count',
+  'incident.run_id',
+  'incident.id',
+]
+const DAG_RUN_VARIABLES = ['dag_run.dag_id', 'dag_run.run_id', 'dag_run.state', 'dag_run.environment']
+const LIVE_VALIDATE_MS = 800
 // The settings popover opens above its block when there is this much room (px), or more room
 // than below; its height is capped to the room it has.
 const POPOVER_ROOM = 260
 const POPOVER_GAP = 12
 const DIRTY_CHANGES = new Set(['position', 'remove', 'add', 'replace'])
-// Replaced in the palette by the real DAGs and databases (still valid in saved workflows).
-const HIDDEN_IN_PALETTE = new Set(['pipeline.run_dag', 'pipeline.wait_for_dag', 'database.run_sql', 'database.check'])
 
-// Triggers fed by monitoring (incidents, finished DAG runs) rather than by people or the clock.
-const isMonitoringTrigger = (def) => Boolean(def?.needs_incident || def?.needs_dag_run)
+/** How "Start when…" groups a trigger: one DAG, incidents (catch-all), or people / the clock. */
+function triggerGroup(def) {
+  if (def?.type === DAG_TRIGGER) return 'dag'
+  return def?.needs_incident ? 'incident' : 'orchestration'
+}
 
-/** Why a block cannot be used under `trigger`, or null when it can. */
-function triggerMismatch(def, trigger) {
+/**
+ * Why a block cannot be used under `trigger`, or null when it can. `opensIncident`: the
+ * workflow has an 'Open incident' block (the server checks that it comes first).
+ */
+function triggerMismatch(def, trigger, opensIncident = false) {
   if (!trigger || def.category === 'trigger') return null
-  if (def.needs_incident && !trigger.needs_incident) return 'Works on an incident: needs an incident trigger'
-  if (def.needs_dag_run && !trigger.needs_dag_run) return "Works on a finished DAG run: needs 'When a DAG run finishes'"
+  const isDag = trigger.type === DAG_TRIGGER
+  if (def.needs_incident && !trigger.needs_incident && !opensIncident) {
+    return isDag
+      ? "Works on an incident: put an 'Open incident' block before it"
+      : 'Works on an incident: needs an incident trigger'
+  }
+  if (def.needs_target && !trigger.needs_incident && !isDag) {
+    return "Works on a DAG run: start with 'When this DAG runs' or an incident trigger"
+  }
+  if (def.needs_dag_run && !isDag) return "Works on the DAG's run: needs 'When this DAG runs'"
   return null
 }
 // What a DAG or database block can be switched between in its settings.
@@ -139,6 +170,11 @@ function dagPreset(conn, dag) {
   }
 }
 
+/** "Start when…": this DAG starts the workflow ("When this DAG runs", set to the DAG). */
+function dagTriggerPreset(conn, dag) {
+  return { type: DAG_TRIGGER, config: { connection_id: conn.id, dag_id: dag.dag_id } }
+}
+
 function databasePreset(conn) {
   return { type: 'database.run_sql', name: conn.name, idBase: conn.name, config: { connection_id: conn.id } }
 }
@@ -147,7 +183,7 @@ function channelPreset(conn) {
   return { type: 'notify', name: conn.name, idBase: `notify_${conn.name}`, config: { send_via: conn.id } }
 }
 
-/** "Record & notify": each catalog channel as its own "Tell someone via …" component. */
+/** "Record & notify": each catalog channel as its own "Send a notification via …" component. */
 function ChannelSources({ sources, onAdd }) {
   if (!sources) return null
   if (!sources.channels.length) {
@@ -162,7 +198,7 @@ function ChannelSources({ sources, onAdd }) {
       key={conn.id}
       category="output"
       preset={channelPreset(conn)}
-      title={`Tell someone via ${conn.name} (${state.label})`}
+      title={`Send a notification via ${conn.name} (${state.label})`}
       onAdd={onAdd}
     >
       <span className="palette-source-name">{conn.name}</span>
@@ -192,7 +228,9 @@ function SourceItem({ category, preset, title, children, onAdd }) {
   )
 }
 
-function PipelineSources({ sources, onAdd }) {
+/** Real DAGs: under "Act" each one is a ready "Run a DAG" block; with `starts`, under
+ * "Start when…", each one starts the workflow ("When this DAG runs"). */
+function PipelineSources({ sources, onAdd, starts = false }) {
   const [query, setQuery] = useState('')
   if (!sources) return <p className="muted small">Loading DAGs…</p>
   if (!sources.airflow.length) {
@@ -237,13 +275,22 @@ function PipelineSources({ sources, onAdd }) {
               {shown.map((dag) => (
                 <SourceItem
                   key={dag.id}
-                  category="pipeline"
-                  preset={dagPreset(conn, dag)}
-                  title={`${dag.dag_id} (${conn.name})\n${dag.description ?? 'Run it (or wait for it) in a workflow'}`}
+                  category={starts ? 'trigger' : 'pipeline'}
+                  preset={starts ? dagTriggerPreset(conn, dag) : dagPreset(conn, dag)}
+                  title={
+                    starts
+                      ? `${dag.dag_id} (${conn.name})\nStart this workflow when ${dag.dag_id} runs: in progress, succeeded or failed each get an output.`
+                      : `${dag.dag_id} (${conn.name})\n${dag.description ?? 'Run it (or wait for it) in a workflow'}`
+                  }
                   onAdd={onAdd}
                 >
                   <span className="palette-source-name mono">{dag.dag_id}</span>
                   {dag.is_paused && <span className="palette-tag">paused</span>}
+                  {starts && !dag.is_monitored && (
+                    <span className="palette-tag" title="Monitoring is switched on when the workflow is turned on">
+                      not monitored
+                    </span>
+                  )}
                 </SourceItem>
               ))}
             </div>
@@ -286,6 +333,52 @@ function DatabaseSources({ sources, onAdd }) {
   )
 }
 
+/** Blocks that run before `nodeId` (everything with a path to it), nearest first. */
+function upstreamOf(nodeId, edges) {
+  const into = {}
+  edges.forEach((e) => (into[e.target] ??= []).push(e.source))
+  const seen = []
+  const queue = [...(into[nodeId] ?? [])]
+  while (queue.length) {
+    const id = queue.shift()
+    if (seen.includes(id)) continue
+    seen.push(id)
+    queue.push(...(into[id] ?? []))
+  }
+  return seen
+}
+
+/** The {{placeholders}} a block can use: what the trigger offers plus earlier blocks' outputs. */
+function variablesFor(nodeId, nodes, edges, defs) {
+  const trigger = nodes.find((n) => isTrigger(n.data.nodeType))
+  const triggerDef = trigger && defs[trigger.data.nodeType]
+  const list = RUN_VARIABLES.map((key) => ({ group: 'This run', key }))
+  if (triggerDef?.needs_incident) list.push(...INCIDENT_VARIABLES.map((key) => ({ group: 'Incident', key })))
+  if (triggerDef?.needs_dag_run) list.push(...DAG_RUN_VARIABLES.map((key) => ({ group: 'DAG run', key })))
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]))
+  upstreamOf(nodeId, edges).forEach((id) => {
+    const node = byId[id]
+    const def = node && defs[node.data.nodeType]
+    if (!def?.outputs?.length) return
+    const group = `${node.data.name || def.label} (${id})`
+    def.outputs.forEach((output) => list.push({ group, key: output.replaceAll('{id}', id) }))
+  })
+  return list
+}
+
+/** "Run a DAG (orders_pipeline_1)": how problems and links name a block. */
+function blockName(nodeId, nodes, defs) {
+  const node = nodes.find((n) => n.id === nodeId)
+  if (!node) return nodeId
+  const label = node.data.name || defs[node.data.nodeType]?.label || node.data.nodeType
+  return label === nodeId ? label : `${label} (${nodeId})`
+}
+
+function matchesQuery(def, query) {
+  if (!query) return true
+  return [def.label, def.description, def.type].some((text) => text?.toLowerCase().includes(query))
+}
+
 function blankGraph(defs) {
   // Monitoring first: a new workflow reacts to incidents on the monitored pipelines.
   const type = 'trigger.incident'
@@ -319,86 +412,533 @@ function TriggerItem({ def, current, stageId, onAdd }) {
 }
 
 /**
- * "Start when…": monitoring triggers (incidents, finished DAG runs) first; "Run on demand" and "On a schedule" sit in a
- * collapsed Orchestration group that opens when the workflow uses one of them. A workflow has one
- * trigger, so picking another replaces it.
+ * "Start when…": "When this DAG runs" first, with the real DAGs under it (pick one to start
+ * from it); then the incident catch-alls and people / the clock, each in a group that opens when
+ * the workflow uses one of its triggers. A workflow has one trigger, so picking another
+ * replaces it.
  */
-function TriggerItems({ items, current, stageId, onAdd }) {
-  const usesOrchestration = Boolean(current && !isMonitoringTrigger(current))
-  const [open, setOpen] = useState(usesOrchestration)
-  // Open the group when the workflow switches to one of its triggers (state adjusted during render).
-  const [wasUsing, setWasUsing] = useState(usesOrchestration)
-  if (usesOrchestration !== wasUsing) {
-    setWasUsing(usesOrchestration)
-    if (usesOrchestration) setOpen(true)
-  }
+function TriggerItems({ items, current, stageId, sources, onAdd }) {
   const item = (def) => (
     <TriggerItem key={def.type} def={def} current={current?.type === def.type} stageId={stageId} onAdd={onAdd} />
   )
-  const orchestration = items.filter((d) => !isMonitoringTrigger(d))
+  const group = (name) => items.filter((d) => triggerGroup(d) === name)
   return (
     <>
-      {items.filter(isMonitoringTrigger).map(item)}
-      {orchestration.length > 0 && (
-        <details className="palette-sub" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-          <summary className="palette-sub-title">Orchestration</summary>
-          <p className="muted small">Start without an incident: by hand or on a clock.</p>
-          {orchestration.map(item)}
-        </details>
+      {group('dag').map(item)}
+      {group('dag').length > 0 && (
+        <div className="palette-dag-list">
+          <PipelineSources sources={sources} onAdd={onAdd} starts />
+        </div>
       )}
+      <TriggerGroup title="Incidents (catch-all)" items={group('incident')} current={current} item={item} />
+      <TriggerGroup title="Orchestration" items={group('orchestration')} current={current} item={item} />
     </>
   )
 }
 
-function Palette({ catalog, trigger, sources, onAdd }) {
+/** A collapsed group of triggers that opens when the workflow switches to one of them. */
+function TriggerGroup({ title, items, current, item }) {
+  const uses = Boolean(current && items.some((d) => d.type === current.type))
+  const [open, setOpen] = useState(uses)
+  // Open the group when the workflow switches to one of its triggers (state adjusted during render).
+  const [wasUsing, setWasUsing] = useState(uses)
+  if (uses !== wasUsing) {
+    setWasUsing(uses)
+    if (uses) setOpen(true)
+  }
+  if (!items.length) return null
+  return (
+    <details className="palette-sub" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary className="palette-sub-title">{title}</summary>
+      {items.map(item)}
+    </details>
+  )
+}
+
+function PaletteItem({ def, stageId, trigger, opensIncident, onAdd }) {
+  const why = triggerMismatch(def, trigger, opensIncident)
+  const disabled = Boolean(why)
+  return (
+    <button
+      type="button"
+      className={`palette-item stage-${stageId}`}
+      draggable={!disabled}
+      disabled={disabled}
+      title={disabled ? why : `${def.description}${def.is_action ? ' Changes something: on PROD it needs an approval first.' : ''}`}
+      onDragStart={(e) => {
+        e.dataTransfer.setData(DRAG_TYPE, def.type)
+        e.dataTransfer.effectAllowed = 'move'
+      }}
+      onClick={() => onAdd(def.type)}
+    >
+      <span className="block-icon" aria-hidden="true">
+        {nodeIcon(def.type)}
+      </span>
+      <span>{def.label}</span>
+      {/* Decorative: the button's title says the same, and its name stays the block's label. */}
+      {def.is_action && (
+        <span className="palette-tag" aria-hidden="true">
+          changes
+        </span>
+      )}
+    </button>
+  )
+}
+
+function Palette({ catalog, trigger, opensIncident, sources, onAdd }) {
   // Blocks that work on an incident (or a finished DAG run) only make sense under that trigger.
+  const [query, setQuery] = useState('')
+  const q = query.trim().toLowerCase()
+  const inStage = (stage, category) =>
+    catalog.filter((d) => stageOf(d).id === stage.id && d.category === category && matchesQuery(d, q))
+  const anyMatch = catalog.some((d) => matchesQuery(d, q))
   return (
     <aside className="editor-palette" aria-label="Blocks">
-      <p className="muted small">Drag a block onto the canvas, or click to add it.</p>
-      {STAGES.map((stage) => (
-        <details key={stage.id} className={`palette-stage stage-${stage.id}`} open>
-          <summary className="palette-stage-title">{stage.title}</summary>
-          {stage.categories.map((category) => {
-            const items = catalog.filter((d) => d.category === category && !HIDDEN_IN_PALETTE.has(d.type))
-            if (!items.length && !SWITCHES[category]) return null
-            return (
-              <div key={category} className="palette-group">
-                {stage.categories.length > 1 && <div className="palette-title">{CATEGORY_TITLES[category] ?? category}</div>}
-                {category === 'pipeline' && <PipelineSources sources={sources} onAdd={onAdd} />}
-                {category === 'database' && <DatabaseSources sources={sources} onAdd={onAdd} />}
-                {category === 'output' && <ChannelSources sources={sources} onAdd={onAdd} />}
-                {category === 'trigger' && <TriggerItems items={items} current={trigger} stageId={stage.id} onAdd={onAdd} />}
-                {category !== 'trigger' &&
-                  items.map((def) => {
-                  const why = triggerMismatch(def, trigger)
-                  const disabled = Boolean(why)
-                  return (
-                    <button
-                      key={def.type}
-                      type="button"
-                      className={`palette-item stage-${stage.id}`}
-                      draggable={!disabled}
-                      disabled={disabled}
-                      title={disabled ? why : def.description}
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData(DRAG_TYPE, def.type)
-                        e.dataTransfer.effectAllowed = 'move'
-                      }}
-                      onClick={() => onAdd(def.type)}
-                    >
-                      <span className="block-icon" aria-hidden="true">
-                        {nodeIcon(def.type)}
-                      </span>
-                      <span>{def.label}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            )
-          })}
-        </details>
-      ))}
+      <input
+        type="search"
+        className="palette-search"
+        placeholder="Search blocks"
+        aria-label="Search blocks"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      {q && !anyMatch && <p className="muted small palette-empty">No block matches “{query.trim()}”.</p>}
+      {STAGES.map((stage) => {
+        const groups = stage.categories
+          .map((category) => ({ category, items: inStage(stage, category) }))
+          // Real DAGs, databases and channels are listed even before a block of that kind matches.
+          .filter(({ category, items }) => items.length || (!q && sourcesFor(stage.id, category)))
+        if (!groups.length) return null
+        return (
+          <details key={stage.id} className={`palette-stage stage-${stage.id}`} open>
+            <summary className="palette-stage-title">{stage.title}</summary>
+            {groups.map(({ category, items }) => {
+              const Sources = q ? null : sourcesFor(stage.id, category)
+              const title = SUB_TITLES[stage.id]?.[category]
+              return (
+                <div key={category} className="palette-group">
+                  {title && groups.length > 1 && <div className="palette-title">{title}</div>}
+                  {Sources && <Sources sources={sources} onAdd={onAdd} />}
+                  {category === 'trigger' ? (
+                    <TriggerItems items={items} current={trigger} stageId={stage.id} sources={sources} onAdd={onAdd} />
+                  ) : (
+                    items.map((def) => (
+                      <PaletteItem
+                        key={def.type}
+                        def={def}
+                        stageId={stage.id}
+                        trigger={trigger}
+                        opensIncident={opensIncident}
+                        onAdd={onAdd}
+                      />
+                    ))
+                  )}
+                </div>
+              )
+            })}
+          </details>
+        )
+      })}
     </aside>
+  )
+}
+
+/** The live DAGs / databases / channels shown as ready-made blocks in a palette group. */
+function sourcesFor(stageId, category) {
+  if (stageId === 'act' && category === 'pipeline') return PipelineSources
+  if (stageId === 'act' && category === 'database') return DatabaseSources
+  if (stageId === 'notify' && category === 'output') return ChannelSources
+  return null
+}
+
+// "How should it start?" for a new workflow.
+const START_CHOICES = [
+  {
+    type: DAG_TRIGGER,
+    title: 'When this DAG runs',
+    text: 'Pick a DAG. Its runs in progress, succeeded and failed each get their own output.',
+  },
+  { type: 'trigger.manual', title: 'Run manually', text: 'Someone presses Run now.' },
+  { type: 'trigger.schedule', title: 'On a schedule', text: 'Every N minutes, or at set times (cron).' },
+  {
+    type: 'trigger.webhook',
+    title: 'When a webhook is called',
+    text: 'Another system calls the workflow’s secret URL; its JSON body is {{trigger.body}}.',
+  },
+  {
+    type: 'trigger.incident',
+    title: 'Any DAG has an incident',
+    text: 'Catch-all: reacts to incidents on monitored DAGs that have no workflow of their own.',
+  },
+]
+
+/** A new workflow starts by choosing what starts it (and, for one DAG, which DAG). */
+function StartPicker({ sources, onPick, onClose }) {
+  const [pickDag, setPickDag] = useState(false)
+  const [query, setQuery] = useState('')
+  const dags = (sources?.airflow ?? []).flatMap(({ conn, dags: list }) => list.map((dag) => ({ conn, dag })))
+  const q = query.trim().toLowerCase()
+  const shown = dags.filter(({ dag }) => !q || dag.dag_id.toLowerCase().includes(q))
+  return (
+    <Modal title={pickDag ? 'Which DAG?' : 'How should this workflow start?'} onClose={onClose} wide>
+      {!pickDag ? (
+        <div className="start-choices">
+          {START_CHOICES.map((choice) => (
+            <button
+              key={choice.type}
+              type="button"
+              className="start-choice"
+              onClick={() => (choice.type === DAG_TRIGGER ? setPickDag(true) : onPick(choice.type))}
+            >
+              <span className="block-icon" aria-hidden="true">
+                {nodeIcon(choice.type)}
+              </span>
+              <strong>{choice.title}</strong>
+              <span className="muted small">{choice.text}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="start-dags">
+          <input
+            type="search"
+            className="palette-search"
+            placeholder="Search DAGs"
+            aria-label="Search DAGs"
+            value={query}
+            autoFocus
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {!sources && <p className="muted small">Loading DAGs…</p>}
+          {sources && !dags.length && (
+            <p className="muted small">
+              No DAGs yet. <Link to="/connections/airflow">Add or sync an Airflow connection</Link>.
+            </p>
+          )}
+          <div className="start-dag-list">
+            {shown.map(({ conn, dag }) => (
+              <button
+                key={dag.id}
+                type="button"
+                className="start-dag"
+                onClick={() => onPick(DAG_TRIGGER, { connection_id: conn.id, dag_id: dag.dag_id })}
+              >
+                <span className="mono">{dag.dag_id}</span>
+                <span className="muted small">
+                  {conn.name} · {conn.environment.toLowerCase()}
+                  {dag.is_paused ? ' · paused' : ''}
+                </span>
+              </button>
+            ))}
+          </div>
+          <Button size="sm" onClick={() => setPickDag(false)}>
+            ← Back
+          </Button>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+/** The secret URL of a 'When a webhook is called' workflow (admins only). */
+function WebhookUrl({ workflow, canEdit, saved }) {
+  const toast = useToast()
+  const [path, setPath] = useState(null)
+  const id = workflow?.id
+  useEffect(() => {
+    if (!id || !canEdit) return undefined
+    let alive = true
+    automationApi
+      .getWebhook(id)
+      .then((r) => alive && setPath(r.path))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [id, canEdit])
+  if (!canEdit) return <p className="muted small">Only admins can see the webhook URL.</p>
+  if (!id) return <p className="muted small">Save the workflow to get its webhook URL.</p>
+  const url = path ? `${window.location.origin}${path}` : ''
+  async function rotate() {
+    if (!window.confirm('Make a new URL? The current one stops working.')) return
+    try {
+      setPath((await automationApi.rotateWebhook(id)).path)
+      toast.success('New webhook URL made')
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+  return (
+    <div className="field webhook-url">
+      <label htmlFor="webhook-url">Webhook URL (POST, JSON body)</label>
+      <input id="webhook-url" className="mono" readOnly value={url || 'Loading…'} onFocus={(e) => e.target.select()} />
+      <div className="webhook-actions">
+        <Button size="sm" disabled={!url} onClick={() => navigator.clipboard?.writeText(url).then(() => toast.success('Copied'))}>
+          Copy
+        </Button>
+        <Button size="sm" disabled={!url} onClick={rotate}>
+          New URL
+        </Button>
+      </div>
+      {!saved && <small className="field-hint">Runs use the saved version: save, and turn the workflow on.</small>}
+    </div>
+  )
+}
+
+/**
+ * "Test this block": runs only this block as a dry run (nothing is changed or kept), with the
+ * values of the workflow's latest run, or with input you type.
+ */
+function TestBlock({ graph, nodeId, workflowId }) {
+  const [input, setInput] = useState('')
+  const [result, setResult] = useState(null)
+  const [busy, setBusy] = useState(false)
+  async function run() {
+    let parsed
+    if (input.trim()) {
+      try {
+        parsed = JSON.parse(input)
+      } catch {
+        return setResult({ error: 'The input is not valid JSON' })
+      }
+    }
+    setBusy(true)
+    try {
+      setResult(await automationApi.testNode({ graph, node_id: nodeId, workflow_id: workflowId ?? null, input: parsed ?? null }))
+    } catch (err) {
+      setResult({ error: err.message })
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <details className="test-block">
+      <summary className="small">Test this block</summary>
+      <p className="muted small">
+        A dry run of this block only. It uses the latest run's values, or this input, e.g.{' '}
+        <code>{'{"trigger": {"body": {"rows": 5}}}'}</code>.
+      </p>
+      <textarea
+        className="code-input"
+        rows={3}
+        aria-label="Test input (JSON)"
+        placeholder="Optional input (JSON)"
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+      />
+      <Button size="sm" onClick={run} loading={busy}>
+        Test
+      </Button>
+      {result && (
+        <div className="test-result" role="status">
+          {result.error ? (
+            <Alert tone="danger">{result.error}</Alert>
+          ) : (
+            <>
+              <div className="small">
+                {result.waits ? 'Would wait, then continue' : <>Continues on <strong>{result.port ?? '—'}</strong></>}
+                {result.message && <> · {result.message}</>}
+              </div>
+              {Object.keys(result.output ?? {}).length > 0 && (
+                <pre className="json-view">{JSON.stringify(result.output, null, 2)}</pre>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </details>
+  )
+}
+
+/** Saved versions of the workflow: what changed against the canvas, and restore. */
+function VersionsDialog({ workflow, current, canRestore, onClose, onRestored }) {
+  const toast = useToast()
+  const [versions, setVersions] = useState(null)
+  const [diff, setDiff] = useState({})
+  useEffect(() => {
+    let alive = true
+    automationApi
+      .listVersions(workflow.id)
+      .then((items) => alive && setVersions(items))
+      .catch((err) => alive && toast.error(err.message))
+    return () => {
+      alive = false
+    }
+  }, [workflow.id, toast])
+  async function compare(version) {
+    try {
+      const old = await automationApi.getVersion(workflow.id, version)
+      setDiff((d) => ({ ...d, [version]: graphDiff(old.graph, current) }))
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+  async function restore(version) {
+    if (!window.confirm(`Make version ${version} the current one? It is saved as a new version.`)) return
+    try {
+      onRestored(await automationApi.restoreVersion(workflow.id, version))
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+  return (
+    <Modal title={`Versions of ${workflow.name}`} onClose={onClose} wide>
+      {!versions ? (
+        <p className="muted">Loading…</p>
+      ) : (
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Version</th>
+              <th>Saved</th>
+              <th>Changes against the canvas</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {versions.map((v) => (
+              <tr key={v.version}>
+                <td>
+                  v{v.version}
+                  {v.version === workflow.version && <Badge tone="success">current</Badge>}
+                </td>
+                <td className="small">
+                  {new Date(v.created_at).toLocaleString()}
+                  {v.created_by_name && ` · ${v.created_by_name}`}
+                </td>
+                <td className="small">
+                  {diff[v.version] ? (
+                    diff[v.version]
+                  ) : (
+                    <button type="button" className="link-btn" onClick={() => compare(v.version)}>
+                      Compare
+                    </button>
+                  )}
+                </td>
+                <td>
+                  {canRestore && v.version !== workflow.version && (
+                    <Button size="sm" onClick={() => restore(v.version)}>
+                      Restore
+                    </Button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Modal>
+  )
+}
+
+/** "2 blocks added, 1 changed, 3 links removed": an old graph against the canvas. */
+function graphDiff(old, now) {
+  const byId = (g) => Object.fromEntries((g?.nodes ?? []).map((n) => [n.id, n]))
+  const a = byId(old)
+  const b = byId(now)
+  const same = (x, y) => JSON.stringify([x.type, x.config, x.settings ?? null, x.name ?? null]) === JSON.stringify([y.type, y.config, y.settings ?? null, y.name ?? null])
+  const added = Object.keys(b).filter((id) => !a[id])
+  const removed = Object.keys(a).filter((id) => !b[id])
+  const changed = Object.keys(b).filter((id) => a[id] && !same(a[id], b[id]))
+  const edges = (g) => new Set((g?.edges ?? []).map((e) => `${e.from}:${e.port}->${e.to}`))
+  const ea = edges(old)
+  const eb = edges(now)
+  const linksAdded = [...eb].filter((e) => !ea.has(e)).length
+  const linksRemoved = [...ea].filter((e) => !eb.has(e)).length
+  const parts = [
+    added.length && `${added.length} block${added.length === 1 ? '' : 's'} added (${added.join(', ')})`,
+    removed.length && `${removed.length} removed (${removed.join(', ')})`,
+    changed.length && `${changed.length} changed (${changed.join(', ')})`,
+    linksAdded && `${linksAdded} link${linksAdded === 1 ? '' : 's'} added`,
+    linksRemoved && `${linksRemoved} link${linksRemoved === 1 ? '' : 's'} removed`,
+  ].filter(Boolean)
+  return parts.length ? parts.join(' · ') : 'Same as the canvas'
+}
+
+/** How the engine runs a block: retries, and where a failure goes. */
+function RunSettings({ settings, disabled, onChange }) {
+  const value = { ...DEFAULT_RUN_SETTINGS, ...settings }
+  const set = (patch) => onChange({ ...value, ...patch })
+  return (
+    <details className="run-settings" open={hasRunSettings(settings)}>
+      <summary className="small">Run settings</summary>
+      <div className="form-grid">
+        <div className="field">
+          <label htmlFor="run-retries">Try again when it fails</label>
+          <select
+            id="run-retries"
+            value={value.retries}
+            disabled={disabled}
+            onChange={(e) => set({ retries: Number(e.target.value) })}
+          >
+            {[0, 1, 2, 3, 4, 5].map((n) => (
+              <option key={n} value={n}>
+                {n === 0 ? 'No' : `${n} more time${n === 1 ? '' : 's'}`}
+              </option>
+            ))}
+          </select>
+        </div>
+        {value.retries > 0 && (
+          <div className="field">
+            <label htmlFor="run-delay">Wait between tries (seconds)</label>
+            <input
+              id="run-delay"
+              type="number"
+              min={5}
+              max={3600}
+              value={value.retry_delay_seconds}
+              disabled={disabled}
+              onChange={(e) => set({ retry_delay_seconds: Number(e.target.value) || 60 })}
+            />
+          </div>
+        )}
+        <div className="field">
+          <label htmlFor="run-on-error">When it cannot run</label>
+          <select
+            id="run-on-error"
+            value={value.on_error}
+            disabled={disabled}
+            onChange={(e) => set({ on_error: e.target.value })}
+          >
+            <option value="fail">Fail the run</option>
+            <option value="output">Continue on its 'error' output</option>
+          </select>
+        </div>
+      </div>
+    </details>
+  )
+}
+
+/** Other workflows that start from the same DAG: all of them run on each event. */
+function AlsoUsedBy({ config, workflowId }) {
+  const [workflows, setWorkflows] = useState(null)
+  useEffect(() => {
+    let alive = true
+    automationApi
+      .listWorkflows()
+      .then((items) => alive && setWorkflows(items))
+      .catch(() => alive && setWorkflows([]))
+    return () => {
+      alive = false
+    }
+  }, [])
+  const others = (workflows ?? []).filter((w) => {
+    if (w.id === workflowId) return false
+    const trigger = w.graph?.nodes?.find((n) => n.type === DAG_TRIGGER)
+    return trigger?.config?.dag_id === config?.dag_id && trigger?.config?.connection_id === config?.connection_id
+  })
+  if (!config?.dag_id || !others.length) return null
+  return (
+    <p className="muted small also-used-by">
+      Also starts from {config.dag_id}:{' '}
+      {others.map((w, i) => (
+        <span key={w.id}>
+          {i > 0 && ', '}
+          <Link to={`/automation/workflows/${w.id}`}>{w.name}</Link>
+          {!w.enabled && ' (off)'}
+        </span>
+      ))}
+    </p>
   )
 }
 
@@ -438,34 +978,44 @@ function BlockPopover({ node, onClose, children }) {
   )
 }
 
-function Problems({ problems, onSelect, onAskAssistant }) {
-  if (!problems.length) return null
+function Problems({ problems, warnings = [], nameOf, onSelect, onAskAssistant }) {
+  if (!problems.length && !warnings.length) return null
+  const item = (p, i, tone) => (
+    <li key={`${tone}-${i}`} className={tone === 'warning' ? 'block-warning' : undefined}>
+      {p.node ? (
+        <button type="button" className="link-btn small" onClick={() => onSelect(p.node)}>
+          {nameOf(p.node)}
+        </button>
+      ) : (
+        p.edge && <span className="small">{edgeName(p.edge, nameOf)}</span>
+      )}{' '}
+      <span className="small">{p.message}</span>
+    </li>
+  )
   return (
     <div className="editor-problems">
       <strong className="small">
-        {problems.length} problem{problems.length === 1 ? '' : 's'}
+        {problems.length > 0 && `${problems.length} problem${problems.length === 1 ? '' : 's'}`}
+        {problems.length > 0 && warnings.length > 0 && ' · '}
+        {warnings.length > 0 && `${warnings.length} warning${warnings.length === 1 ? '' : 's'}`}
       </strong>
-      {onAskAssistant && (
+      {onAskAssistant && problems.length > 0 && (
         <button type="button" className="link-btn small problems-ask" onClick={onAskAssistant}>
           ✨ Ask AI to fix
         </button>
       )}
       <ul>
-        {problems.map((p, i) => (
-          <li key={i}>
-            {p.node ? (
-              <button type="button" className="link-btn small" onClick={() => onSelect(p.node)}>
-                {p.node}
-              </button>
-            ) : (
-              p.edge && <span className="mono small">{p.edge}</span>
-            )}{' '}
-            <span className="small">{p.message}</span>
-          </li>
-        ))}
+        {problems.map((p, i) => item(p, i, 'problem'))}
+        {warnings.map((p, i) => item(p, i, 'warning'))}
       </ul>
     </div>
   )
+}
+
+/** "from.port->to" as "Run a DAG → failed → Send a notification". */
+function edgeName(edge, nameOf) {
+  const match = /^(.*)\.([^.]+)->(.*)$/.exec(edge)
+  return match ? `${nameOf(match[1])} → ${match[2]} → ${nameOf(match[3])}` : edge
 }
 
 function Editor() {
@@ -490,13 +1040,21 @@ function Editor() {
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [selection, setSelection] = useState({ node: null, edge: null })
   const [problems, setProblems] = useState([])
+  const [warnings, setWarnings] = useState([])
+  const validation = useRef(0)
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(null)
   const [error, setError] = useState(null)
+  const [reloadKey, setReloadKey] = useState(0)
   const [showDetails, setShowDetails] = useState(false)
   // Block whose settings popover is open: set by clicking a block, not by adding or dragging one.
   const [popover, setPopover] = useState(null)
   const sources = useSources()
+  // A brand-new workflow first asks what starts it.
+  const [startPicker, setStartPicker] = useState(isNew && !fromId)
+  const [showVersions, setShowVersions] = useState(false)
+  // JSON typed for "Run now" on a webhook workflow (null: the dialog is closed).
+  const [runInput, setRunInput] = useState(null)
   // Workflow assistant: hidden unless the backend has it turned on (ASSISTANT_ENABLED).
   const [assistant, setAssistant] = useState(null)
   const [showAssistant, setShowAssistant] = useState(false)
@@ -562,7 +1120,7 @@ function Editor() {
     return () => {
       cancelled = true
     }
-  }, [id, isNew, fromId, setNodes, setEdges, fitView])
+  }, [id, isNew, fromId, setNodes, setEdges, fitView, reloadKey])
 
   useEffect(() => {
     if (!canEdit) return undefined
@@ -607,10 +1165,11 @@ function Editor() {
     (connection) => {
       const problem = connectionProblem(connection, nodes, edges)
       if (problem) return toast.error(problem)
-      setEdges((current) => connect(connection, current))
+      const source = nodes.find((n) => n.id === connection.source)
+      setEdges((current) => connect(connection, current, source && defs[source.data.nodeType], source?.data.config))
       setDirty(true)
     },
-    [nodes, edges, setEdges, toast],
+    [nodes, edges, defs, setEdges, toast],
   )
 
   const isValidConnection = useCallback(
@@ -627,12 +1186,13 @@ function Editor() {
   }, [])
 
   const triggerNode = nodes.find((n) => isTrigger(n.data.nodeType))
+  const opensIncident = nodes.some((n) => n.data.nodeType === 'incident.open')
   const canRun = hasRole('ADMIN', 'OPERATOR') && !isNew && workflow && startsByHand(workflow.graph)
 
-  async function runNow() {
+  async function runNow(input) {
     setBusy('run')
     try {
-      const run = await automationApi.runWorkflow(workflow.id)
+      const run = await automationApi.runWorkflow(workflow.id, input ? { input } : {})
       if (run.status === 'FAILED') toast.error(`Run failed: ${run.error ?? 'see the steps'}`)
       else toast.success(run.status === 'COMPLETED' ? 'Run completed' : 'Run started')
       navigate(`/automation/runs/${run.id}`)
@@ -643,10 +1203,21 @@ function Editor() {
     }
   }
 
-  /** `block` is a type, or a palette preset `{type, name, config, idBase}` (a real DAG/database). */
+  /** Download the workflow as JSON (import it on the Workflows page, e.g. in another setup). */
+  function exportWorkflow() {
+    const data = { format: 1, name: meta.name, description: meta.description || null, graph: fromFlow(nodes, edges) }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `${(meta.name || 'workflow').replace(/[^A-Za-z0-9_-]+/g, '_')}.json`
+    link.click()
+    URL.revokeObjectURL(link.href)
+  }
+
+  /** `block` is a type, or a palette preset `{type, name, config, idBase, dag}` (a real DAG/database). */
   function addBlock(block, position) {
     const { type, name = '', config = {}, idBase } = typeof block === 'string' ? { type: block } : block
-    if (isTrigger(type) && triggerNode) return replaceTrigger(type)
+    if (isTrigger(type) && triggerNode) return replaceTrigger(type, config)
     const def = defs[type]
     let at = position
     if (!at) {
@@ -685,14 +1256,28 @@ function Editor() {
     setDirty(true)
   }
 
-  /** A workflow has exactly one trigger: switch it in place (same id, position and link). */
-  function replaceTrigger(type) {
+  /**
+   * A workflow has exactly one trigger: switch it in place (same id, position and links). Links
+   * from outputs the new trigger does not have move to the closest one ('then', or 'failed').
+   * `config`: settings to apply, e.g. the DAG picked under "When this DAG runs".
+   */
+  function replaceTrigger(type, config = {}) {
     const def = defs[type]
-    if (!def || type === triggerNode.data.nodeType) return
-    changeType(triggerNode, type)
+    if (!def) return
+    const same = type === triggerNode.data.nodeType
+    if (same && !Object.keys(config).length) return
+    const settings = { ...(same ? triggerNode.data.config : defaultConfig(def.config_schema)), ...config }
+    const moved = retargetTriggerEdges(edges, triggerNode.id, def, settings)
+    setNodes((current) =>
+      current.map((n) =>
+        n.id === triggerNode.id ? { ...n, data: { ...n.data, nodeType: type, def, config: settings } } : n,
+      ),
+    )
+    setEdges(moved)
+    setDirty(true)
     const blocked = nodes
       .filter((n) => !isTrigger(n.data.nodeType) && defs[n.data.nodeType])
-      .map((n) => ({ node: n, why: triggerMismatch(defs[n.data.nodeType], def) }))
+      .map((n) => ({ node: n, why: triggerMismatch(defs[n.data.nodeType], def, opensIncident) }))
       .filter((b) => b.why)
     applyProblems(blocked.map(({ node, why }) => ({ node: node.id, message: `'${defs[node.data.nodeType].label}': ${why}` })))
     if (blocked.length) {
@@ -705,6 +1290,11 @@ function Editor() {
 
   function updateNodeData(nodeId, patch) {
     setNodes((current) => current.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...patch } } : n)))
+    // Outputs that follow settings (Switch cases, the 'error' output): drop links from gone ones.
+    const node = nodes.find((n) => n.id === nodeId)
+    if ((patch.config && node?.data.def?.dynamic_ports) || patch.settings) {
+      setEdges((current) => prunePortEdges({ ...node, data: { ...node.data, ...patch } }, current))
+    }
     setDirty(true)
   }
 
@@ -744,20 +1334,48 @@ function Editor() {
   }
 
   // ------------------------------------------------------------------ validate & save
-  function applyProblems(list) {
-    const byNode = {}
-    list.forEach((p) => {
-      if (p.node) byNode[p.node] ??= p.message
-    })
+  /** Show problems (and non-blocking warnings) in the panel and on every block they concern. */
+  function applyProblems(list, warningList = []) {
+    const group = (items) => {
+      const byNode = {}
+      items.forEach((p) => p.node && (byNode[p.node] ??= []).push(p.message))
+      return byNode
+    }
+    const errors = group(list)
+    const warned = group(warningList)
     setProblems(list)
-    setNodes((current) => current.map((n) => ({ ...n, data: { ...n.data, problem: byNode[n.id] ?? null } })))
+    setWarnings(warningList)
+    setNodes((current) =>
+      current.map((n) => ({ ...n, data: { ...n.data, problems: errors[n.id] ?? [], warnings: warned[n.id] ?? [] } })),
+    )
   }
+
+  // Validate while editing (debounced): problems show up as you build, not only on Save.
+  // The key leaves out block positions, so dragging a block does not re-validate.
+  const graphKey = useMemo(() => {
+    const graph = fromFlow(nodes, edges)
+    return JSON.stringify({ ...graph, nodes: graph.nodes.map(({ position: _position, ...n }) => n) })
+  }, [nodes, edges])
+  useEffect(() => {
+    if (!catalog || !canEdit || !nodes.length) return undefined
+    const ticket = ++validation.current
+    const timer = setTimeout(async () => {
+      try {
+        const result = await automationApi.validateGraph(JSON.parse(graphKey))
+        if (ticket === validation.current) applyProblems(result.problems, result.warnings ?? [])
+      } catch {
+        // Offline or a server error: keep the last known problems.
+      }
+    }, LIVE_VALIDATE_MS)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-validate only when the graph changes
+  }, [graphKey, catalog, canEdit])
 
   async function validate() {
     setBusy('validate')
     try {
       const result = await automationApi.validateGraph(fromFlow(nodes, edges))
-      applyProblems(result.problems)
+      applyProblems(result.problems, result.warnings ?? [])
       if (result.valid) toast.success('Looks good: the workflow is valid')
       else toast.error(`${result.problems.length} problem(s) to fix`)
     } catch (err) {
@@ -824,6 +1442,18 @@ function Editor() {
     setFixRequest((n) => n + 1)
   }
 
+  async function changeMode(mode) {
+    setBusy('mode')
+    try {
+      setWorkflow(await automationApi.updateWorkflow(workflow.id, { mode }))
+      toast.success(mode === 'DRY_RUN' ? 'Dry run: it will only show what it would do' : 'Live: it will make changes')
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function save() {
     if (!meta.name.trim()) return toast.error('Give the workflow a name')
     setBusy('save')
@@ -863,6 +1493,7 @@ function Editor() {
       <div className="page">
         <Link to="/automation/workflows">← Workflows</Link>
         <Alert tone="danger">{error}</Alert>
+        <Button size="sm" onClick={() => { setError(null); setReloadKey((k) => k + 1) }}>Retry</Button>
       </div>
     )
   }
@@ -892,7 +1523,21 @@ function Editor() {
         {workflow && (
           <>
             <Badge tone={workflow.enabled ? 'success' : 'neutral'}>{workflow.enabled ? 'on' : 'off'}</Badge>
-            {workflow.mode === 'DRY_RUN' && <Badge tone="info">dry run</Badge>}
+            {canEdit ? (
+              <select
+                className="editor-mode"
+                value={workflow.mode}
+                disabled={busy === 'mode'}
+                aria-label="Mode"
+                title="Dry run: the workflow only shows what it would do. Live: it makes changes."
+                onChange={(e) => changeMode(e.target.value)}
+              >
+                <option value="LIVE">Live</option>
+                <option value="DRY_RUN">Dry run</option>
+              </select>
+            ) : (
+              workflow.mode === 'DRY_RUN' && <Badge tone="info">dry run</Badge>
+            )}
             <span className="muted small">v{workflow.version}</span>
           </>
         )}
@@ -901,7 +1546,7 @@ function Editor() {
         <span className="spacer" />
         {canRun && (
           <Button
-            onClick={runNow}
+            onClick={() => (triggerNode?.data.nodeType === 'trigger.webhook' ? setRunInput('{}') : runNow())}
             loading={busy === 'run'}
             disabled={dirty}
             title={dirty ? 'Save first: Run now runs the saved version' : 'Start a run now'}
@@ -909,6 +1554,8 @@ function Editor() {
             ▶ Run now
           </Button>
         )}
+        {!isNew && workflow && <Button onClick={() => setShowVersions(true)}>Versions</Button>}
+        {!isNew && workflow && <Button onClick={exportWorkflow}>Export</Button>}
         {assistant && (
           <Button onClick={() => setShowAssistant((v) => !v)} aria-pressed={showAssistant}>
             ✨ Assistant
@@ -927,6 +1574,68 @@ function Editor() {
           </Button>
         )}
       </div>
+
+      {runInput !== null && (
+        <Modal
+          title="Run with this input"
+          onClose={() => setRunInput(null)}
+          footer={
+            <Button
+              variant="primary"
+              onClick={() => {
+                let input
+                try {
+                  input = JSON.parse(runInput || '{}')
+                } catch {
+                  return toast.error('The input is not valid JSON')
+                }
+                setRunInput(null)
+                runNow(input)
+              }}
+            >
+              ▶ Run now
+            </Button>
+          }
+        >
+          <p className="muted small">Offered to the run as {'{{trigger.body.<field>}}'}, like a webhook call.</p>
+          <textarea
+            className="code-input"
+            rows={8}
+            aria-label="Run input (JSON)"
+            value={runInput}
+            onChange={(e) => setRunInput(e.target.value)}
+          />
+        </Modal>
+      )}
+
+      {showVersions && workflow && (
+        <VersionsDialog
+          workflow={workflow}
+          current={fromFlow(nodes, edges)}
+          canRestore={canEdit}
+          onClose={() => setShowVersions(false)}
+          onRestored={(updated) => {
+            setShowVersions(false)
+            setWorkflow(updated)
+            const flow = toFlow(updated.graph, (n) => ({ def: defs[n.type] }))
+            setNodes(flow.nodes)
+            setEdges(flow.edges)
+            setDirty(false)
+            toast.success(`Version restored as v${updated.version}`)
+          }}
+        />
+      )}
+
+      {startPicker && canEdit && catalog && triggerNode && (
+        <StartPicker
+          sources={sources}
+          onClose={() => setStartPicker(false)}
+          onPick={(type, config) => {
+            replaceTrigger(type, config)
+            setStartPicker(false)
+          }}
+        />
+      )}
 
       {isNew && !fromId && (
         <div className="editor-template-setup">
@@ -974,11 +1683,17 @@ function Editor() {
         {canEdit && <Palette
             catalog={catalog}
             trigger={triggerNode && defs[triggerNode.data.nodeType]}
+            opensIncident={opensIncident}
             sources={sources}
             onAdd={(block) => addBlock(block)}
           />}
 
-        <div className="editor-canvas" ref={wrapper} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+        <div
+          className="editor-canvas"
+          ref={wrapper}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={onDrop}
+        >
           <ReactFlow
             nodes={nodes}
             edges={shownEdges}
@@ -1006,7 +1721,7 @@ function Editor() {
             {selectedNode && (
               <BlockPopover node={selectedNode} onClose={clearSelection}>
                 <div className="panel-head">
-                  <span className={`block-icon stage-${stageOf(selectedDef?.category).id}`} aria-hidden="true">
+                  <span className={`block-icon stage-${stageOf(selectedDef ?? 'act').id}`} aria-hidden="true">
                     {nodeIcon(selectedNode.data.nodeType)}
                   </span>
                   <div>
@@ -1014,7 +1729,12 @@ function Editor() {
                     <div className="muted small mono">{selectedNode.id}</div>
                   </div>
                 </div>
-                {selectedDef?.description && <p className="muted small">{selectedDef.description}</p>}
+                {selectedDef && (
+                  <p className="muted small" title={selectedDef.description}>
+                    {selectedDef.summary ?? selectedDef.description}
+                  </p>
+                )}
+                {selectedDef?.is_action && <p className="small block-warning">Changes things · needs approval on PROD</p>}
                 {SWITCHES[selectedDef?.category] && (
                   <div className="segmented" role="group" aria-label="What this block does">
                     {SWITCHES[selectedDef.category].map(([type, label]) => (
@@ -1040,28 +1760,34 @@ function Editor() {
                       disabled={!canEdit}
                       onChange={(e) => replaceTrigger(e.target.value)}
                     >
-                      <optgroup label="Monitoring">
-                        {catalog
-                          .filter((d) => d.category === 'trigger' && isMonitoringTrigger(d))
-                          .map((d) => (
-                            <option key={d.type} value={d.type}>
-                              {d.label}
-                            </option>
-                          ))}
-                      </optgroup>
-                      <optgroup label="Orchestration">
-                        {catalog
-                          .filter((d) => d.category === 'trigger' && !isMonitoringTrigger(d))
-                          .map((d) => (
-                            <option key={d.type} value={d.type}>
-                              {d.label}
-                            </option>
-                          ))}
-                      </optgroup>
+                      {[
+                        ['dag', 'One DAG'],
+                        ['incident', 'Incidents (catch-all)'],
+                        ['orchestration', 'Orchestration'],
+                      ].map(([group, label]) => (
+                        <optgroup key={group} label={label}>
+                          {catalog
+                            .filter((d) => d.category === 'trigger' && triggerGroup(d) === group)
+                            .map((d) => (
+                              <option key={d.type} value={d.type}>
+                                {d.label}
+                              </option>
+                            ))}
+                        </optgroup>
+                      ))}
                     </select>
                   </div>
                 )}
-                {selectedNode.data.problem && <Alert tone="danger">{selectedNode.data.problem}</Alert>}
+                {selectedNode.data.problems?.map((message) => (
+                  <Alert key={message} tone="danger">
+                    {message}
+                  </Alert>
+                ))}
+                {selectedNode.data.warnings?.map((message) => (
+                  <Alert key={message} tone="warning">
+                    {message}
+                  </Alert>
+                ))}
                 <div className="field">
                   <label htmlFor="block-name">Display name</label>
                   <input
@@ -1073,19 +1799,28 @@ function Editor() {
                     onChange={(e) => updateNodeData(selectedNode.id, { name: e.target.value })}
                   />
                 </div>
+                {selectedNode.data.nodeType === DAG_TRIGGER && (
+                  <AlsoUsedBy config={selectedNode.data.config} workflowId={workflow?.id} />
+                )}
+                {selectedNode.data.nodeType === 'trigger.webhook' && (
+                  <WebhookUrl workflow={workflow} canEdit={canEdit} saved={!isNew && !dirty} />
+                )}
                 <SchemaForm
                   schema={selectedDef?.config_schema}
                   value={selectedNode.data.config}
                   disabled={!canEdit}
+                  variables={variablesFor(selectedNode.id, nodes, edges, defs)}
                   onChange={(config) => updateNodeData(selectedNode.id, { config })}
                 />
-                {selectedDef?.ports?.length > 0 && (
-                  <p className="muted small">
-                    {selectedDef.ports.length > 1 &&
-                      `Outputs: ${selectedDef.ports.map((p) => selectedDef.port_labels?.[p] ?? p).join(' · ')}. `}
-                    Drag from an output on the right of the block to the next block. An output can link to several
-                    blocks: they run one after another, top to bottom.
-                  </p>
+                {selectedDef?.category !== 'trigger' && hasRole('ADMIN', 'OPERATOR') && (
+                  <TestBlock graph={fromFlow(nodes, edges)} nodeId={selectedNode.id} workflowId={workflow?.id} />
+                )}
+                {selectedDef?.category !== 'trigger' && (
+                  <RunSettings
+                    settings={selectedNode.data.settings}
+                    disabled={!canEdit}
+                    onChange={(settings) => updateNodeData(selectedNode.id, { settings })}
+                  />
                 )}
                 {canEdit && (
                   <Button variant="danger" size="sm" onClick={() => deleteNode(selectedNode.id)}>
@@ -1098,8 +1833,8 @@ function Editor() {
             {selectedEdge && (
               <Panel position="bottom-center" className="canvas-card edge-card">
                 <span className="small">
-                  <span className="mono">{selectedEdge.source}</span> —{selectedEdge.sourceHandle}→{' '}
-                  <span className="mono">{selectedEdge.target}</span>
+                  {blockName(selectedEdge.source, nodes, defs)} — {selectedEdge.label ?? selectedEdge.sourceHandle} →{' '}
+                  {blockName(selectedEdge.target, nodes, defs)}
                 </span>
                 {canEdit && (
                   <Button variant="danger" size="sm" onClick={() => deleteEdge(selectedEdge.id)}>
@@ -1109,10 +1844,12 @@ function Editor() {
               </Panel>
             )}
 
-            {problems.length > 0 && (
+            {(problems.length > 0 || warnings.length > 0) && (
               <Panel position="top-left" className="canvas-card">
                 <Problems
                   problems={problems}
+                  warnings={warnings}
+                  nameOf={(nodeId) => blockName(nodeId, nodes, defs)}
                   onSelect={selectNode}
                   onAskAssistant={assistant ? askAssistantToFix : null}
                 />
@@ -1135,11 +1872,6 @@ function Editor() {
                     }}
                   />
                 </div>
-                <p className="muted small">
-                  Click a block to edit its settings. Runs start at the trigger and follow the output of each block;
-                  an output with no connection ends the run. Every Airflow change on PROD still needs a human
-                  approval.
-                </p>
                 {!isNew && (
                   <Link className="small" to={`/automation/runs?workflow_id=${workflow.id}`}>
                     View runs

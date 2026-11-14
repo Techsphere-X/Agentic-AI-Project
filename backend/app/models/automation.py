@@ -41,9 +41,37 @@ class Workflow(TimestampMixin, Base):
     )
     graph: Mapped[dict[str, Any]] = mapped_column(JSON)
     version: Mapped[int] = mapped_column(default=1)
+    # 'When a webhook is called': the secret in the workflow's URL (only admins see it).
+    webhook_token: Mapped[str | None] = mapped_column(String(64))
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
+
+
+class WorkflowVersion(Base):
+    """A saved version of a workflow's graph: one per change in behaviour (layout-only edits
+    do not make one). Runs keep the version they ran with."""
+
+    __tablename__ = "workflow_versions"
+    __table_args__ = (UniqueConstraint("workflow_id", "version"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    workflow_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("automation_workflows.id", ondelete="CASCADE"), index=True
+    )
+    version: Mapped[int]
+    name: Mapped[str] = mapped_column(String(200))
+    graph: Mapped[dict[str, Any]] = mapped_column(JSON)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
+
+    creator: Mapped[User | None] = relationship()
+
+    @property
+    def created_by_name(self) -> str | None:
+        return self.creator.full_name if self.creator else None
 
 
 class WorkflowRun(TimestampMixin, Base):

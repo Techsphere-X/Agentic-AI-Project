@@ -47,11 +47,19 @@ A workflow graph is JSON: {{"nodes": [{{id, type, name, config}}], "edges": [{{f
   block finished on. A port with no edge ends the run there; not every port needs an edge.
 - `port` must be one of the source block's ports listed below.
 - No loops, and every block must be reachable from the trigger.
-- Blocks marked [needs incident] only work under an incident trigger
-  ({", ".join(sorted(INCIDENT_TRIGGER_TYPES))}). To react to a failed DAG run and FIX it
-  (analyze, approve, retry, rerun, pause, update the incident), use "trigger.incident" with
-  incident_types ["DAG_RUN_FAILED"]: detection opens an incident for every failed run.
-- Blocks marked [needs DAG run] only work under the "trigger.dag_run" trigger.
+- When the user names a DAG, start with "trigger.dag" ("When this DAG runs") and set its
+  connection_id and dag_id (keep an existing trigger's values). Its outputs are in_progress,
+  success and failed: wire each outcome to its own steps. No incident opens automatically for
+  that DAG; add "incident.open" where the user wants one.
+- "trigger.incident" (any DAG has an incident) is the catch-all for DAGs without their own
+  workflow.
+- Blocks marked [needs DAG run target] (logs, classify, AI fix, choose a fix, retry, re-run,
+  pause) work under "trigger.dag" or an incident trigger
+  ({", ".join(sorted(INCIDENT_TRIGGER_TYPES))}).
+- Blocks marked [needs incident] (filter incidents, update the incident) need an incident
+  trigger, or an "incident.open" block earlier in the path.
+- Blocks marked [needs DAG run] (record the run result, open incident) only work under
+  "trigger.dag".
 - Node ids: short, letters, digits, "_" or "-" (for example "start", "logs", "notify"). Keep the
   ids of blocks you keep, so the user's layout survives. At most {MAX_NODES} blocks.
 - `config` is a JSON object written as a string, for example "{{\\"level\\": \\"WARNING\\"}}".
@@ -143,13 +151,15 @@ def catalog_prompt() -> str:
             label
             for flag, label in (
                 (nt.needs_incident, "[needs incident]"),
+                (nt.needs_target, "[needs DAG run target]"),
                 (nt.needs_dag_run, "[needs DAG run]"),
                 (nt.is_action, "[action: changes Airflow, policy-checked]"),
             )
             if flag
         ]
-        ports = ", ".join(
-            f"{p} ({nt.port_labels[p]})" if p in nt.port_labels else p for p in nt.ports
+        ports = (
+            ", ".join(f"{p} ({nt.port_labels[p]})" if p in nt.port_labels else p for p in nt.ports)
+            or "one per watched DAG: the DAG's `key` in config.dags"
         )
         head = f"* {nt.type} - {nt.label}: {nt.description}"
         if flags:
@@ -287,6 +297,8 @@ def _problems_text(problems: list[dict[str, str]]) -> str:
     lines = []
     for p in problems:
         where = p.get("node") or p.get("edge")
+        if where and p.get("field"):
+            where = f"{where}, config.{p['field']}"  # the message names the field by its label
         lines.append(f"- {p.get('message')}" + (f" (at {where})" if where else ""))
     return "\n".join(lines)
 

@@ -11,7 +11,21 @@ const COLLAPSED_KEY = 'sidebar-collapsed'
 // Sidebar sections. `badge` picks a count from the polled summaries; `admin` hides a section
 // from non-admins.
 const NAV = [
-  { items: [{ to: '/', end: true, label: 'Dashboard', icon: 'dashboard' }] },
+  {
+    title: 'Pipelines',
+    items: [
+      { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
+      {
+        to: '/incidents',
+        label: 'Incidents',
+        icon: 'incidents',
+        badge: ({ incidents }) => incidents?.open_total,
+        badgeTitle: 'Open incidents',
+      },
+      { to: '/automation/run-checks', label: 'Run checks', icon: 'checks' },
+      { to: '/diagnosis/analyzer', label: 'Log analyzer', icon: 'analyzer' },
+    ],
+  },
   {
     title: 'Connections',
     items: [
@@ -21,11 +35,13 @@ const NAV = [
     ],
   },
   {
-    title: 'Workflow orchestration',
+    title: 'Build',
+    items: [{ to: '/automation/workflows', label: 'Workflows', icon: 'workflows' }],
+  },
+  {
+    title: 'Runs',
     items: [
-      { to: '/automation/workflows', label: 'Workflows', icon: 'workflows' },
       { to: '/automation/runs', label: 'Runs', icon: 'runs' },
-      { to: '/automation/run-checks', label: 'Run checks', icon: 'checks' },
       {
         to: '/automation/approvals',
         label: 'Approvals',
@@ -33,13 +49,6 @@ const NAV = [
         badge: ({ automation }) => automation?.pending_approvals,
         tone: 'warning',
         badgeTitle: 'Waiting for approval',
-      },
-      {
-        to: '/incidents',
-        label: 'Incidents',
-        icon: 'incidents',
-        badge: ({ incidents }) => incidents?.open_total,
-        badgeTitle: 'Open incidents',
       },
       {
         to: '/automation/notifications',
@@ -51,7 +60,6 @@ const NAV = [
       },
     ],
   },
-  { title: 'Diagnosis', items: [{ to: '/diagnosis/analyzer', label: 'Log analyzer', icon: 'analyzer' }] },
   { title: 'Settings', admin: true, items: [{ to: '/settings/users', label: 'Users', icon: 'users' }] },
 ]
 

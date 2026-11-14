@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useOutletContext } from 'react-router'
-import { ActionMenu, ActionMenuItem, Badge, Button, Card, ConfirmDialog, EmptyState } from '../../components/ui'
+import { ActionMenu, ActionMenuItem, Badge, Button, Card, ConfirmDialog, EmptyState, LoadError } from '../../components/ui'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { formatDateTime, formatRelative } from '../../format'
@@ -106,11 +106,15 @@ export default function Approvals() {
   const [deleting, setDeleting] = useState(false)
   const [selected, setSelected] = useState(() => new Set())
 
+  const [loadError, setLoadError] = useState(null)
+
   const load = useCallback(async () => {
+    setLoadError(null)
     try {
       const status = tab === 'PENDING' ? ['PENDING'] : ['APPROVED', 'REJECTED', 'EXPIRED']
       setPage(await automationApi.listApprovals({ status, limit: 100 }))
     } catch (err) {
+      setLoadError(err.message)
       toast.error(err.message)
     }
   }, [tab, toast])
@@ -159,9 +163,6 @@ export default function Approvals() {
       <div className="page-header">
         <div>
           <h1>Approvals</h1>
-          <p className="muted">
-            Fixes that automations want to make and that need a human decision first (always in PROD).
-          </p>
         </div>
       </div>
 
@@ -194,12 +195,12 @@ export default function Approvals() {
           ))}
         </div>
 
-        {!page ? (
+        {loadError && !page ? (
+          <LoadError message={loadError} onRetry={load} />
+        ) : !page ? (
           <p className="muted">Loading…</p>
         ) : page.total === 0 ? (
-          <EmptyState title={tab === 'PENDING' ? 'Nothing waiting for approval' : 'No decisions yet'}>
-            {tab === 'PENDING' && 'Enable workflows under Automation → Workflows to start automating fixes.'}
-          </EmptyState>
+          <EmptyState title={tab === 'PENDING' ? 'Nothing waiting for approval' : 'No decisions yet'} />
         ) : tab === 'PENDING' ? (
           <div className="approval-list">
             {page.items.map((a) => (

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useOutletContext } from 'react-router'
-import { ActionMenu, ActionMenuItem, Button, Card, ConfirmDialog, EmptyState } from '../../components/ui'
+import { ActionMenu, ActionMenuItem, Button, Card, ConfirmDialog, EmptyState, LoadError } from '../../components/ui'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { formatRelative } from '../../format'
@@ -22,10 +22,14 @@ export default function Notifications() {
   const [selected, setSelected] = useState(() => new Set())
   const canDelete = hasRole('ADMIN')
 
+  const [loadError, setLoadError] = useState(null)
+
   const load = useCallback(async () => {
+    setLoadError(null)
     try {
       setPage(await automationApi.listNotifications({ unread_only: unreadOnly || undefined, limit: PAGE_SIZE, offset }))
     } catch (err) {
+      setLoadError(err.message)
       toast.error(err.message)
     }
   }, [unreadOnly, offset, toast])
@@ -83,7 +87,6 @@ export default function Notifications() {
       <div className="page-header">
         <div>
           <h1>Notifications</h1>
-          <p className="muted">Messages sent by automation workflows: fixes made, approvals needed, and things that need a human.</p>
         </div>
         <Button onClick={markAllRead} loading={marking} disabled={!hasUnread}>
           Mark all read
@@ -108,7 +111,9 @@ export default function Notifications() {
             </Button>
           )}
         </div>
-        {!page ? (
+        {loadError && !page ? (
+          <LoadError message={loadError} onRetry={load} />
+        ) : !page ? (
           <p className="muted">Loading…</p>
         ) : page.total === 0 ? (
           <EmptyState title="No notifications" />

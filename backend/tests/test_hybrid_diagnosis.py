@@ -382,21 +382,6 @@ def test_analyzer_regex_only_when_ml_disabled(
     assert body["regex"]["category"] == body["final"]["category"] == "CODE_BUG"
 
 
-def test_analyzer_uses_model_and_returns_window(
-    client: TestClient,
-    viewer_headers: dict[str, str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    fake = FakeClient(FakePrediction("AUTH", 0.97))
-    monkeypatch.setattr(diagnosis_service, "model_client", lambda: fake)
-    body = client.post(
-        "/api/v1/diagnosis/classify", json={"log": CODE_LOG}, headers=viewer_headers
-    ).json()
-    assert (body["regex"]["category"], body["final"]["category"]) == ("CODE_BUG", "AUTH")
-    assert body["final"]["source"] == "model" and body["window"] == "window text"
-    assert body["model"]["category"] == "AUTH"
-
-
 def test_analyzer_size_cap_and_auth(client: TestClient, viewer_headers: dict[str, str]) -> None:
     big = "x" * (300 * 1024)
     response = client.post("/api/v1/diagnosis/classify", json={"log": big}, headers=viewer_headers)

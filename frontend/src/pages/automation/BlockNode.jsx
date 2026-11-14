@@ -1,6 +1,6 @@
 import { Handle, Position } from '@xyflow/react'
 import { memo } from 'react'
-import { BAD_PORTS } from '../../components/flow/graph'
+import { portName, portTone, portsOf } from '../../components/flow/graph'
 import { NODE_LABELS, describeConfig, nodeIcon, stageOf } from './automationText'
 
 /**
@@ -8,21 +8,29 @@ import { NODE_LABELS, describeConfig, nodeIcon, stageOf } from './automationText
  * One input on the left (except triggers); one output on the right, or one labelled output
  * per port when the block branches.
  *
- * data: { nodeType, name, config, def (catalog entry), problem?, run?: {tone, label}, dimmed? }
+ * data: { nodeType, name, config, def (catalog entry), problems?: string[], warnings?: string[],
+ *         run?: {tone, label}, dimmed? }
+ * "When this DAG runs" shows its DAG as the title. Blocks whose outputs follow their settings
+ * get them from `portsOf`.
  */
 function BlockNode({ data, selected }) {
   const def = data.def
-  const ports = def?.ports ?? []
+  const ports = portsOf(def, data.config, data.settings)
+  const retries = data.settings?.retries ?? 0
   const category = def?.category ?? data.nodeType.split('.')[0]
-  const stage = stageOf(category)
+  const stage = stageOf(def ?? category)
+  const problems = data.problems ?? []
+  const warnings = data.warnings ?? []
   const kind = def?.label ?? NODE_LABELS[data.nodeType] ?? data.nodeType
-  const title = data.name || kind
+  // "When this DAG runs": the DAG is what the block is about.
+  const dagTitle = data.nodeType === 'trigger.dag' ? data.config?.dag_id || 'Choose a DAG' : null
+  const title = data.name || dagTitle || kind
   const summary = describeConfig(data.nodeType, data.config)
   const classes = [
     'block',
     `stage-${stage.id}`,
     selected && 'block-selected',
-    data.problem && 'block-problem',
+    problems.length > 0 && 'block-problem',
     data.run && `block-run-${data.run.tone}`,
     data.dimmed && 'block-dimmed',
   ]
@@ -30,11 +38,16 @@ function BlockNode({ data, selected }) {
     .join(' ')
 
   return (
-    <div className={classes} title={data.problem ?? def?.description}>
+    <div className={classes} title={problems[0] ?? warnings[0] ?? def?.description}>
       {category !== 'trigger' && <Handle type="target" position={Position.Left} className="block-handle-in" />}
       <div className="block-band">
         <span className="block-stage">{stage.label}</span>
-        {data.name && <span className="block-kind">{kind}</span>}
+        {title !== kind && <span className="block-kind">{kind}</span>}
+        {def?.is_action && (
+          <span className="block-badge-action" title="Changes something in Airflow or a database. On PROD it needs an approval first.">
+            changes things
+          </span>
+        )}
       </div>
       <div className="block-head">
         <span className="block-icon" aria-hidden="true">
@@ -43,7 +56,21 @@ function BlockNode({ data, selected }) {
         <div className="block-title">{title}</div>
       </div>
       {summary && <div className="block-summary">{summary}</div>}
-      {data.problem && <div className="block-error">{data.problem}</div>}
+      {retries > 0 && (
+        <div className="block-summary muted">
+          retries {retries}× every {data.settings.retry_delay_seconds ?? 60} s
+        </div>
+      )}
+      {problems.map((message) => (
+        <div key={message} className="block-error">
+          {message}
+        </div>
+      ))}
+      {warnings.map((message) => (
+        <div key={message} className="block-warning">
+          ⚠ {message}
+        </div>
+      ))}
       {data.run?.label && <div className="block-run-label">{data.run.label}</div>}
       {ports.length === 1 && (
         <Handle type="source" position={Position.Right} id={ports[0]} className="block-handle-out" />
@@ -51,8 +78,8 @@ function BlockNode({ data, selected }) {
       {ports.length > 1 && (
         <div className="block-ports">
           {ports.map((port) => (
-            <div key={port} className={`block-port block-port-${BAD_PORTS.has(port) ? 'bad' : 'ok'}`}>
-              <span className="block-port-label">{def.port_labels?.[port] ?? port}</span>
+            <div key={port} className={`block-port block-port-${{ good: 'ok', bad: 'bad', neutral: 'neutral' }[portTone(def, port)]}`}>
+              <span className="block-port-label">{portName(def, port, data.config)}</span>
               <Handle type="source" position={Position.Right} id={port} className="block-handle-out" />
             </div>
           ))}

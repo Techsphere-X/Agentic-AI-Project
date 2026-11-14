@@ -107,7 +107,7 @@ export function RunTable({ runs, showIncident = true, selected, onSelect, onDele
                           disabled={isActive(r)}
                           onClick={() => {
                             close()
-                                    onDelete(r)
+                            onDelete(r)
                           }}
                         >
                           Delete
@@ -125,10 +125,25 @@ export function RunTable({ runs, showIncident = true, selected, onSelect, onDele
   )
 }
 
+// What started a run (the run's trigger event), for the filter.
+const TRIGGER_FILTERS = [
+  ['', 'Any start'],
+  ['dag_run', 'DAG run'],
+  ['manual', 'Run now'],
+  ['schedule', 'Schedule'],
+  ['webhook', 'Webhook'],
+  ['called', 'Another workflow'],
+  ['opened', 'Incident opened'],
+  ['recurred', 'Incident happened again'],
+  ['stale', 'Incident ignored'],
+]
+
 export default function RunList() {
   const { hasRole } = useAuth()
   const toast = useToast()
   const [status, setStatus] = useState('all')
+  const [trigger, setTrigger] = useState('')
+  const [workflows, setWorkflows] = useState([])
   const [offset, setOffset] = useState(0)
   const [page, setPage] = useState(null)
   const [ticking, setTicking] = useState(false)
@@ -148,6 +163,7 @@ export default function RunList() {
         await automationApi.listRuns({
           status: STATUS_FILTERS[status],
           workflow_id: workflowId ?? undefined,
+          trigger: trigger || undefined,
           limit: PAGE_SIZE,
           offset,
         }),
@@ -157,7 +173,14 @@ export default function RunList() {
       setError(message)
       toast.error(message)
     }
-  }, [status, workflowId, offset, toast])
+  }, [status, workflowId, trigger, offset, toast])
+
+  useEffect(() => {
+    automationApi
+      .listWorkflows()
+      .then((items) => setWorkflows(items))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     // eslint-disable-next-line react/set-state-in-effect -- fetch on mount/filter change; state is set after await
@@ -175,9 +198,12 @@ export default function RunList() {
   async function onDelete() {
     const count = selected.size
     setDeleteTarget({ kind: 'selected', count })
+    if (count === 0) return
+    setDeleteTarget({ kind: 'selected', count })
   }
 
   async function confirmDelete() {
+    if (!deleteTarget) return
     setDeleting(true)
     try {
       const { deleted } = deleteTarget.kind === 'selected'
@@ -199,7 +225,6 @@ export default function RunList() {
   async function onDeleteSingle(run) {
     setDeleteTarget({ kind: 'single', run })
   }
-
   async function onTick() {
     setTicking(true)
     try {
@@ -267,6 +292,36 @@ export default function RunList() {
               </button>
             </span>
           )}
+          <select
+            value={workflowId ?? ''}
+            aria-label="Workflow"
+            onChange={(e) => {
+              setOffset(0)
+              setParams(e.target.value ? { workflow_id: e.target.value } : {})
+            }}
+          >
+            <option value="">All workflows</option>
+            {workflowId && !workflows.some((w) => w.id === workflowId) && <option value={workflowId}>This workflow</option>}
+            {workflows.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={trigger}
+            aria-label="Started by"
+            onChange={(e) => {
+              setOffset(0)
+              setTrigger(e.target.value)
+            }}
+          >
+            {TRIGGER_FILTERS.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
         </div>
         {error && !page ? (
           <div role="alert">
