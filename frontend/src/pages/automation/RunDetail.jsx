@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useOutletContext, useParams } from 'react-router'
-import { ActionMenu, ActionMenuItem, Alert, Badge, Button, Card, ConfirmDialog, EmptyState } from '../../components/ui'
+import { Alert, Badge, Button, Card, ConfirmDialog, EmptyState } from '../../components/ui'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { formatDateTime, formatRelative } from '../../format'
@@ -100,7 +100,6 @@ export default function RunDetail() {
       setRerunning(false)
     }
   }
-
   async function remove() {
     setDeleting(true)
     try {
@@ -150,25 +149,14 @@ export default function RunDetail() {
             Cancel run
           </Button>
         )}
-        {canDelete && !active && (
-          <ActionMenu label={`Actions for ${run.workflow_name}`}>
-            {(close) => (
-              <ActionMenuItem
-                tone="danger"
-                disabled={deleting}
-                onClick={() => {
-                  close()
-                  setConfirmingDelete(true)
-                }}
-              >
-                Delete run
-              </ActionMenuItem>
-            )}
-          </ActionMenu>
-        )}
         {canRerun && !active && (
           <Button onClick={rerun} loading={rerunning} title={input ? 'Same input as this run' : undefined}>
             Run again{input ? ' with the same input' : ''}
+          </Button>
+        )}
+        {canDelete && !active && (
+          <Button variant="danger" onClick={() => setConfirmingDelete(true)} loading={deleting}>
+            Delete run
           </Button>
         )}
       </div>

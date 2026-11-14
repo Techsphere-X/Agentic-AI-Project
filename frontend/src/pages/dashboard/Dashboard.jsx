@@ -84,8 +84,6 @@ export default function Dashboard() {
           return null
         }
       }
-      }
-
       const airflowPromise = read(
         airflowApi.listConnections(),
         async ({ items }) => {

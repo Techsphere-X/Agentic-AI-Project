@@ -2,7 +2,7 @@
 fix blocks work on the DAG run itself, and a fix does not restart its own workflow."""
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import event, select
 from sqlalchemy.orm import Session
 
 from app.automation.graph import GraphError, validate_graph
@@ -140,6 +140,44 @@ def test_a_workflow_only_on_success_leaves_failure_incidents_alone(
     summary = detection_service.run_cycle(db, now=T0)
     assert summary.automation_queued == 0
     assert [i.dag_id for i in db.scalars(select(Incident))] == ["etl"]
+
+
+def test_detection_loads_enabled_workflows_once_for_many_dag_runs(
+    db: Session, fake: FakeAirflow
+) -> None:
+    conn = _conn(db)
+    _dag(db, conn, "etl")
+    for index in range(10):
+        _workflow(
+            db,
+            {
+                "nodes": [_trigger(conn, ["in_progress", "success"]), _notify(f"tell-{index}")],
+                "edges": [
+                    {"from": "trigger", "port": "in_progress", "to": f"tell-{index}"},
+                    {"from": "trigger", "port": "success", "to": f"tell-{index}"},
+                ],
+            },
+            name=f"workflow-{index}",
+        )
+    fake.add_run("etl", "r1", "running", iso(at(10)))
+    fake.add_run("etl", "r2", "success", iso(at(11)))
+
+    workflow_selects: list[str] = []
+    engine = db.get_bind()
+
+    def count_workflow_selects(*args) -> None:
+        statement = args[2].lower()
+        if "select" in statement and "automation_workflows" in statement:
+            workflow_selects.append(statement)
+
+    event.listen(engine, "before_cursor_execute", count_workflow_selects)
+    try:
+        summary = detection_service.run_cycle(db, now=T0)
+    finally:
+        event.remove(engine, "before_cursor_execute", count_workflow_selects)
+
+    assert summary.automation_queued == 20
+    assert len(workflow_selects) == 1
 
 
 def test_open_incident_then_already_open(db: Session, fake: FakeAirflow) -> None:
